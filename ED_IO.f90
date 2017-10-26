@@ -189,6 +189,11 @@ MODULE ED_IO
      module procedure :: ed_get_dph_lattice
   end interface ed_get_dph
 
+  interface ed_get_density_matrix
+     module procedure :: ed_get_density_matrix_single
+   !  module procedure :: ed_get_density_matrix_lattice
+  end interface ed_get_density_matrix
+
 
 
 
@@ -392,129 +397,14 @@ contains
   include "ED_IO/get_phisc.f90"
   include "ED_IO/get_eimp.f90"
   include "ED_IO/get_doubles.f90"
+  !
+  include "ED_IO/get_imp_dm.f90"
 
 
 
 
 
-  subroutine ed_get_density_matrix(dm_,custom_rot,dm_eig_,dm_rot_)
-    !passed
-    complex(8),allocatable,intent(out)           :: dm_(:,:)
-    complex(8),allocatable,intent(in)            :: custom_rot(:,:)
-    real(8),allocatable,intent(out),optional     :: dm_eig_(:)
-    complex(8),allocatable,intent(out),optional  :: dm_rot_(:,:)
-    !internal
-    integer                                      :: unit  
-    integer                                      :: iorb,jorb,ispin,jspin,io,jo
-    complex(8)                                   :: Tr
-    complex(8),allocatable                       :: dm_diag(:,:)
-    !
-    if (.not.allocated(imp_density_matrix)) then
-       write(LOGfile,"(A)") "imp_density_matrix is not allocated"
-       stop
-    endif
-    !
-    if(present(dm_eig_))then
-       if(allocated(dm_eig_))deallocate(dm_eig_)
-       allocate(dm_eig_(Nspin*Norb));dm_eig_ = 0.0d0
-    endif
-    if(present(dm_rot_))then
-       if(allocated(dm_rot_))deallocate(dm_rot_)
-       allocate(dm_rot_(Nspin*Norb,Nspin*Norb));dm_rot_ = zero
-    endif
-    if(allocated(dm_))    deallocate(dm_);    allocate(dm_(Nspin*Norb,Nspin*Norb));    dm_ = zero
-    if(allocated(dm_diag))deallocate(dm_diag);allocate(dm_diag(Nspin*Norb,Nspin*Norb));dm_diag = zero
-    !
-    if(bath_type=="replica")then
-       !
-       do ispin=1,Nspin
-          do jspin=1,Nspin
-             do iorb=1,Norb
-                do jorb=1,Norb
-                   io = iorb + (ispin-1)*Norb
-                   jo = jorb + (jspin-1)*Norb
-                   dm_(io,jo) =  imp_density_matrix(ispin,jspin,iorb,jorb)
-                enddo
-             enddo
-          enddo
-       enddo
-       !
-       if(present(dm_eig_).and.present(dm_rot_))then
-          dm_rot_=dm_
-          call eigh(dm_rot_,dm_eig_,'V','U')
-       endif
-       !
-       ! rotate from the impurity basis to the J diagonal basis
-       dm_diag=matmul(transpose(conjg(custom_rot)),matmul(dm_,custom_rot))
-       !
-    elseif(bath_type=="normal")then
-       !
-       do iorb=1,Norb
-          do ispin=1,Nspin
-             io = iorb + (ispin-1)*Norb
-             dm_diag(io,io) =  imp_density_matrix(ispin,ispin,iorb,iorb)
-          enddo
-       enddo
-       !
-       dm_=matmul(custom_rot,matmul(dm_diag,transpose(conjg(custom_rot))))
-       !
-       if(present(dm_eig_).and.present(dm_rot_))then
-          dm_rot_=dm_
-          call eigh(dm_rot_,dm_eig_,'V','U')
-       endif
-       !
-    endif
-    !
-    unit = free_unit()
-    open(unit,file="imp_density_matrix.dat",action="write",position="rewind",status='unknown')
-    !
-    write(unit,"(A30)")"# Re{rho_asbs'}:"
-    do io=1,Nspin*Norb
-       write(unit,"(90(F15.9,1X))") (real(dm_(io,jo)),jo=1,Nspin*Norb)
-    enddo
-    write(unit,*)
-    !
-    write(unit,"(A30)")"# Im{rho_asbs'}:"
-    do io=1,Nspin*Norb
-       write(unit,"(90(F15.9,1X))") (aimag(dm_(io,jo)),jo=1,Nspin*Norb)
-    enddo
-    write(unit,*)
-    !
-    if(present(dm_eig_).and.present(dm_rot_))then
-       write(unit,"(A30)")"# rho_tilda"
-       write(unit,'(10F22.12)') dm_eig_
-       write(unit,*)
-       !
-       write(unit,"(A30)")"# Re{theta}:"
-       do io=1,Nspin*Norb
-          write(unit,"(90(F15.9,1X))") (real(dm_rot_(io,jo)),jo=1,Nspin*Norb)
-       enddo
-       write(unit,*)
-       !
-       write(unit,"(A30)")"# Im{theta}:"
-       do io=1,Nspin*Norb
-          write(unit,"(90(F15.9,1X))") (aimag(dm_rot_(io,jo)),jo=1,Nspin*Norb)
-       enddo
-       write(unit,*)
-    endif
-    !
-    write(unit,"(A30)")"# Re{rho_Jj}"
-    do io=1,Nspin*Norb
-       write(unit,"(90(F15.9,1X))") (real(dm_diag(io,jo)),jo=1,Nspin*Norb)
-    enddo
-    write(unit,*)
-    !
-    write(unit,"(A30)")"# Im{rho_Jj}"
-    do io=1,Nspin*Norb
-       write(unit,"(90(F15.9,1X))") (aimag(dm_diag(io,jo)),jo=1,Nspin*Norb)
-    enddo
-    write(unit,*)
-    write(unit,"(A30)")"# J basis densities"
-    write(unit,"(90(F15.9,1X))") (real(dm_diag(io,io)),io=1,Nspin*Norb)
-    !
-    close(unit)
-    !
-  end subroutine ed_get_density_matrix
+
 
 
   subroutine ed_get_quantum_SOC_operators()

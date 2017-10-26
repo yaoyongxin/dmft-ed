@@ -142,12 +142,7 @@ program ed_SOC
   !
   !#########        BUILD Hk        #########
   !
-  call build_hk(trim(hkfile))                              !;stop
-  if(surface)then
-      allocate(Wtk(Nk*Nk));Wtk=1.d0/(Nk*Nk)
-  else
-      allocate(Wtk(Nk*Nk*Nk));Wtk=1.d0/(Nk*Nk*Nk)
-  endif
+  call read_hk(trim(hkfile)) !TO WRITE PROPERLY                             !;stop
   !stop
   if(nonint_mu_shift)stop
   !
@@ -257,7 +252,7 @@ program ed_SOC
         !e - chemical potential find
         converged_n=.true.
         xmu_old=xmu
-        allocate(orb_dens(Norb));orb_dens=0.d0
+        allocate(orb_dens(Nlat,Norb));orb_dens=0.d0
         call ed_get_dens(orb_dens);sumdens=sum(orb_dens)
         deallocate(orb_dens)
         if(nread/=0.d0.and.look4n)then
@@ -275,11 +270,11 @@ program ed_SOC
         write(LOGfile,*) "   ------------------- convergence --------------------"
         if(cg_scheme=='weiss')then
            do i=1,Lmats
-              conv_funct(i)=sum(nn2so_reshape(weiss(:,:,:,:,i),Nspin,Norb))
+              conv_funct(i)=sum(nnn2lso_reshape(weiss(:,:,:,:,:,i),Nspin,Norb))
            enddo
         else
            do i=1,Lmats
-              conv_funct(i)=sum(nn2so_reshape(delta(:,:,:,:,i),Nspin,Norb))
+              conv_funct(i)=sum(nnn2lso_reshape(delta(:,:,:,:,:,i),Nspin,Norb))
            enddo
         endif
         if(converged_n)converged = check_convergence(conv_funct,dmft_error,nsuccess,nloop)
@@ -344,21 +339,20 @@ contains
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: build the Non interacting Hamiltonian with SOC and IVSB
   !+------------------------------------------------------------------------------------------+!
-  subroutine build_hk(file)
+  subroutine build_hk(file1,file2)
     implicit none
-    character(len=*),optional                     :: file
-    character(len=8)                              :: filehloc="hlocfile"
-    real(8),dimension(3)                          :: bk_x,bk_y,bk_z
-    integer                                       :: ik,Lk
-    !integer                                       :: i_mu,max_mu=500
-    !real(8)                                       :: mu_edge=0.5
-    integer                                       :: i_mu,max_mu=100
-    real(8)                                       :: mu_edge=2.0d0
-    complex(8),dimension(Nlat*Nso,Nlat*Nso,Lmats) :: Gmats
-    complex(8),dimension(Nlat*Nso,Nlat*Nso,Lreal) :: Greal
-    complex(8),allocatable                        :: Gso(:,:,:,:,:,:)
-    complex(8),allocatable                        :: Hk_tmp(:,:,:)
-    real(8)                                       :: wm(Lmats),wr(Lreal),dw,mu
+    character(len=*),optional                    :: file1
+    character(len=*),optional                    :: file2
+    real(8),dimension(3)                         :: bk_x,bk_y,bk_z
+    integer                                      :: ik,Lk
+    !integer                                      :: i_mu,max_mu=500
+    !real(8)                                      :: mu_edge=0.5
+    integer                                      :: i_mu,max_mu=100
+    real(8)                                      :: mu_edge=2.0d0
+    complex(8),dimension(Nso,Nso,Lmats)          :: Gmats
+    complex(8),dimension(Nso,Nso,Lreal)          :: Greal
+    complex(8),allocatable                       :: Gso(:,:,:,:,:)
+    real(8)                                      :: wm(Lmats),wr(Lreal),dw,mu
     !
     if(master)then
        write(LOGfile,*)"Build H(Nso,Nso,k)"
@@ -377,40 +371,24 @@ contains
        call TB_set_bk(bk_x,bk_y)
        Lk=Nk*Nk
        if(master)write(LOGfile,*)"surface tot k-points:",Lk
-       !
-       allocate(Hk(Nlat*Nso,Nlat*Nso,Lk));Hk=zero
-       allocate(Hk_tmp(Nso,Nso,Lk));Hk_tmp=zero
-       !
+       allocate(Hk(Nso,Nso,Lk));Hk=zero
        Sigma_correction=zero
-       !
-       do ilat=1,Nlat
-          call TB_build_model(Hk_tmp,hk_Ti3dt2g,Nso,[Nk,Nk])
-          Hk((ilat-1)*Nso+1:ilat*Nso,(ilat-1)*Nso+1:ilat*Nso,:)=Hk_tmp
-       enddo
-       !
-       if(master.AND.present(file)) call TB_write_hk(Hk,file,Nso,Norb,1,1,[Nk,Nk])
+       call TB_build_model(Hk,hk_Ti3dt2g,Nso,[Nk,Nk])
+       if(master.AND.present(file1)) call TB_write_hk(Hk,file1,Nso,Norb,1,1,[Nk,Nk])
     else
        call TB_set_bk(bk_x,bk_y,bk_z)
        Lk=Nk*Nk*Nk
        if(master)write(LOGfile,*)"bulk tot k-points:",Lk
-       !
-       allocate(Hk(Nlat*Nso,Nlat*Nso,Lk));Hk=zero
-       allocate(Hk_tmp(Nso,Nso,Lk));Hk_tmp=zero
-       !
+       allocate(Hk(Nso,Nso,Lk));Hk=zero
        Sigma_correction=zero
-       !
-       do ilat=1,Nlat
-          call TB_build_model(Hk_tmp,hk_Ti3dt2g,Nso,[Nk,Nk,Nk])
-          Hk((ilat-1)*Nso+1:ilat*Nso,(ilat-1)*Nso+1:ilat*Nso,:)=Hk_tmp
-       enddo
-       !
-       if(master.AND.present(file)) call TB_write_hk(Hk,file,Nso,Norb,1,1,[Nk,Nk,Nk])
+       call TB_build_model(Hk,hk_Ti3dt2g,Nso,[Nk,Nk,Nk])
+       if(master.AND.present(file1)) call TB_write_hk(Hk,file1,Nso,Norb,1,1,[Nk,Nk,Nk])
     endif
     !
-    d_t2g_Hloc = sum(Hk,dim=3)/Lk
-    where(abs((d_t2g_Hloc))<1.d-9)d_t2g_Hloc=zero
-    d_t2g_Hloc_nn=lso2nnn_reshape(d_t2g_Hloc,Nlat,Nspin,Norb)
-    call TB_write_hloc(d_t2g_Hloc,filehloc)
+    d_t2g_Hloc = sum(Hk(:,:,:),dim=3)/Lk
+    where(abs((d_t2g_Hloc))<1.d-9)d_t2g_Hloc=0d0
+    d_t2g_Hloc_nn=so2nn_reshape(d_t2g_Hloc,Nspin,Norb)
+    call TB_write_hloc(d_t2g_Hloc,file2)
     !
     !-----  Build the local GF in the spin-orbital Basis   -----
     !
@@ -422,11 +400,12 @@ contains
           Gmats(:,:,i)=Gmats(:,:,i) + inverse_g0k( xi*wm(i) , Hk(:,:,ik) )/Lk
        enddo
     enddo
+    !
     if(rotateG0loc) then
        !
-       allocate(Gso(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Gso=zero
+       allocate(Gso(Nspin,Nspin,Norb,Norb,Lmats));Gso=zero
        do i=1,Lmats
-          Gso(:,:,:,:,:,i)=lso2nnn_reshape(Gmats(:,:,i),Nlat,Nspin,Norb)
+          Gso(:,:,:,:,i)=so2nn_reshape(Gmats(:,:,i),Nspin,Norb)
        enddo
        !
        if(master) call dmft_print_gf_matsubara(Gso,"G0loc",iprint=3)
@@ -461,11 +440,12 @@ contains
              Greal(:,:,i)=Greal(:,:,i) + inverse_g0k(dcmplx(wr(i),eps),Hk(:,:,ik),mu)/Lk
           enddo
        enddo
+       !
        if(rotateG0loc) then
           !
-          allocate(Gso(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Gso=zero
+          allocate(Gso(Nspin,Nspin,Norb,Norb,Lreal));Gso=zero
           do i=1,Lreal
-             Gso(:,:,:,:,:,i)=lso2nnn_reshape(Greal(:,:,i),Nlat,Nspin,Norb)
+             Gso(:,:,:,:,i)=so2nn_reshape(Greal(:,:,i),Nspin,Norb)
           enddo
           !
           if(master) call dmft_print_gf_realaxis(Gso,"G0loc",iprint=3)
@@ -1314,18 +1294,6 @@ contains
           enddo
           if(type_freq=="wr") call dmft_print_gf_realaxis( Fso_out,file_rotation,iprint=3)
           if(type_freq=="wm") call dmft_print_gf_matsubara(Fso_out,file_rotation,iprint=3)
-          !do ispin=1,Nspin
-          !   do jspin=1,Nspin
-          !      do iorb=1,Norb
-          !         do jorb=1,Norb
-          !            io = iorb + (ispin-1)*Norb
-          !            jo = jorb + (jspin-1)*Norb
-          !            call splot(file_rotation//reg(txtfy(iorb))//reg(txtfy(jorb))//"_s"//reg(txtfy(ispin))//reg(txtfy(jspin))//"_"//type_freq//".dat",&
-          !                       w,fact*dimag(f_out(io,jo,:)),dreal(f_out(io,jo,:)))
-          !         enddo
-          !      enddo
-          !   enddo
-          !enddo
           !
        endif
     endif
@@ -1448,4 +1416,4 @@ contains
   end subroutine inversion_test
 
 
-end program ed_SOC
+end program ed_SOC_ineq

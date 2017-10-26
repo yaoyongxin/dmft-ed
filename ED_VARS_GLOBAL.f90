@@ -129,7 +129,12 @@ MODULE ED_VARS_GLOBAL
   complex(8),dimension(:,:,:,:,:,:),allocatable,save :: SAmatsii,SArealii        ![Nlat][Nspin][Nspin][Norb][Norb][L]
   complex(8),dimension(:,:,:,:,:,:),allocatable,save :: Gmatsii,Grealii          ![Nlat][Nspin][Nspin][Norb][Norb][L]
   complex(8),dimension(:,:,:,:,:,:),allocatable,save :: Fmatsii,Frealii          ![Nlat][Nspin][Nspin][Norb][Norb][L]
-
+  complex(8),dimension(:,:,:,:,:)  ,allocatable,save :: imp_density_matrix_ii    ![Nlat][Nspin][Nspin][Norb][Norb]
+  complex(8),dimension(:,:,:,:)    ,allocatable,save :: impStot_ii               ![Nlat][3] [Norb] [Norb]
+  complex(8),dimension(:,:,:,:)    ,allocatable,save :: impLtot_ii               ![Nlat][3][Nspin][Nspin]
+  complex(8),dimension(:)          ,allocatable,save :: impLdotS_ii              ![Nlat]
+  complex(8),dimension(:,:)        ,allocatable,save :: impj_aplha_ii            ![Nlat][3]
+  complex(8),dimension(:,:)        ,allocatable,save :: impj_aplha_sq_ii         ![Nlat][3]
 
   !Spin Susceptibilities
   !=========================================================
