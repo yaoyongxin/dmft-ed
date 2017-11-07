@@ -283,7 +283,8 @@ contains
     enddo
     !
     !
-    !BATH DENSITY MATRIX
+    !BATH DENSITY MATRIX (only if bath_type=="replica")
+    if(bath_type=="replica")then
     if(allocated(bth_density_matrix)) deallocate(bth_density_matrix);allocate(bth_density_matrix(Nspin,Nspin,Norb,Norb,Nbath))
     bth_density_matrix=zero
     do izero=1,state_list%size
@@ -341,77 +342,6 @@ contains
        !
        deallocate(H%map)
     enddo
-    !
-    !IMPURITY DENSITY OPERATORS
-    if((Nspin/=1).and.(Norb==3))then
-       if(allocated(impStot))      deallocate(impStot);      allocate(impStot(3,Norb,Norb));  impStot=zero
-       if(allocated(impLtot))      deallocate(impLtot);      allocate(impLtot(3,Nspin,Nspin));impLtot=zero
-       if(allocated(impj_aplha))   deallocate(impj_aplha);   allocate(impj_aplha(3));         impj_aplha=zero
-       if(allocated(impj_aplha_sq))deallocate(impj_aplha_sq);allocate(impj_aplha_sq(3));      impj_aplha_sq=zero
-       impLdotS=zero
-       if(allocated(bthLdotS))     deallocate(bthLdotS);     allocate(bthLdotS(Nbath));       bthLdotS=zero
-       !
-       !#####################################################
-       !#                    S(iorb,jorb)                   #
-       !#####################################################
-       !
-       !Sx =    [ <c+_up,c_dw> + <c+_dw,c_up> ]_(iorb,jorb)
-       !Sy = xi*[ <c+_dw,c_up> - <c+_up,c_dw> ]_(iorb,jorb)
-       !Sz =    [ <c+_up,c_up> - <c+_dw,c_dw> ]_(iorb,jorb)
-       !
-       do iorb=1,Norb
-          do jorb=1,Norb
-             if(ed_mode=="normal")cycle                     !  ed_mode=="normal" ==>    spin off-dig term not calculated
-             if((bath_type=="normal").and.(iorb/=jorb))cycle!bath_type=="normal" ==> orbital off-dig term not calculated
-             impStot(1,iorb,jorb) = 0.5d0*( imp_density_matrix(1,2,iorb,jorb) + imp_density_matrix(2,1,iorb,jorb) )
-             impStot(2,iorb,jorb) = 0.5d0*( imp_density_matrix(2,1,iorb,jorb) - imp_density_matrix(1,2,iorb,jorb) )*xi
-             impStot(3,iorb,jorb) = 0.5d0*( imp_density_matrix(1,1,iorb,jorb) - imp_density_matrix(2,2,iorb,jorb) )
-          enddo
-       enddo
-       !
-       !#####################################################
-       !#                   L(ispin,jspin)                  #
-       !#####################################################
-       !1=yz 2=zx 3=xy
-       !Lx = xi*[ <c+_3,c_2> - <c+_2,c_3> ]_(ispin,jspin)
-       !Ly = xi*[ <c+_1,c_3> - <c+_3,c_1> ]_(ispin,jspin)
-       !Lz = xi*[ <c+_2,c_1> - <c+_1,c_2> ]_(ispin,jspin)
-       !
-       do ispin=1,Nspin
-          do jspin=1,Nspin
-             if((ed_mode=="normal").and.(ispin/=jspin))cycle!  ed_mode=="normal" ==>    spin off-dig term not calculated
-             if(bath_type=="normal")cycle                   !bath_type=="normal" ==> orbital off-dig term not calculated
-             impLtot(1,ispin,jspin) = ( imp_density_matrix(ispin,jspin,3,2) - imp_density_matrix(ispin,jspin,2,3) )*xi
-             impLtot(2,ispin,jspin) = ( imp_density_matrix(ispin,jspin,1,3) - imp_density_matrix(ispin,jspin,3,1) )*xi
-             impLtot(3,ispin,jspin) = ( imp_density_matrix(ispin,jspin,2,1) - imp_density_matrix(ispin,jspin,1,2) )*xi
-          enddo
-       enddo
-       !
-       !#####################################################
-       !#                        LdotS                      #
-       !#####################################################
-       !
-       impLdotS = trace(matmul(nn2so_reshape(imp_density_matrix,Nspin,Norb),atomic_SOC()))
-       do ibath=1,Nbath
-          bthLdotS(ibath) = trace(matmul(nn2so_reshape(bth_density_matrix(:,:,:,:,ibath),Nspin,Norb),atomic_SOC()))
-       enddo
-       !
-       !#####################################################
-       !#                         ja                        #
-       !#####################################################
-       !
-       impj_aplha(1) = trace(matmul(nn2so_reshape(imp_density_matrix,Nspin,Norb),atomic_j("x")))
-       impj_aplha(2) = trace(matmul(nn2so_reshape(imp_density_matrix,Nspin,Norb),atomic_j("y")))
-       impj_aplha(3) = trace(matmul(nn2so_reshape(imp_density_matrix,Nspin,Norb),atomic_j("z")))
-       !
-       !#####################################################
-       !#                        (ja)^2                     #
-       !#####################################################
-       !
-       impj_aplha_sq(1) = trace(matmul(nn2so_reshape(imp_density_matrix,Nspin,Norb),matmul(atomic_j("x"),atomic_j("x"))))
-       impj_aplha_sq(2) = trace(matmul(nn2so_reshape(imp_density_matrix,Nspin,Norb),matmul(atomic_j("y"),atomic_j("y"))))
-       impj_aplha_sq(3) = trace(matmul(nn2so_reshape(imp_density_matrix,Nspin,Norb),matmul(atomic_j("z"),atomic_j("z"))))
-       !
     endif
     !
     if(MPI_MASTER)then
@@ -428,10 +358,7 @@ contains
     end select
     if(Nspin==2)then
        write(LOGfile,"(A,10f18.12,A)") "mag "//reg(ed_file_suffix)//"=",(magz(iorb),iorb=1,Norb)
-       if(Norb==3)write(LOGfile,"(A,10f18.12,A)") " Ji "//reg(ed_file_suffix)//"=",(real(impj_aplha(i)),i=1,3)
-       if(Norb==3)write(LOGfile,"(A,10f18.12,A)") " Ji^2 "//reg(ed_file_suffix)//"=",(real(impj_aplha_sq(i)),i=1,3)
     endif
-
     !
     do iorb=1,Norb
        ed_dens_up(iorb)=dens_up(iorb)

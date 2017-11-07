@@ -44,7 +44,8 @@ MODULE DMFT_ED
        ed_get_eknot                           ,&
        ed_get_doubles                         ,&
        ed_get_density_matrix                  ,&
-       ed_get_quantum_SOC_operators
+       ed_get_quantum_SOC_operators_single    ,&
+       ed_get_quantum_SOC_operators_lattice
 
 
   USE ED_BATH, only:                           &

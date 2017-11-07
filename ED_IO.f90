@@ -191,11 +191,8 @@ MODULE ED_IO
 
   interface ed_get_density_matrix
      module procedure :: ed_get_density_matrix_single
-   !  module procedure :: ed_get_density_matrix_lattice
+     module procedure :: ed_get_density_matrix_lattice
   end interface ed_get_density_matrix
-
-
-
 
 
   public :: ed_get_sigma_matsubara
@@ -226,7 +223,8 @@ MODULE ED_IO
   public :: ed_get_dph
 
   public :: ed_get_density_matrix
-  public :: ed_get_quantum_SOC_operators
+  public :: ed_get_quantum_SOC_operators_single
+  public :: ed_get_quantum_SOC_operators_lattice
 
   !****************************************************************************************!
   !****************************************************************************************!
@@ -399,163 +397,7 @@ contains
   include "ED_IO/get_doubles.f90"
   !
   include "ED_IO/get_imp_dm.f90"
-
-
-
-
-
-
-
-
-  subroutine ed_get_quantum_SOC_operators()
-    complex(8)                        ::  Simp(3,Norb,Norb)
-    complex(8)                        ::  Limp(3,Nspin,Nspin)
-    complex(8)                        ::  Jimp(3)
-    complex(8)                        ::  Jimp_sq(3)
-    complex(8),allocatable            ::  rho_so(:,:),U(:,:),Udag(:,:)
-    complex(8),allocatable            ::  rho_nn(:,:,:,:)
-    complex(8)                        ::  Jsq
-    complex(8)                        ::  LSimp
-    complex(8)                        ::  LSbth(Nbath)
-    integer                           ::  unit_
-    integer                           ::  iorb,ispin,jorb,jspin,io,ibath
-    !
-    if(Norb/=3)stop "SOC_operators implemented for 3 orbitals"
-    !
-    if((bath_type=="replica").and.(.not.Jz_basis))then
-       !the impurity dm is in the {a,Sz} basis
-       Simp=impStot
-       Limp=impLtot
-       jimp=impj_aplha
-       jimp_sq=impj_aplha_sq
-       Jsq=sum(jimp_sq)
-       LSimp=impLdotS
-       do ibath=1,Nbath
-          LSbth(ibath)=bthLdotS(ibath)
-       enddo
-    elseif((bath_type=="replica".and.Jz_basis).or.(bath_type=="replica"))then
-       allocate(U(Nspin*Norb,Nspin*Norb));U=zero
-       allocate(Udag(Nspin*Norb,Nspin*Norb));Udag=zero
-       allocate(rho_so(Nspin*Norb,Nspin*Norb));rho_so=zero
-       allocate(rho_nn(Nspin,Nspin,Norb,Norb));rho_nn=zero
-       !
-       rho_so=nn2so_reshape(imp_density_matrix,Nspin,Norb)
-       !
-       if(bath_type=="replica".and.Jz_basis)then
-          !
-          !the impurity dm is in the {Lz,Sz} basis
-          !rotation {Lz,Sz}-->{a,Sz}
-          U=transpose(conjg(orbital_Lz_rotation_NorbNspin()))
-          Udag=transpose(conjg(U))
-          !
-       elseif(bath_type=="normal")then
-          !
-          !the impurity dm is in the {J} basis
-          !rotation {J}-->{a,Sz}
-          U=transpose(conjg(atomic_SOC_rotation()))
-          Udag=transpose(conjg(U))
-          !
-       endif
-       !
-       rho_so=matmul(Udag,matmul(rho_so,U))
-       rho_nn=so2nn_reshape(rho_so,Nspin,Norb)
-       !
-       !#    <S>(iorb,jorb)   #
-       do iorb=1,Norb
-          do jorb=1,Norb
-             Simp(1,iorb,jorb) = 0.5d0*( rho_nn(1,2,iorb,jorb) + rho_nn(2,1,iorb,jorb) )
-             Simp(2,iorb,jorb) = 0.5d0*( rho_nn(2,1,iorb,jorb) - rho_nn(1,2,iorb,jorb) )*xi
-             Simp(3,iorb,jorb) = 0.5d0*( rho_nn(1,1,iorb,jorb) - rho_nn(2,2,iorb,jorb) )
-          enddo
-       enddo
-       !
-       !#   <L>(ispin,jspin)   #
-       do ispin=1,Nspin
-          do jspin=1,Nspin
-             Limp(1,ispin,jspin) = ( rho_nn(ispin,jspin,3,2) - rho_nn(ispin,jspin,2,3) )*xi
-             Limp(2,ispin,jspin) = ( rho_nn(ispin,jspin,1,3) - rho_nn(ispin,jspin,3,1) )*xi
-             Limp(3,ispin,jspin) = ( rho_nn(ispin,jspin,2,1) - rho_nn(ispin,jspin,1,2) )*xi
-          enddo
-       enddo
-       !
-       !#          <J>         #
-       jimp(1) = trace(matmul(rho_so,atomic_j("x")))
-       jimp(2) = trace(matmul(rho_so,atomic_j("y")))
-       jimp(3) = trace(matmul(rho_so,atomic_j("z")))
-       !
-       !#          <Jz>        #
-       jimp_sq(1) = trace(matmul(rho_so,matmul(atomic_j("x"),atomic_j("x"))))
-       jimp_sq(2) = trace(matmul(rho_so,matmul(atomic_j("y"),atomic_j("y"))))
-       jimp_sq(3) = trace(matmul(rho_so,matmul(atomic_j("z"),atomic_j("z"))))
-       !
-       Jsq=sum(jimp_sq)
-       !#          <LS>        #
-       LSimp = trace(matmul(rho_so,atomic_SOC()))
-    endif
-    !
-    !   IMPURITY SPIN OPERATOR - (S)
-    !
-    unit_ = free_unit()
-    open(unit=unit_,file='S_imp.dat',status='unknown',position='rewind',action='write',form='formatted')
-    write(unit_,'(A)')"# Re{Sx_(iorb,jorb)}, Im{Sx_(iorb,jorb)}"
-    do iorb=1,Norb
-       write(unit_,'(30(F20.12,1X))') (real(Simp(1,iorb,jorb)),jorb=1,Norb),(aimag(Simp(1,iorb,jorb)),jorb=1,Norb)
-    enddo
-    write(unit_,*)
-    write(unit_,'(A)')"# Re{Sy_(iorb,jorb)}, Im{Sy_(iorb,jorb)}"
-    do iorb=1,Norb
-       write(unit_,'(30(F20.12,1X))') (real(Simp(2,iorb,jorb)),jorb=1,Norb),(aimag(Simp(2,iorb,jorb)),jorb=1,Norb)
-    enddo
-    write(unit_,*)
-    write(unit_,'(A)')"# Re{Sz_(iorb,jorb)}, Im{Sz_(iorb,jorb)}"
-    do iorb=1,Norb
-       write(unit_,'(30(F20.12,1X))') (real(Simp(3,iorb,jorb)),jorb=1,Norb),(aimag(Simp(3,iorb,jorb)),jorb=1,Norb)
-    enddo
-    write(unit_,*)
-    write(unit_,'(30(a20,1X))')"#1-Re{Tr[Sx]}","2-Im{Tr[Sx]}","3-Re{Tr[Sy]}","4-Im{Tr[Sy]}","5-Re{Tr[Sz]}","6-Im{Tr[Sz]}"
-    write(unit_,'(30(F20.12,1X))') real(trace(Simp(1,:,:))),aimag(trace(Simp(1,:,:))),&
-         real(trace(Simp(2,:,:))),aimag(trace(Simp(2,:,:))),&
-         real(trace(Simp(3,:,:))),aimag(trace(Simp(3,:,:)))
-    close(unit_)
-    !
-    !   IMPURITY ORBITAL ANGULAR MOMENTUM OPERATOR - (L)
-    !
-    unit_ = free_unit()
-    open(unit=unit_,file='L_imp.dat',status='unknown',position='rewind',action='write',form='formatted')
-    write(unit_,'(A)')"# Re{Lx_(ipin,jspin)}, Im{Lx_(ipin,jspin)}"
-    do ispin=1,Nspin
-       write(unit_,'(30(F20.12,1X))') (real(Limp(1,ispin,jspin)),jspin=1,Nspin),(aimag(Limp(1,ispin,jspin)),jspin=1,Nspin)
-    enddo
-    write(unit_,*)
-    write(unit_,'(A)')"# Re{Ly_(ipin,jspin)}, Im{Ly_(ipin,jspin)}"
-    do ispin=1,Nspin
-       write(unit_,'(30(F20.12,1X))') (real(Limp(2,ispin,jspin)),jspin=1,Nspin),(aimag(Limp(2,ispin,jspin)),jspin=1,Nspin)
-    enddo
-    write(unit_,*)
-    write(unit_,'(A)')"# Re{Lz_(ipin,jspin)}, Im{Lz_(ipin,jspin)}"
-    do ispin=1,Nspin
-       write(unit_,'(30(F20.12,1X))') (real(Limp(3,ispin,jspin)),jspin=1,Nspin),(aimag(Limp(3,ispin,jspin)),jspin=1,Nspin)
-    enddo
-    write(unit_,*)
-    write(unit_,'(30(a20,1X))')"#1-Re{Tr[Lx]}","2-Im{Tr[Lx]}","3-Re{Tr[Ly]}","4-Im{Tr[ly]}","5-Re{Tr[Lz]}","6-Im{Tr[Lz]}"
-    write(unit_,'(30(F20.12,1X))') real(trace(Limp(1,:,:))),aimag(trace(Limp(1,:,:))),&
-         real(trace(Limp(2,:,:))),aimag(trace(Limp(2,:,:))),&
-         real(trace(Limp(3,:,:))),aimag(trace(Limp(3,:,:)))
-    close(unit_)
-    !
-    !   IMPURITY TOTAL ANGULAR MOMENTUM OPERATOR - (J = S + L)
-    !
-    unit_ = free_unit()
-    open(unit=unit_,file='J_imp.dat',status='unknown',position='rewind',action='write',form='formatted')
-    write(unit_,'(30(a20,1X))') "# 1-Re{jx}   "," 2-Im{jx}   "," 3-Re{jy}   "," 4-Im{jy}   "," 5-Re{jz}   "," 6-Im{jz}   ", &
-         " 7-Re{jx_sq}"," 8-Im{jx_sq}"," 9-Re{jy_sq}","10-Im{jy_sq}","11-Re{jz_sq}","12-Im{jz_sq}", &
-         "13-Re{L.S}","14-Im{L.S}"
-    write(unit_,'(30(F20.12,1X))') real(jimp(1))   ,aimag(jimp(1))   ,real(jimp(2))   ,aimag(jimp(2))   ,real(jimp(3))   ,aimag(jimp(3))   , &
-         real(jimp_sq(1)),aimag(jimp_sq(1)),real(jimp_sq(2)),aimag(jimp_sq(2)),real(jimp_sq(3)),aimag(jimp_sq(3)), &
-         real(LSimp),aimag(LSimp),(real(LSbth(io)),io=1,Nbath)
-    close(unit_)
-    !
-  end subroutine ed_get_quantum_SOC_operators
+  include "ED_IO/get_imp_SOC_op.f90"
 
 
 

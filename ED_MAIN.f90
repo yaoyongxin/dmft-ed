@@ -418,16 +418,7 @@ contains
     !
     !Allocate the imp dm and related observables
     if(allocated(imp_density_matrix_ii))deallocate(imp_density_matrix_ii)
-    if(allocated(impStot_ii))deallocate(impStot_ii)
-    if(allocated(impLtot_ii))deallocate(impLtot_ii)
-    if(allocated(impLdotS_ii))deallocate(impLdotS_ii)
-    if(allocated(impj_aplha_ii))deallocate(impj_aplha_ii)
-    if(allocated(impj_aplha_sq_ii))deallocate(impj_aplha_sq_ii)
     allocate(imp_density_matrix_ii(Nsites,Nspin,Nspin,Norb,Norb))
-    allocate(impStot_ii(Nsites,3,Norb,Norb))
-    allocate(impLtot_ii(Nsites,3,Nspin,Nspin))
-    allocate(impj_aplha_ii(Nsites,3))
-    allocate(impj_aplha_sq_ii(Nsites,3))
     !
     if(size(neigen_sectorii,1)<Nsites)stop "ed_solve_lattice error: size(neigen_sectorii,1)<Nsites"
     if(size(neigen_totalii)<Nsites)stop "ed_solve_lattice error: size(neigen_totalii,1)<Nsites"
@@ -452,11 +443,6 @@ contains
     eii      = 0d0  
     ddii     = 0d0 
     imp_density_matrix_ii = zero
-    impStot_ii            = zero
-    impLtot_ii            = zero
-    impLdotS_ii           = zero
-    impj_aplha_ii         = zero
-    impj_aplha_sq_ii      = zero
     !
     call start_timer
     !
@@ -495,11 +481,6 @@ contains
        ddii(ilat,:)             = [ed_Dust,ed_Dund,ed_Dse,ed_Dph]
        !
        imp_density_matrix_ii(ilat,:,:,:,:) = imp_density_matrix(:,:,:,:)
-       impStot_ii(ilat,:,:,:)   = impStot(:,:,:)
-       impLtot_ii(ilat,:,:,:)   = impLtot(:,:,:)
-       impLdotS_ii(ilat)        = impLdotS
-       impj_aplha_ii(ilat,:)    = impj_aplha(:)
-       impj_aplha_sq_ii(ilat,:) = impj_aplha_sq(:)
        !
     enddo
     !
@@ -537,11 +518,6 @@ contains
     real(8)          :: ddii_tmp(size(bath,1),4)
     !
     complex(8)       :: imp_density_matrix_tmp(size(bath,1),Nspin,Nspin,Norb,Norb)
-    complex(8)       :: impStot_tmp(size(bath,1),3,Norb,Norb)
-    complex(8)       :: impLtot_tmp(size(bath,1),3,Nspin,Nspin)
-    complex(8)       :: impLdotS_tmp(size(bath,1))
-    real(8)          :: impj_aplha_tmp(size(bath,1),3)
-    real(8)          :: impj_aplha_sq_tmp(size(bath,1),3)
     !
     integer          :: neigen_sectortmp(size(bath,1),Nsectors)
     integer          :: neigen_totaltmp(size(bath,1))
@@ -603,16 +579,7 @@ contains
     !
     !Allocate the imp dm and related observables
     if(allocated(imp_density_matrix_ii))deallocate(imp_density_matrix_ii)
-    if(allocated(impStot_ii))deallocate(impStot_ii)
-    if(allocated(impLtot_ii))deallocate(impLtot_ii)
-    if(allocated(impLdotS_ii))deallocate(impLdotS_ii)
-    if(allocated(impj_aplha_ii))deallocate(impj_aplha_ii)
-    if(allocated(impj_aplha_sq_ii))deallocate(impj_aplha_sq_ii)
     allocate(imp_density_matrix_ii(Nsites,Nspin,Nspin,Norb,Norb))
-    allocate(impStot_ii(Nsites,3,Norb,Norb))
-    allocate(impLtot_ii(Nsites,3,Nspin,Nspin))
-    allocate(impj_aplha_ii(Nsites,3))
-    allocate(impj_aplha_sq_ii(Nsites,3))
     !
     if(size(neigen_sectorii,1)<Nsites)stop "ed_solve_lattice error: size(neigen_sectorii,1)<Nsites"
     if(size(neigen_totalii)<Nsites)stop "ed_solve_lattice error: size(neigen_totalii,1)<Nsites"
@@ -639,11 +606,6 @@ contains
     eii_tmp    = 0d0
     ddii_tmp   = 0d0
     imp_density_matrix_tmp = zero
-    impStot_tmp            = zero
-    impLtot_tmp            = zero
-    impLdotS_tmp           = zero
-    impj_aplha_tmp         = zero
-    impj_aplha_sq_tmp      = zero
     !
     call start_timer
     !
@@ -682,11 +644,6 @@ contains
        ddii_tmp(ilat,:)           = [ed_Dust,ed_Dund,ed_Dse,ed_Dph]
        !
        imp_density_matrix_tmp(ilat,:,:,:,:) = imp_density_matrix(:,:,:,:)
-       impStot_tmp(ilat,:,:,:)   = impStot(:,:,:)
-       impLtot_tmp(ilat,:,:,:)   = impLtot(:,:,:)
-       impLdotS_tmp(ilat)        = impLdotS
-       impj_aplha_tmp(ilat,:)    = impj_aplha(:)
-       impj_aplha_sq_tmp(ilat,:) = impj_aplha_sq(:)
        !
     enddo
     !
@@ -714,11 +671,6 @@ contains
     eii      = 0d0  
     ddii     = 0d0  
     imp_density_matrix_ii = zero
-    impStot_ii            = zero
-    impLtot_ii            = zero
-    impLdotS_ii           = zero
-    impj_aplha_ii         = zero
-    impj_aplha_sq_ii      = zero
     call MPI_ALLREDUCE(neigen_sectortmp,neigen_sectorii,Nsites*Nsectors,MPI_INTEGER,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(neigen_totaltmp,neigen_totalii,Nsites,MPI_INTEGER,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(Smats_tmp,Smatsii,Nsites*Nspin*Nspin*Norb*Norb*Lmats,MPI_DOUBLE_COMPLEX,MPI_SUM,MpiComm,mpi_err)
@@ -735,6 +687,7 @@ contains
     call MPI_ALLREDUCE(pii_tmp,pii,Nsites*Norb,MPI_DOUBLE_PRECISION,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(eii_tmp,eii,Nsites*4,MPI_DOUBLE_PRECISION,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(ddii_tmp,ddii,Nsites*4,MPI_DOUBLE_PRECISION,MPI_SUM,MpiComm,mpi_err)
+    call MPI_ALLREDUCE(imp_density_matrix_tmp,imp_density_matrix_ii,Nsites*Nspin*Nspin*Norb*Norb,MPI_DOUBLE_COMPLEX,MPI_SUM,MpiComm,mpi_err)
     !
   end subroutine ed_solve_lattice_mpi
 #endif

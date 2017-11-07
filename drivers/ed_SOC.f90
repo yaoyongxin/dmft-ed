@@ -227,7 +227,7 @@ program ed_SOC
         call ed_get_density_matrix(dm,dm_custom_rot,dm_eig,dm_rot)
         !
         !+ print operators Simp, Limp, Jimp in the {a,s} basis
-        call ed_get_quantum_SOC_operators()
+        call ed_get_quantum_SOC_operators_single()
         !
         !
         write(LOGfile,*)
