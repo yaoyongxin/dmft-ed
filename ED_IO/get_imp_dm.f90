@@ -76,7 +76,7 @@
     complex(8),allocatable                       :: dm_rot_tmp(:,:)
     complex(8),allocatable                       :: dm_custom_rot_tmp(:,:)
     !
-    call add_ctrl_var(soc,"soc")
+    !call add_ctrl_var(soc,"soc")
     Nlat=size(imp_density_matrix_ii,1)
     !
     if (.not.allocated(imp_density_matrix)) then
@@ -110,7 +110,7 @@
           ! dm in the basis defined by custom_rot
           dm_custom_rot(ilat,:,:)=matmul(transpose(conjg(custom_rot)),matmul(dm_(ilat,:,:),custom_rot))
           !
-       elseif(bath_type=="normal".and.SOC/=0.d0)then
+       elseif(bath_type=="normal")then !.and.SOC/=0.d0
           !
           ! here I assume that custom_rot is: {J,jz}-->{t2g,Sz} / {Lz,Sz}
           dm_custom_rot(ilat,:,:)=nn2so_reshape(imp_density_matrix_ii(ilat,:,:,:,:),Nspin,Norb)
