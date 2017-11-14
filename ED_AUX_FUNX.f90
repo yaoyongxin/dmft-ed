@@ -730,12 +730,12 @@ contains
   subroutine SOC_jz_symmetrize(funct,mask)
     !passed
     complex(8),allocatable,intent(inout)         ::  funct(:,:,:,:,:)
-    logical   ,allocatable,intent(in)            ::  mask(:,:,:,:,:)
+    logical(8),allocatable,intent(in)            ::  mask(:,:,:,:,:)
     complex(8),allocatable                       ::  funct_in(:,:,:),funct_out(:,:,:)
     complex(8),allocatable                       ::  a_funct(:),b_funct(:)
     integer                                      ::  ispin,io
     integer                                      ::  ifreq,Lfreq
-    logical                                      ::  boolmask
+    logical(8)                                   ::  boolmask
     complex(8),allocatable                       ::  U(:,:),Udag(:,:)
     if(size(funct,dim=1)/=Nspin)stop "wrong size 1 in SOC symmetrize input f"
     if(size(funct,dim=2)/=Nspin)stop "wrong size 2 in SOC symmetrize input f"
