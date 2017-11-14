@@ -195,6 +195,7 @@ program ed_SOC
         if (ed_mode=="normal") then
            call ed_chi2_fitgf(Weiss,bath,ispin=1)
            call spin_symmetrize_bath(bath,save=.true.)
+           call  orb_symmetrize_bath(bath,save=.true.)
         else
            call ed_chi2_fitgf(Weiss,bath)
         endif
@@ -209,6 +210,7 @@ program ed_SOC
         if (ed_mode=="normal") then
            call ed_chi2_fitgf(Delta,bath,ispin=1)
            call spin_symmetrize_bath(bath,save=.true.)
+           call  orb_symmetrize_bath(bath,save=.true.)
         else
            call ed_chi2_fitgf(Delta,bath)
         endif

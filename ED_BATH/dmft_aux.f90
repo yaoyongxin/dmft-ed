@@ -657,8 +657,17 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
               eps_k=0.0d0;lambda_k=0.0d0
               !
               !off-diagonal lambda_k
-              i=i+1
-              lambda_k=bath_(i)
+              if(Jz_basis)then
+                 if(dmft_bath_%mask(1,2,3,2,1).or.dmft_bath_%mask(1,2,3,2,2))then
+                    i=i+1
+                    lambda_k=bath_(i)
+                 endif
+              else
+                 if(dmft_bath_%mask(1,2,3,1,1).or.dmft_bath_%mask(1,2,3,1,2))then
+                    i=i+1
+                    lambda_k=bath_(i)
+                 endif
+              endif
               !
               !diagonal eps_k
               i=i+1
@@ -913,15 +922,20 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
                  hrep_aux=matmul(U,matmul(hrep_aux,Udag))
                  !
                  !off-diagonal lambda_k
-                 i=i+1
-                 bath_(i)=real(hrep_aux(3,4))*2.d0
+                 if(dmft_bath_%mask(1,2,3,2,1).or.dmft_bath_%mask(1,2,3,2,2))then
+                    i=i+1
+                    bath_(i)=real(hrep_aux(3,4))*2.d0
+                 endif
                  !diagonal eps_k
                  i=i+1
                  bath_(i)=real(hrep_aux(1,1))
               else
+                 !
                  !off-diagonal lambda_k
-                 i=i+1
-                 bath_(i)=real(dmft_bath_%h(1,2,3,1,ibath))
+                 if(dmft_bath_%mask(1,2,3,1,1).or.dmft_bath_%mask(1,2,3,1,2))then
+                    i=i+1
+                    bath_(i)=real(dmft_bath_%h(1,2,3,1,ibath))*2.d0
+                 endif
                  !diagonal eps_k
                  i=i+1
                  bath_(i)=real(dmft_bath_%h(1,1,1,1,ibath))
