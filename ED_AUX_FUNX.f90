@@ -727,13 +727,15 @@ contains
 
 
 
-  subroutine SOC_jz_symmetrize(funct)
+  subroutine SOC_jz_symmetrize(funct,mask)
     !passed
     complex(8),allocatable,intent(inout)         ::  funct(:,:,:,:,:)
+    logical   ,allocatable,intent(in)            ::  mask(:,:,:,:,:)
     complex(8),allocatable                       ::  funct_in(:,:,:),funct_out(:,:,:)
     complex(8),allocatable                       ::  a_funct(:),b_funct(:)
     integer                                      ::  ispin,io
     integer                                      ::  ifreq,Lfreq
+    logical                                      ::  boolmask
     complex(8),allocatable                       ::  U(:,:),Udag(:,:)
     if(size(funct,dim=1)/=Nspin)stop "wrong size 1 in SOC symmetrize input f"
     if(size(funct,dim=2)/=Nspin)stop "wrong size 2 in SOC symmetrize input f"
@@ -774,6 +776,18 @@ contains
        b_funct(:)=b_funct(:)+funct_out(io,io,:)
     enddo
     b_funct = b_funct/4.d0
+    !
+    boolmask = .false.
+    if(Jz_basis)then
+       boolmask = (.not.mask(1,2,3,2,1)).and.(.not.mask(1,2,3,2,2))
+    else
+       boolmask = (.not.mask(1,2,3,1,1)).and.(.not.mask(1,2,3,1,2))
+    endif
+    if(boolmask)then
+       a_funct = ( a_funct + b_funct ) / 2.d0
+       b_funct = a_funct
+    endif
+    !
     funct_out=zero
     do io=1,2
        funct_out(io,io,:)=a_funct(:)
