@@ -339,7 +339,7 @@ contains
     mash_thickness=10
     step=2*pi/(mash_thickness*Nk)
     !
-    !write(*,*) "Starting Weyl point search"
+    write(*,*) "Starting Weyl point search"
     !
     kpoint=[-pi,-pi,-pi]
     xloop: do i=0,mash_thickness*Nk-1
@@ -361,6 +361,7 @@ contains
         end do zloop
       end do yloop
     end do xloop
+	write(*,*) "Starting Weyl point search"
   end subroutine is_weyl
 
 

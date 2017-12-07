@@ -40,8 +40,8 @@ subroutine print_impG0_normal
         iorb=getIorb(l)
         jorb=getJorb(l)
         suffix="_l"//str(iorb)//str(jorb)//"_s"//str(ispin)
-        call splot("impG"//reg(suffix)//"_iw"//reg(ed_file_suffix)//".ed"   ,wm,impG0mats(ispin,ispin,iorb,jorb,:))
-        call splot("impG"//reg(suffix)//"_realw"//reg(ed_file_suffix)//".ed",wr,impG0real(ispin,ispin,iorb,jorb,:))
+        call splot("impG0"//reg(suffix)//"_iw"//reg(ed_file_suffix)//".ed"   ,wm,impG0mats(ispin,ispin,iorb,jorb,:))
+        call splot("impG0"//reg(suffix)//"_realw"//reg(ed_file_suffix)//".ed",wr,impG0real(ispin,ispin,iorb,jorb,:))
      enddo
   enddo
   !
