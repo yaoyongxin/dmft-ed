@@ -4,7 +4,7 @@ program ed_wsm_3d
   USE DMFT_TOOLS
   implicit none
   integer                       :: iloop,Lk,Nso
-  logical                       :: converged
+  logical                       :: converged,small_error,sigma_symmetric
   !Bath:
   integer                       :: Nb
   real(8),allocatable           :: Bath(:),Bath_Prev(:)
@@ -18,7 +18,7 @@ program ed_wsm_3d
   integer,allocatable           :: ik2ix(:),ik2iy(:),ik2iz(:)
   !variables for the model:
   integer                       :: Nk,Nkpath
-  real(8)                       :: e0,mh,lambda,bx,by,bz,BIA
+  real(8)                       :: e0,mh,sigma_difference,sigma_symmetry,lambda,bx,by,bz,BIA
   real(8)                       :: wmixing
   character(len=16)             :: finput
   character(len=32)             :: hkfile
@@ -30,6 +30,7 @@ program ed_wsm_3d
   call parse_input_variable(nk,"NK",finput,default=30)
   call parse_input_variable(nkpath,"NKPATH",finput,default=500)
   call parse_input_variable(mh,"MH",finput,default=1d0)
+  call parse_input_variable(sigma_symmetry,"SIGMA_SYMMETRY",finput,default=0.001d0)
   call parse_input_variable(e0,"E0",finput,default=1d0)
   call parse_input_variable(lambda,"LAMBDA",finput,default=0.5d0)
   call parse_input_variable(bx,"BX",finput,default=0.3d0)
@@ -84,6 +85,8 @@ program ed_wsm_3d
   call ed_init_solver(bath,j2so(wsmHloc))
   !
   !DMFT loop
+  small_error=.false.
+  sigma_symmetric=.false.
   iloop=0;converged=.false.
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
@@ -132,7 +135,18 @@ program ed_wsm_3d
      !
      !
      !
-     converged = check_convergence(Weiss(1,1,1,1,:),dmft_error,nsuccess,nloop)
+     small_error = check_convergence(Weiss(1,1,1,1,:),dmft_error,nsuccess,nloop)
+     !
+     sigma_difference=MAXVAL(Abs(Smats(1,1,1,1,:)+CONJG(Smats(1,1,2,2,:))))
+     if (sigma_difference .lt. sigma_symmetry) then
+        sigma_symmetric=.true.
+        write(*,"(A,ES15.7)")bold_green("Sigma symmetry is wrong by "),sigma_difference
+     else
+        sigma_symmetric=.false.
+        write(*,"(A,ES15.7)")bold_red("Sigma symmetry is wrong by "),sigma_difference
+     endif
+     !sigma_symmetric = check_convergence(Abs(Smats(1,1,1,1,:)+CONJG(Smats(1,1,2,2,:))),sigma_symmetry,nsuccess,nloop)
+     converged=small_error.AND.sigma_symmetric
      !
      call end_loop
      !
@@ -361,7 +375,7 @@ contains
         end do zloop
       end do yloop
     end do xloop
-	write(*,*) "Starting Weyl point search"
+    write(*,*) "Ended Weyl point search"
   end subroutine is_weyl
 
 
