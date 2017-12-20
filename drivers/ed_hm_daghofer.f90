@@ -31,7 +31,7 @@ program ed_hm_3bands
   real(8)                                       :: ts,wmixing
   character(len=32)                             :: finput
   character(len=32)                             :: hkfile
-  logical                                       :: spinsym
+  logical                                       :: spinsym,bathsym
   !
   real(8),dimension(2)                          :: Eout
   real(8),allocatable,dimension(:)              :: dens
@@ -40,15 +40,24 @@ program ed_hm_3bands
   complex(8),dimension(:,:,:),allocatable       :: Zfoo
   complex(8),allocatable,dimension(:,:,:,:,:)   :: S0
 
+  !modify daghofer hamiltonian
+  real(8)                                       :: alpha,theta
+
+  !parse input file
+  call parse_cmd_variable(finput,"FINPUT",default='inputED.conf')
+
+  call parse_input_variable(alpha,"ALPHA",finput,default=1.d0)
+  call parse_input_variable(theta,"THETA",finput,default=0.d0)
 
   !Parse additional variables && read Input && read H(k)^2x2
-  call parse_cmd_variable(finput,"FINPUT",default='inputED.conf')
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call parse_input_variable(nk,"NK",finput,default=100)
   call parse_input_variable(nkpath,"NKPATH",finput,default=500)
   call parse_input_variable(ts,"TS","inputED.conf",default=1d0)
   call parse_input_variable(wmixing,"WMIXING",finput,default=0.5d0)
   call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
+  !
+  call parse_input_variable(bathsym,"BATHSYM",finput,default=.false.)
   !
   call ed_read_input(trim(finput))
 
@@ -106,6 +115,9 @@ program ed_hm_3bands
 
      !Fit the new bath, starting from the old bath + the supplied Weiss
      call ed_chi2_fitgf(Bath,Weiss,Hloc,ispin=1)
+     
+     !copy iorb component in jorb to enforce symmetry
+     if(bathsym) call copy_component_bath(Bath(1,:),1,1,Bath(1,:),1,2)
 
      !MIXING:
      if(iloop>1)Bath=wmixing*Bath + (1.d0-wmixing)*Bath_prev
@@ -123,7 +135,12 @@ program ed_hm_3bands
   call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal,iprint=4)
 
 
+  ! save self-energy on disk
+  call save_sigma_mats(Smats)
+  call save_sigma_real(Sreal)
+
 contains
+
 
 
 
@@ -135,19 +152,36 @@ contains
     integer                         :: Nlso
     complex(8),dimension(Nlso,Nlso) :: hk
     real(8)                         :: kx,ky
-    real(8)                         :: dxy
+    real(8)                         :: t1,t2,t3,t4,t5,t6,t7,t8,dxy,xmu_tb
     !
     kx=kpoint(1)
     ky=kpoint(2)
     !
     hk(:,:) = zero
     !
-    !square lattice
-    dxy=0.5d0*ts
-
-    hk(1,1) = -2.d0*ts*(cos(kx)+cos(ky))
-    hk(2,2) = -2.d0*ts*(cos(kx)+cos(ky))
-    hk(3,3) = -2.d0*ts*(cos(kx)+cos(ky)) + dxy
+    !daghofer model 
+    t1  =  0.02d0
+    t2  =  0.06d0
+    t3  =  0.03d0
+    t4  = -0.01d0
+    t5  =  0.2d0*alpha
+    t6  =  0.3d0*alpha
+    t7  = -0.2d0*alpha
+    t8  = -t7/2.d0
+    dxy =  0.4d0-theta
+    !
+    xmu_tb = 0.212d0
+    !
+    hk(1,1) = 2.d0*t2*cos(kx) + 2.d0*t1*cos(ky) + 4.d0*t3*cos(kx)*cos(ky) - xmu_tb
+    hk(2,2) = 2.d0*t1*cos(kx) + 2.d0*t2*cos(ky) + 4.d0*t3*cos(kx)*cos(ky) - xmu_tb
+    hk(3,3) = 2.d0*t5*(cos(kx)+cos(ky)) + 4.d0*t6*cos(kx)*cos(ky) + dxy   - xmu_tb
+    hk(1,2) = 4.d0*t4*sin(kx)*sin(ky)
+    hk(1,3) = 2.d0*t7*sin(kx)*xi + 4.d0*t8*sin(kx)*cos(ky)*xi
+    hk(2,3) = 2.d0*t7*sin(ky)*xi + 4.d0*t8*sin(ky)*cos(kx)*xi 
+    !
+    hk(2,1) = hk(1,2)
+    hk(3,1) = dconjg(hk(1,3))
+    hk(3,2) = dconjg(hk(2,3))
     !
   end function hk_model
 
@@ -230,7 +264,59 @@ contains
 
 
 
+  !----------------------------------------------------------------------------------------!
+  ! purpose: save the matsubare local self-energy on disk
+  !----------------------------------------------------------------------------------------!
+  subroutine save_sigma_mats(Smats)
+    complex(8),intent(inout)         :: Smats(:,:,:,:,:,:)
+    character(len=30)                :: suffix
+    integer                          :: ilat,ispin,iorb
+    real(8),dimension(:),allocatable :: wm
 
+    if(size(Smats,2)/=Nspin) stop "save_sigma: error in dim 2. Nspin"
+    if(size(Smats,3)/=Nspin) stop "save_sigma: error in dim 3. Nspin"
+    if(size(Smats,4)/=Norb) stop "save_sigma: error in dim 4. Norb"
+    if(size(Smats,5)/=Norb) stop "save_sigma: error in dim 5. Norb"
+
+    allocate(wm(Lmats))
+
+    wm = pi/beta*(2*arange(1,Lmats)-1)
+    write(LOGfile,*)"write spin-orbital diagonal elements:"
+    do ispin=1,Nspin
+       do iorb=1,Norb
+          suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_iw.ed"
+          call store_data("LSigma"//trim(suffix),Smats(:,ispin,ispin,iorb,iorb,:),wm)
+       enddo
+    enddo
+
+  end subroutine save_sigma_mats
+
+
+  !----------------------------------------------------------------------------------------!
+  ! purpose: save the real local self-energy on disk
+  !----------------------------------------------------------------------------------------!
+  subroutine save_sigma_real(Sreal)
+    complex(8),intent(inout)         :: Sreal(:,:,:,:,:,:)
+    character(len=30)                :: suffix
+    integer                          :: ilat,ispin,iorb
+    real(8),dimension(:),allocatable :: wm,wr
+
+    if(size(Sreal,2)/=Nspin) stop "save_sigma: error in dim 2. Nspin"
+    if(size(Sreal,3)/=Nspin) stop "save_sigma: error in dim 3. Nspin"
+    if(size(Sreal,4)/=Norb) stop "save_sigma: error in dim 4. Norb"
+    if(size(Sreal,5)/=Norb) stop "save_sigma: error in dim 5. Norb"
+
+    allocate(wr(Lreal))
+
+    wr = linspace(wini,wfin,Lreal)
+    do ispin=1,Nspin
+       do iorb=1,Norb
+          suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_realw.ed"
+          call store_data("LSigma"//trim(suffix),Sreal(:,ispin,ispin,iorb,iorb,:),wr)
+       enddo
+    enddo
+
+  end subroutine save_sigma_real
 
 
 
