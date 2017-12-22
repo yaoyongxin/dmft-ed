@@ -22,15 +22,15 @@ program ed_wsm_3d
   real(8)                       :: wmixing
   character(len=16)             :: finput
   character(len=32)             :: hkfile
-  logical                       :: spinsym,getpoles
-  complex(8),dimension(4,4)     :: Gamma1,Gamma2,Gamma3,Gamma5
+  logical                       :: orbsym,getpoles
+  complex(8),dimension(4,4)     :: emat,soxmat,soymat,sozmat,bxmat,bymat,bzmat,BIAmat
   !
   call parse_cmd_variable(finput,"FINPUT",default='inputED_WSM.conf')
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call parse_input_variable(nk,"NK",finput,default=30)
   call parse_input_variable(nkpath,"NKPATH",finput,default=500)
   call parse_input_variable(mh,"MH",finput,default=1d0)
-  call parse_input_variable(sigma_symmetry,"SIGMA_SYMMETRY",finput,default=0.001d0)
+  call parse_input_variable(sigma_symmetry,"SIGMA_SYMMETRY",finput,default=10.0d0)
   call parse_input_variable(e0,"E0",finput,default=1d0)
   call parse_input_variable(lambda,"LAMBDA",finput,default=0.5d0)
   call parse_input_variable(bx,"BX",finput,default=0.3d0)
@@ -38,10 +38,12 @@ program ed_wsm_3d
   call parse_input_variable(bz,"BZ",finput,default=0.d0)
   call parse_input_variable(BIA,"BIA",finput,default=0.d0)
   call parse_input_variable(wmixing,"WMIXING",finput,default=0.75d0)
-  call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
+  call parse_input_variable(orbsym,"ORBSYM",finput,default=.false.)
+  !
+  !READ INPUT FILE
   !
   call ed_read_input(trim(finput))
-
+  !
   !Add DMFT CTRL Variables:
   call add_ctrl_var(Norb,"norb")
   call add_ctrl_var(Nspin,"nspin")
@@ -50,15 +52,19 @@ program ed_wsm_3d
   call add_ctrl_var(wini,'wini')
   call add_ctrl_var(wfin,'wfin')
   call add_ctrl_var(eps,"eps")
-
-
+  !
   !SETUP THE GAMMA MATRICES:
-  gamma1=kron_pauli( pauli_tau_z, pauli_sigma_x)
-  gamma2=kron_pauli( pauli_tau_0,-pauli_sigma_y)
-  gamma3=kron_pauli( pauli_tau_x,-pauli_sigma_x)
-  gamma5=kron_pauli( pauli_tau_0, pauli_sigma_z)
-
-
+  emat = kron_pauli( pauli_sigma_0, pauli_tau_z)
+  soxmat=kron_pauli( pauli_sigma_z, pauli_tau_x)
+  soymat=kron_pauli( pauli_sigma_0, pauli_tau_y)
+  sozmat=kron_pauli( pauli_sigma_x, pauli_tau_x)
+  bxmat =kron_pauli( pauli_sigma_x, pauli_tau_z)
+  bymat =kron_pauli( pauli_sigma_y, pauli_tau_0)
+  bzmat =kron_pauli( pauli_sigma_z, pauli_tau_z)
+  BIAmat=kron_pauli( pauli_sigma_y, pauli_tau_y)
+  !
+  !PRELIMINARY CHECKS
+  !
   if(Nspin/=2.OR.Norb/=2)stop "Wrong setup from input file: Nspin=Norb=2 -> 4Spin-Orbitals"
   Nso=Nspin*Norb
   !
@@ -69,46 +75,43 @@ program ed_wsm_3d
   allocate(Sreal(Nspin,Nspin,Norb,Norb,Lreal))
   allocate(Greal(Nspin,Nspin,Norb,Norb,Lreal))
   allocate(SigmaWSM(Nso,Nso))
-  call set_sigmaWSM()           !this set sigma_WSM(0) to zero
   !
+  !SET sigma_WSM(0) to zero
   !
-  !
-  !
+  call set_sigmaWSM()
   !
   !Buil the Hamiltonian on a grid or on path
+  !
   call build_hk(trim(hkfile))
   !
   !Setup solver
+  !
   Nb=get_bath_dimension()
   allocate(Bath(Nb))
   allocate(Bath_Prev(Nb))
   call ed_init_solver(bath,j2so(wsmHloc))
   !
   !DMFT loop
-  small_error=.false.
-  sigma_symmetric=.false.
-  iloop=0;converged=.false.
+  !
+  small_error=.false.                 ! flag for dmft error
+  sigma_symmetric=.false.             ! flag for sigma symmetry breaking - usually huge aka disabled
+  iloop=0;converged=.false.           ! loop end flags
+  !
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
      call start_loop(iloop,nloop,"DMFT-loop")
      !
-     !
-     !
      !Solve the EFFECTIVE IMPURITY PROBLEM (first w/ a guess for the bath)
      call ed_solve(bath)
-     !
      !
      ! retrieve the self-energies
      call ed_get_sigma_matsubara(Smats)
      call ed_get_sigma_real(Sreal)
      call build_z2_indices( so2j(Smats(:,:,:,:,1),Nso) ) !so2j transforms a Nspin:Nspin:Norb:Norb into a Nso:Nso matrix
      !
-     !
-     !
      ! compute the local gf:
      call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats)
      call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=3)
-     !
      !
      ! compute the Weiss field (only the Nineq ones)
      if(cg_scheme=='weiss')then
@@ -116,8 +119,6 @@ program ed_wsm_3d
      else
         call dmft_delta(Gmats,Smats,Weiss,Hloc=j2so(wsmHloc))
      endif
-     !
-     !
      !
      !Fit the new bath, starting from the old bath + the supplied Weiss/Delta
      if(ed_mode=="normal")then
@@ -127,17 +128,28 @@ program ed_wsm_3d
         call ed_chi2_fitgf(Weiss,bath)
      endif
      !
+     !if flag is set, symmetrize the bath
      !
+     if(orbsym)then
+     call copy_component_bath(-bath,1,1,bath,1,2,1)
+     call copy_component_bath(-bath,2,1,bath,2,2,1)
      !
-     !MIXING:
+     call copy_component_bath(bath,1,1,bath,1,2,2)
+     call copy_component_bath(bath,2,1,bath,2,2,2)
+     endif
+     !
+     !MIXING the current bath with the previous:
      if(iloop>1)Bath = wmixing*Bath + (1.d0-wmixing)*Bath_Prev
      Bath_Prev=Bath
      !
-     !
+     !First check: DMFT error
      !
      small_error = check_convergence(Weiss(1,1,1,1,:),dmft_error,nsuccess,nloop)
      !
+     !Second check: Sigma symmetry
+     !
      sigma_difference=MAXVAL(Abs(Smats(1,1,1,1,:)+CONJG(Smats(1,1,2,2,:))))
+     !
      if (sigma_difference .lt. sigma_symmetry) then
         sigma_symmetric=.true.
         write(*,"(A,ES15.7)")bold_green("Sigma symmetry is wrong by "),sigma_difference
@@ -145,73 +157,60 @@ program ed_wsm_3d
         sigma_symmetric=.false.
         write(*,"(A,ES15.7)")bold_red("Sigma symmetry is wrong by "),sigma_difference
      endif
-     !sigma_symmetric = check_convergence(Abs(Smats(1,1,1,1,:)+CONJG(Smats(1,1,2,2,:))),sigma_symmetry,nsuccess,nloop)
+     !
+     !converge if all checks are positive
+     !
      converged=small_error.AND.sigma_symmetric
      !
      call end_loop
      !
   enddo
-
-  
+  !
   ! compute the local gf:
   call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal)
   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=3)
+  !
   !Get kinetic energy:
   call dmft_kinetic_energy(Hk,Wtk,Smats)
-
-
-  !!Get 3d Bands from Top. Hamiltonian
+  !
+  !Get 3d Bands from Top. Hamiltonian
   call solve_hk_topological( so2j(Smats(:,:,:,:,1),Nso) )
-
-  !!Find out if it is a semimetal
+  !
+  !Find out if it is a semimetal
   call is_weyl( Nso, so2j(Smats(:,:,:,:,1),Nso) )
+ 
+ 
+
+
 contains
 
 
 
-  !---------------------------------------------------------------------
-  !PURPOSE: GET WSM HAMILTONIAN IN THE FULL BZ
-  !---------------------------------------------------------------------
-  subroutine build_hk(file)
-    character(len=*),optional           :: file
-    integer                             :: i,j,k,ik,iorb,jorb,io,ispin
-    integer                             :: ix,iy,iz
-    real(8)                             :: kx,ky,kz
-    real(8)                             :: foo
-    integer                             :: unit
+  !--------------------------------------------------------------------!
+  !PURPOSE: Define the WSM Hamiltonian
+  !--------------------------------------------------------------------!
+  !
+  function hk_weyl(kpoint,N) result(hk)
+    real(8),dimension(:)      :: kpoint
+    integer                   :: N
+    real(8)                   :: kx,ky,kz
+    complex(8),dimension(N,N) :: hk
+    if(N/=4)stop "hk_weyl: error in N dimensions"
+    kx=kpoint(1)
+    ky=kpoint(2)
+    kz=kpoint(3)
     !
-    !get H(k) and solve the non-interacting problem along a path in 3d:
-    call build_hk_path()
+    Hk          = zero
     !
-    !Get H(k) in the BZ:    
-    Lk=Nk**3
-    !
-    write(LOGfile,*)"Build H(k) for WSM:"
-    write(*,*)"# of k-points     :",Lk
-    !
-    if(allocated(Hk))deallocate(Hk)
-    if(allocated(wtk))deallocate(wtk)
-    allocate(Hk(Nso,Nso,Lk))
-    allocate(Wtk(Lk))
-    call TB_set_bk([pi2,0d0,0d0],[0d0,pi2,0d0],[0d0,0d0,pi2])
-    call TB_build_model(Hk,hk_weyl,Nso,[Nk,Nk,Nk])
-    Wtk = 1d0/Lk
-    if(present(file))call TB_write_hk(Hk,trim(file),Nso,&
-         Nd=Norb,Np=1,Nineq=1,&
-         Nkvec=[Nk,Nk,Nk])
+    Hk=(Mh - e0*(cos(kx) + cos(ky) + cos(kz)))*emat+&
+        lambda*(sin(kx)*soxmat - sin(ky)*soymat + sin(kz)*sozmat)+&
+        BIA*BIAmat + bx*bxmat + by*bymat + bz*bzmat
     !
     !
-    !   
-    !GET LOCAL PART OF THE HAMILTONIAN
-    if(allocated(wsmHloc))deallocate(wsmHloc)
-    allocate(wsmHloc(Nso,Nso))
-    wsmHloc = sum(Hk(:,:,:),dim=3)/Lk
-    where(abs(dreal(wsmHloc))<1.d-9)wsmHloc=0d0
-    call TB_write_Hloc(wsmHloc)
+    !add the SigmaWSM term to get Topologial Hamiltonian if required:
+    Hk = Hk + dreal(SigmaWSM)
     !
-  end subroutine build_hk
-
-
+  end function hk_weyl
 
 
   !---------------------------------------------------------------------
@@ -266,6 +265,63 @@ contains
   end subroutine build_hk_path
 
 
+  !---------------------------------------------------------------------
+  !PURPOSE: GET WSM HAMILTONIAN IN THE FULL BZ
+  !---------------------------------------------------------------------
+  subroutine build_hk(file)
+    character(len=*),optional           :: file
+    integer                             :: i,j,k,ik,iorb,jorb,io,ispin
+    integer                             :: ix,iy,iz
+    real(8)                             :: kx,ky,kz
+    real(8)                             :: foo
+    integer                             :: unit
+    !
+    !get H(k) and solve the non-interacting problem along a path in 3d:
+    call build_hk_path()
+    !
+    !Get H(k) in the BZ:    
+    Lk=Nk**3
+    !
+    write(LOGfile,*)"Build H(k) for WSM:"
+    write(*,*)"# of k-points     :",Lk
+    !
+    if(allocated(Hk))deallocate(Hk)
+    if(allocated(wtk))deallocate(wtk)
+    allocate(Hk(Nso,Nso,Lk))
+    allocate(Wtk(Lk))
+    call TB_set_bk([pi2,0d0,0d0],[0d0,pi2,0d0],[0d0,0d0,pi2])
+    call TB_build_model(Hk,hk_weyl,Nso,[Nk,Nk,Nk])
+    Wtk = 1d0/Lk
+    if(present(file))call TB_write_hk(Hk,trim(file),Nso,&
+         Nd=Norb,Np=1,Nineq=1,&
+         Nkvec=[Nk,Nk,Nk])
+    !   
+    !GET LOCAL PART OF THE HAMILTONIAN
+    if(allocated(wsmHloc))deallocate(wsmHloc)
+    allocate(wsmHloc(Nso,Nso))
+    wsmHloc = sum(Hk(:,:,:),dim=3)/Lk
+    where(abs(dreal(wsmHloc))<1.d-9)wsmHloc=0d0
+    call TB_write_Hloc(wsmHloc)
+    !
+  end subroutine build_hk
+
+
+  !--------------------------------------------------------------------!
+  !PURPOSE: Set the Self-Energy
+  !--------------------------------------------------------------------!
+  !
+  subroutine set_SigmaWSM(sigma)
+    complex(8),dimension(Nso,Nso),optional :: sigma(Nso,Nso)
+    sigmaWSM = zero;if(present(sigma))sigmaWSM=sigma
+  end subroutine set_SigmaWSM
+  
+
+
+  !--------------------------------------------------------------------!
+  !PURPOSE: Solve the topological Hamiltonian
+  !--------------------------------------------------------------------!
+  
+  
   subroutine solve_hk_topological(sigma)
     integer                                :: i,j
     integer                                :: Npts
@@ -296,45 +352,10 @@ contains
 
 
 
-  !--------------------------------------------------------------------!
-  !WSM HAMILTONIAN:
-  !--------------------------------------------------------------------!
-  subroutine set_SigmaWSM(sigma)
-    complex(8),dimension(Nso,Nso),optional :: sigma(Nso,Nso)
-    sigmaWSM = zero;if(present(sigma))sigmaWSM=sigma
-  end subroutine set_SigmaWSM
-
-  function hk_weyl(kpoint,N) result(hk)
-    real(8),dimension(:)      :: kpoint
-    integer                   :: N
-    real(8)                   :: kx,ky,kz
-    complex(8),dimension(N,N) :: hk
-    if(N/=4)stop "hk_weyl: error in N dimensions"
-    kx=kpoint(1)
-    ky=kpoint(2)
-    kz=kpoint(3)
-    !
-    Hk          = zero
-    Hk(1:2,1:2) = &
-         (Mh - e0*(cos(kx) + cos(ky) + cos(kz)) )*pauli_tau_z +&
-         lambda*sin(kx)*pauli_tau_x + lambda*sin(ky)*pauli_tau_y +&
-         bz*pauli_tau_z
-    Hk(3:4,3:4) = conjg( &
-         (Mh - e0*(cos(-kx) + cos(-ky) + cos(-kz)) )*pauli_tau_z +&
-         lambda*sin(-kx)*pauli_tau_x + lambda*sin(-ky)*pauli_tau_y -&
-         bz*pauli_tau_z)
-    Hk(1:2,3:4) = lambda*sin(kz)*pauli_tau_x -xi*BIA*pauli_tau_y + bx*pauli_tau_z - xi*by*pauli_tau_0
-    Hk(3:4,1:2) = lambda*sin(kz)*pauli_tau_x +xi*BIA*pauli_tau_y + bx*pauli_tau_z + xi*by*pauli_tau_0
-    !
-    !add the SigmaWSM term to get Topologial Hamiltonian if required:
-    Hk = Hk + dreal(SigmaWSM)
-    !
-  end function hk_weyl
-
-  !--------------------------------------------------------------------!
-  !WSM REGION FINDER:
-  !--------------------------------------------------------------------!
-
+  !-------------------------------------------------------------------------------!
+  !PURPOSE: Rough finder of candidate Weyl points
+  !-------------------------------------------------------------------------------!
+  !
   subroutine is_weyl(N,sigma)
     integer                                 :: weyl_index,test_brutal=0,i,j,k,mash_thickness
     real(8)                                    :: step
@@ -365,12 +386,11 @@ contains
           test_brutal=test_brutal+1
           ham=hk_weyl(kpoint,N)
           call eigh(ham,Eval)
-          if (abs(Eval(3))+abs(Eval(2)) .lt. 0.1) then
+          if (abs(Eval(3) - Eval(2)) .lt. 0.2) then
             write(*,*) "----------------------------------------"
-            write(*,*) "Found candidate Weyl point at ",kpoint, "value is ", abs(Eval(3))
+            write(*,*) "Found candidate Weyl point at ",kpoint, ": Energy = ", abs(Eval(3))
             call chern_retriever(kpoint,step)
             write(*,*) "----------------------------------------"
-            !exit xloop
           end if
         end do zloop
       end do yloop
@@ -378,27 +398,10 @@ contains
     write(*,*) "Ended Weyl point search"
   end subroutine is_weyl
 
-
-  subroutine retrieve_third_band(n,x,fvec,iflag)
-    integer                                 :: iflag,n, INFO
-    real(8),dimension(N)                    :: x
-    real(8),dimension(N)                    :: fvec
-    complex(8),dimension(Nso,Nso)           :: ham
-    complex(8),dimension(Nso,Nso)           :: sigma
-    real(8),dimension(Nso)                  :: eval
-    !
-    sigma=so2j(Smats(:,:,:,:,1),Nso)
-    call set_sigmaWSM(sigma)
-    ham=hk_weyl(x,Nso)
-    call eigh(ham,Eval)
-    fvec=[Eval(3),0.0d0,0.0d0]
-  end subroutine retrieve_third_band
-
-
   !--------------------------------------------------------------------!
-  !CHERN NUMBER EVALUATION  (NEEDS FIXING AND OPTIMIZATION)
+  !PURPOSE: Evaluation of the Chirality of the candidate Weyl point
   !--------------------------------------------------------------------!
-
+  !
   subroutine chern_retriever(kpoint,cubesize)   !integrates Berry flux on a cubic surface around the point kpoint
     real(8)                         :: z2
     complex(8)                      :: phase
@@ -476,13 +479,8 @@ contains
     endif
   end subroutine chern_retriever
 
-
-
-
-
-
   !--------------------------------------------------------------------!
-  !TRANSFORMATION BETWEEN DIFFERENT BASIS AND OTHER ROUTINES
+  !PURPOSE: TRANSFORMATION BETWEEN DIFFERENT BASIS AND OTHER ROUTINES
   !--------------------------------------------------------------------!
   subroutine build_z2_indices(sigma0)
     integer                                :: unit

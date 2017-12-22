@@ -229,6 +229,7 @@ end function grad_chi2_delta_normal_normal
 !PURPOSE: Evaluate the \chi^2 distance of G_0_Anderson function 
 ! The Gradient is not evaluated, so the minimization requires 
 ! a numerical estimate of the gradient. 
+!TOCCA QUI
 !+-------------------------------------------------------------+
 function chi2_weiss_normal_normal(a) result(chi2)
   real(8),dimension(:)         ::  a
