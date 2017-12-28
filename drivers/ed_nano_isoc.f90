@@ -1,4 +1,4 @@
-program ed_nano
+program ed_nano_isoc
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
@@ -32,7 +32,7 @@ program ed_nano
   !
   logical                                         :: phsym
   logical                                         :: leads
-  logical                                         :: kinetic,trans,jrkky,chi0ij
+  logical                                         :: kinetic,trans,jbias,jrkky,chi0ij
   logical                                         :: para
   !non-local Green's function:
   complex(8),allocatable,dimension(:,:,:,:,:,:,:) :: Gijmats,Gijreal
@@ -49,6 +49,7 @@ program ed_nano
   ! parse environment & transport flags
   call parse_input_variable(leads,"leads",finput,default=.false.)
   call parse_input_variable(trans,"trans",finput,default=.false.)
+  call parse_input_variable(jbias,"jbias",finput,default=.false.)
   call parse_input_variable(jrkky,"jrkky",finput,default=.false.)
   call parse_input_variable(chi0ij,"chi0ij",finput,default=.false.)
   call parse_input_variable(kinetic,"kinetic",finput,default=.false.)
@@ -144,7 +145,8 @@ program ed_nano
      !
      ! extract the linear response (zero-bias) transmission function
      ! i.e. the conductance in units of the quantum G0 [e^2/h]
-     call ed_get_conductance(Gijreal)
+     ! and the corresponding bias-driven current (if jbias=T)
+     call ed_transport(Gijreal)
      !
      deallocate(Gijreal)
      stop
@@ -533,6 +535,7 @@ contains
 
     allocate(wr(Lreal))
 
+    wr = linspace(wini,wfin,Lreal)
     do ispin=1,Nspin
        do iorb=1,Norb
           suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_realw.ed"
@@ -686,23 +689,27 @@ contains
 
 
   !----------------------------------------------------------------------------------------!
-  ! purpose: evaluate the conductance (without vertex corrections) for a nanostructure 
-  ! on the real axis, given the non-local Green's function and the L/R hybridization matrix, 
-  ! of size [Nlat*Nspin*Norb**2*Lreal]
+  ! purpose: evaluate 
+  !  - conductance (without vertex corrections) 
+  !  - bias-driven current
+  ! for a nanostructure on the real axis, given the non-local Green's function 
+  ! and the L/R hybridization matrix, of size [Nlat*Nspin*Norb**2*Lreal]
   !----------------------------------------------------------------------------------------!
-  subroutine ed_get_conductance(Gret)
+  subroutine ed_transport(Gret)
     complex(8),intent(inout)              :: Gret(:,:,:,:,:,:,:)  ![Nlat][Nlat][Nspin][Nspin][Norb][Norb][Lreal]
     ! auxiliary variables for matmul        
     complex(8),dimension(:,:),allocatable :: GR,HR,GA,HL,Re,Le,Te ![Nlat*Norb]**2
     complex(8),dimension(:,:),allocatable :: transe               ![Nspin][Lreal]
     !
-    real(8),dimension(:),allocatable      :: jcurrs               ![Nspin]
-    !
-    integer,dimension(:),allocatable      :: rmask,lmask          ![Nlat]
+    integer,dimension(:,:),allocatable    :: rmask,lmask          ![Nlat]**2
     !
     real(8),dimension(:),allocatable      :: wr
+    !
+    real(8),dimension(:),allocatable      :: jcurr                ![Nspin]
+    real(8)                               :: lbias,rbias,dE
+    !
     integer                               :: ilat,jlat,ispin,jspin,iorb,jorb,io,jo,is,js,i,Nlso,Nlo
-    integer                               :: unit,lfile
+    integer                               :: unit,unit_in,unit_out,eof,lfile
     character(len=30)                     :: suffix
     !
     Nlso = Nlat*Nspin*Norb
@@ -721,26 +728,28 @@ contains
     allocate(Te(Nlo,Nlo));Te=zero
 
     ! set masks
-    allocate(lmask(Nlat),rmask(Nlat))
-    lmask(:)=0
-    rmask(:)=0
+    allocate(lmask(Nlat,Nlat),rmask(Nlat,Nlat))
+    lmask(:,:)=0
+    rmask(:,:)=0
     lfile = file_length("lmask.in")
     unit = free_unit()
     open(unit,file='lmask.in',status='old')
     do i=1,lfile
-       read(unit,*) ilat
+       read(unit,*) ilat, jlat
        ilat=ilat+1
-       lmask(ilat)=1
-       write(6,*) ilat,lmask(ilat)
+       jlat=jlat+1
+       lmask(ilat,jlat)=1
+       write(6,*) ilat,jlat,lmask(ilat,jlat)
     enddo
     lfile = file_length("rmask.in")
     unit = free_unit()
     open(unit,file='rmask.in',status='old')
     do i=1,lfile
-       read(unit,*) ilat
+       read(unit,*) ilat, jlat
        ilat=ilat+1
-       rmask(ilat)=1
-       write(6,*) ilat,rmask(ilat)
+       jlat=jlat+1
+       rmask(ilat,jlat)=1
+       write(6,*) ilat,jlat,rmask(ilat,jlat)
     enddo
 
     ! allocate spin-resolved transmission coefficient
@@ -753,24 +762,28 @@ contains
              do jlat=1,Nlat
                 do iorb=1,Norb
                    do jorb=1,Norb
-                      io = iorb  + (ilat-1)*Norb
-                      jo = jorb  + (jlat-1)*Norb
+                      io = iorb +  (ilat-1)*Norb
+                      jo = jorb +  (jlat-1)*Norb
                       is = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb !== ilat
                       js = jorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb !== jlat
                       !
                       ! retarded Green's function
                       GR(io,jo)=Gret(ilat,jlat,ispin,ispin,iorb,jorb,i)
-                      ! set \Gamma matrix for L/R according to masks: {ilat,jlat} \in L-subset OR R-subset
+                      !
+                      ! set \Gamma matrix for L/R according to masks to select L-subset OR R-subset
+                      ! R-subset
                       HR(io,jo)=zero
-                      if( (rmask(ilat)==1) .AND. (rmask(jlat)==1) )HR(io,jo) = cmplx(dimag(Hyb_real(is,js,i)),0d0)
+                      if(rmask(ilat,jlat)==1) HR(io,jo) = cmplx(2.d0*dimag(Hyb_real(is,js,i)),0d0)
+                      ! L-subset
                       HL(io,jo)=zero
-                      if( (lmask(ilat)==1) .AND. (lmask(jlat)==1) )HL(io,jo) = cmplx(dimag(Hyb_real(is,js,i)),0d0)
+                      if(lmask(ilat,jlat)==1) HL(io,jo) = cmplx(2.d0*dimag(Hyb_real(is,js,i)),0d0)
                    enddo
                 enddo
              enddo
           enddo
           ! advanced Green's function
           GA=conjg(transpose(GR))
+          !
           ! get transmission function as T(ispin,i)=Tr[Gadvc*Hybl*Gret*Hybr]
           Re = matmul(GR,HR)
           Le = matmul(GA,HL)
@@ -780,33 +793,59 @@ contains
        suffix="_s"//reg(txtfy(ispin))//"_realw.ed"
        call store_data("Te"//trim(suffix),transe(ispin,:),wr)
     enddo
+    
+    deallocate(GR,HR,GA,HL)
+    deallocate(rmask,lmask)
+    deallocate(Re,Le)
 
 
-    ! allocate spin-resolved current (transmission coefficient integrated)
-    allocate(jcurrs(Nspin));jcurrs=0.d0
 
-    ! evaluate spin-resolved current: 
-    ! actually this formula is wrong, because in the zero-bias limit the current should be zero 
-    ! what matters is the integral over the eenrgy window included 
-    ! between the chemical potentials of the L/R leads: i.e., the formula should be 
-    ! J = \int_{-\infty}^{\infty} de T(e)*(f_L(e)-f_R(e))
-    do ispin=1,Nspin
-       do i=1,Lreal
-          jcurrs(ispin) = jcurrs(ispin) + transe(ispin,i)*fermi(wr(i),beta)
+    if(jbias)then
+       !
+       ! evaluate spin-resolved current as:
+       ! J = \int_{-\infty}^{\infty} de T(e)*(f_L(e)-f_R(e))
+       ! actually this formula is wrong, because in the zero-bias limit the current should be zero 
+       ! what matters is the integral over the eenrgy window included 
+       ! between the chemical potentials of the L/R leads: i.e., the formula should be 
+       ! allocate spin-resolved current (transmission coefficient integrated)
+       allocate(jcurr(Nspin));jcurr=0.d0
+     
+       unit_in = free_unit()
+       open(unit_in,file='jbias.in',status='old')
+       unit_out= free_unit()
+       open(unit_out,file="jbias.ed")
+       do
+          read(unit_in,*,IOSTAT=EOF)lbias,rbias
+          if(EOF<0)exit
+          !
+          ! write L/R bias voltages
+          write(unit_out,'(2f16.9)',advance='no')lbias,rbias
+          !
+          dE=abs(wfin-wini)/Lreal
+          jcurr=0.d0
+          do ispin=1,Nspin
+              do i=1,Lreal
+                 jcurr(ispin) = jcurr(ispin) + transe(ispin,i)*dE* &
+                                (fermi(wr(i)-lbias,beta)-fermi(wr(i)-rbias,beta))
+              enddo
+              !
+              ! write spin-resolved current
+              write(unit_out,'(1f16.9)',advance='no')jcurr(ispin)
+          enddo
+          write(unit_out,*) ! newline
        enddo
-    enddo
-    !unit = free_unit()
-    !open(unit,file="Jcurrs.ed")
-    !do ispin=1,Nspin
-    !   write(unit,'(i3,1f16.9)')ispin,Jcurrs(ispin)
-    !enddo
-    !close(unit)
+       close(unit_in)
+       close(unit_out)
+
+       deallocate(jcurr)
+
+    endif
 
 
 
-    deallocate(GR,HR,GA,HL,rmask,lmask,Re,Le,Te,jcurrs) 
+    deallocate(Te)
 
-  end subroutine ed_get_conductance
+  end subroutine ed_transport
 
 
   !----------------------------------------------------------------------------------------!
@@ -868,14 +907,14 @@ contains
              ksum=zero
              do k=1,kmax
                 epsk = -D + 2*D/kmax*(k-1)
-                ksum = ksum + 1d0/( wr(i)+xi*0.01d0+mu - epsk)
+                ksum = ksum + 1d0/( wr(i)+xi*eps+mu - epsk)
              enddo
              lead_real(ilead,ispin,i)=ksum/kmax
           enddo
        elseif(ikind==2)then
           ! broad-band limit
           write(*,*) "broad-band limit (analytic)" 
-          lead_real(ilead,ispin,:)=dcmplx(0d0,-1d0) ! not very elegant...
+          lead_real(ilead,ispin,:)=dcmplx(0d0,-1.d0*pi) ! to ensure DOS normalization
        elseif(ikind==3)then
           ! semicircular DOS (k-sum) 
           write(*,*) "semicircular DOS (k-sum)"
@@ -883,7 +922,7 @@ contains
              ksum=zero
              do k=1,kmax
                 epsk = -D + 2*D/kmax*(k-1)
-                ksum = ksum + (4d0/(pi*kmax))*sqrt(1d0-(epsk/D)**2)/( wr(i)+xi*0.01d0+mu - epsk)
+                ksum = ksum + (4d0/(pi*kmax))*sqrt(1d0-(epsk/D)**2)/( wr(i)+xi*eps+mu - epsk)
              enddo
              lead_real(ilead,ispin,i)=ksum
           enddo
@@ -895,7 +934,7 @@ contains
           write(*,*) "set_hyb error: in input file 'lead.in' invalid ikind"
           stop
        endif
-       ! store lead(s) on disk
+       ! store lead(s) DOS on disk
        suffix="_ilead"//reg(txtfy(ilead))//"_s"//reg(txtfy(ispin))//"_realw.ed"
        call store_data("lead"//trim(suffix),lead_real(ilead,ispin,:),wr)
        call get_matsubara_gf_from_dos(wr,lead_real(ilead,ispin,:),lead_mats(ilead,ispin,:),beta)
@@ -919,20 +958,9 @@ contains
        if((ilat>Nlat).or.(jlat>Nlat))stop "set_hyb error: in input file 'vij.in' i/jlat > Nlat"
        if(ilead>Nlead)stop "set_hyb error: in input file 'vij.in' ilead > Nlead"
        do ispin=1,Nspin
+          ! get stride and set matrix element: no symmetrization
           io = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb !== ilat
           jo = jorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb !== jlat
-          Hyb_real(io,jo,:)=Hyb_real(io,jo,:)+lead_real(ilead,ispin,:)*V**2
-          Hyb_mats(io,jo,:)=Hyb_mats(io,jo,:)+lead_mats(ilead,ispin,:)*V**2
-          io = iorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb !== jlat
-          jo = jorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb !== ilat
-          Hyb_real(io,jo,:)=Hyb_real(io,jo,:)+lead_real(ilead,ispin,:)*V**2
-          Hyb_mats(io,jo,:)=Hyb_mats(io,jo,:)+lead_mats(ilead,ispin,:)*V**2
-          io = jorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb !== ilat
-          jo = iorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb !== jlat
-          Hyb_real(io,jo,:)=Hyb_real(io,jo,:)+lead_real(ilead,ispin,:)*V**2
-          Hyb_mats(io,jo,:)=Hyb_mats(io,jo,:)+lead_mats(ilead,ispin,:)*V**2
-          io = jorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb !== jlat
-          jo = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb !== ilat
           Hyb_real(io,jo,:)=Hyb_real(io,jo,:)+lead_real(ilead,ispin,:)*V**2
           Hyb_mats(io,jo,:)=Hyb_mats(io,jo,:)+lead_mats(ilead,ispin,:)*V**2
           suffix="_i"//reg(txtfy(ilat))//"_j"//reg(txtfy(jlat))//"_s"//reg(txtfy(ispin))//"_realw.ed"
@@ -1130,4 +1158,4 @@ contains
 
 
 
-end program ed_nano
+end program ed_nano_isoc

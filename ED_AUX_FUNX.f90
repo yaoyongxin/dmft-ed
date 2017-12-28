@@ -569,11 +569,10 @@ contains
 
 
 
-  subroutine search_chempot(xmu_tmp,dens_tmp,converged_)!,write_6)
+  subroutine search_chempot(xmu_tmp,dens_tmp,converged_)
     real(8),intent(in)          ::   dens_tmp
     real(8),intent(inout)       ::   xmu_tmp
     logical,intent(inout)       ::   converged_
-    !logical,intent(in)          ::   write_6
     !internal
     real(8)                     ::   diffdens,delta_xmu,xmu_shift
     real(8)                     ::   denslarge,denssmall,xmu_old
@@ -593,7 +592,6 @@ contains
     if ((dabs(diffdens)).le.nerr) then
        converged_=.TRUE.
        inotbound=0
-       !if(write_6)then
        write(LOGfile,*)
        write(LOGfile,*) "   ------------------- search chempot -----------------"
        write(LOGfile,'(A30,I3)')    "   Density ok in attempt: ",iattempt
@@ -605,26 +603,23 @@ contains
        write(LOGfile,"(A30,L3)")    "   Converged(n): ",converged_
        write(LOGfile,*) "   ----------------------------------------------------"
        write(LOGfile,*)
-       !endif
        unit=free_unit()
        open(unit,file="search_mu_iteration"//reg(ed_file_suffix)//".ed",position="append")
        write(unit,'(3F25.12)')xmu_tmp,dens_tmp,diffdens
        close(unit)
     else
        converged_=.FALSE.
-       !if(write_6)then
        write(LOGfile,*)
        write(LOGfile,*) "   ------------------- search chempot -----------------"
        write(LOGfile,'(A30,2I5)')    "   Adjusting xmu #",iattempt,inotbound
        write(LOGfile,'(A10,F10.6,A8,F10.6,A8,F10.6)') "    n:",dens_tmp,"!= n:",nread,"error:",abs(dens_tmp-nread)
-       !endif
        !vedo se la densità è troppa o troppo poca
        if (diffdens.gt.0.d0) then  
-          !   ilarge=1
+          !ilarge=1
           xmularge=xmu_tmp
           denslarge=dens_tmp
        elseif (diffdens.lt.0.d0) then
-          !   ismall=1
+          !ismall=1
           xmusmall=xmu_tmp
           denssmall=dens_tmp
        endif
@@ -632,10 +627,10 @@ contains
        if (ilarge*ismall.eq.0) then
           !non ho ancora trovato un xmu per cui diffdens cambia segno
           inotbound=inotbound+1
-          if (inotbound>=8)  delta_xmu = 0.5d0
-          if (inotbound>=12) delta_xmu = 0.8d0
-          if (inotbound>=16) delta_xmu = 1.2d0
-          if (inotbound>=20) delta_xmu = 1.6d0
+          !if (inotbound>=8)  delta_xmu = 0.6d0
+          if (inotbound>=10) delta_xmu = 0.4d0
+          !if (inotbound>=16) delta_xmu = 1.0d0
+          !if (inotbound>=20) delta_xmu = 1.2d0
           xmu_shift = delta_xmu * diffdens
           xmu_old = xmu_tmp
           xmu_tmp = xmu_tmp - xmu_shift
@@ -732,13 +727,15 @@ contains
 
 
 
-  subroutine SOC_jz_symmetrize(funct)
+  subroutine SOC_jz_symmetrize(funct,mask)
     !passed
     complex(8),allocatable,intent(inout)         ::  funct(:,:,:,:,:)
+    logical(8),allocatable,intent(in)            ::  mask(:,:,:,:,:)
     complex(8),allocatable                       ::  funct_in(:,:,:),funct_out(:,:,:)
     complex(8),allocatable                       ::  a_funct(:),b_funct(:)
     integer                                      ::  ispin,io
     integer                                      ::  ifreq,Lfreq
+    logical(8)                                   ::  boolmask
     complex(8),allocatable                       ::  U(:,:),Udag(:,:)
     if(size(funct,dim=1)/=Nspin)stop "wrong size 1 in SOC symmetrize input f"
     if(size(funct,dim=2)/=Nspin)stop "wrong size 2 in SOC symmetrize input f"
@@ -779,6 +776,18 @@ contains
        b_funct(:)=b_funct(:)+funct_out(io,io,:)
     enddo
     b_funct = b_funct/4.d0
+    !
+    boolmask = .false.
+    if(Jz_basis)then
+       boolmask = (.not.mask(1,2,3,2,1)).and.(.not.mask(1,2,3,2,2))
+    else
+       boolmask = (.not.mask(1,2,3,1,1)).and.(.not.mask(1,2,3,1,2))
+    endif
+    if(boolmask)then
+       a_funct = ( a_funct + b_funct ) / 2.d0
+       b_funct = a_funct
+    endif
+    !
     funct_out=zero
     do io=1,2
        funct_out(io,io,:)=a_funct(:)

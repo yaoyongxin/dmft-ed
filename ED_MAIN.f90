@@ -416,6 +416,10 @@ contains
     allocate(Fmatsii(Nsites,Nspin,Nspin,Norb,Norb,Lmats))
     allocate(Frealii(Nsites,Nspin,Nspin,Norb,Norb,Lreal))
     !
+    !Allocate the imp dm and related observables
+    if(allocated(imp_density_matrix_ii))deallocate(imp_density_matrix_ii)
+    allocate(imp_density_matrix_ii(Nsites,Nspin,Nspin,Norb,Norb))
+    !
     if(size(neigen_sectorii,1)<Nsites)stop "ed_solve_lattice error: size(neigen_sectorii,1)<Nsites"
     if(size(neigen_totalii)<Nsites)stop "ed_solve_lattice error: size(neigen_totalii,1)<Nsites"
     !
@@ -437,7 +441,8 @@ contains
     mii      = 0d0  
     pii      = 0d0  
     eii      = 0d0  
-    ddii     = 0d0  
+    ddii     = 0d0 
+    imp_density_matrix_ii = zero
     !
     call start_timer
     !
@@ -458,8 +463,8 @@ contains
        !Call ed_solve in SERIAL MODE!! This is parallel on the ineq. sites
        call ed_solve_single(bath(ilat,:),Hloc(ilat,:,:,:,:))
        !
-       neigen_sectorii(ilat,:)   = neigen_sector(:)
-       neigen_totalii(ilat)      = lanc_nstates_total
+       neigen_sectorii(ilat,:)  = neigen_sector(:)
+       neigen_totalii(ilat)     = lanc_nstates_total
        Smatsii(ilat,:,:,:,:,:)  = impSmats(:,:,:,:,:)
        Srealii(ilat,:,:,:,:,:)  = impSreal(:,:,:,:,:)
        SAmatsii(ilat,:,:,:,:,:) = impSAmats(:,:,:,:,:)
@@ -468,12 +473,15 @@ contains
        Grealii(ilat,:,:,:,:,:)  = impGreal(:,:,:,:,:)
        Fmatsii(ilat,:,:,:,:,:)  = impFmats(:,:,:,:,:)
        Frealii(ilat,:,:,:,:,:)  = impFreal(:,:,:,:,:)
-       nii(ilat,1:Norb)       = ed_dens(1:Norb)
-       dii(ilat,1:Norb)       = ed_docc(1:Norb)
-       mii(ilat,1:Norb)       = ed_dens_up(1:Norb)-ed_dens_dw(1:Norb)
-       pii(ilat,1:Norb)       = ed_phisc(1:Norb)
-       eii(ilat,:)            = [ed_Epot,ed_Eint,ed_Ehartree,ed_Eknot]
-       ddii(ilat,:)           = [ed_Dust,ed_Dund,ed_Dse,ed_Dph]
+       nii(ilat,1:Norb)         = ed_dens(1:Norb)
+       dii(ilat,1:Norb)         = ed_docc(1:Norb)
+       mii(ilat,1:Norb)         = ed_dens_up(1:Norb)-ed_dens_dw(1:Norb)
+       pii(ilat,1:Norb)         = ed_phisc(1:Norb)
+       eii(ilat,:)              = [ed_Epot,ed_Eint,ed_Ehartree,ed_Eknot]
+       ddii(ilat,:)             = [ed_Dust,ed_Dund,ed_Dse,ed_Dph]
+       !
+       imp_density_matrix_ii(ilat,:,:,:,:) = imp_density_matrix(:,:,:,:)
+       !
     enddo
     !
     call stop_timer(LOGfile)
@@ -508,6 +516,8 @@ contains
     real(8)          :: pii_tmp(size(bath,1),Norb)
     real(8)          :: eii_tmp(size(bath,1),4)
     real(8)          :: ddii_tmp(size(bath,1),4)
+    !
+    complex(8)       :: imp_density_matrix_tmp(size(bath,1),Nspin,Nspin,Norb,Norb)
     !
     integer          :: neigen_sectortmp(size(bath,1),Nsectors)
     integer          :: neigen_totaltmp(size(bath,1))
@@ -567,6 +577,10 @@ contains
     allocate(Fmatsii(Nsites,Nspin,Nspin,Norb,Norb,Lmats))
     allocate(Frealii(Nsites,Nspin,Nspin,Norb,Norb,Lreal))
     !
+    !Allocate the imp dm and related observables
+    if(allocated(imp_density_matrix_ii))deallocate(imp_density_matrix_ii)
+    allocate(imp_density_matrix_ii(Nsites,Nspin,Nspin,Norb,Norb))
+    !
     if(size(neigen_sectorii,1)<Nsites)stop "ed_solve_lattice error: size(neigen_sectorii,1)<Nsites"
     if(size(neigen_totalii)<Nsites)stop "ed_solve_lattice error: size(neigen_totalii,1)<Nsites"
     neigen_sectortmp = 0
@@ -591,6 +605,7 @@ contains
     pii_tmp    = 0d0
     eii_tmp    = 0d0
     ddii_tmp   = 0d0
+    imp_density_matrix_tmp = zero
     !
     call start_timer
     !
@@ -627,6 +642,9 @@ contains
        pii_tmp(ilat,1:Norb)       = ed_phisc(1:Norb)
        eii_tmp(ilat,:)            = [ed_Epot,ed_Eint,ed_Ehartree,ed_Eknot]
        ddii_tmp(ilat,:)           = [ed_Dust,ed_Dund,ed_Dse,ed_Dph]
+       !
+       imp_density_matrix_tmp(ilat,:,:,:,:) = imp_density_matrix(:,:,:,:)
+       !
     enddo
     !
     call MPI_Barrier(MpiComm,MPI_ERR)
@@ -652,6 +670,7 @@ contains
     pii      = 0d0  
     eii      = 0d0  
     ddii     = 0d0  
+    imp_density_matrix_ii = zero
     call MPI_ALLREDUCE(neigen_sectortmp,neigen_sectorii,Nsites*Nsectors,MPI_INTEGER,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(neigen_totaltmp,neigen_totalii,Nsites,MPI_INTEGER,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(Smats_tmp,Smatsii,Nsites*Nspin*Nspin*Norb*Norb*Lmats,MPI_DOUBLE_COMPLEX,MPI_SUM,MpiComm,mpi_err)
@@ -668,6 +687,7 @@ contains
     call MPI_ALLREDUCE(pii_tmp,pii,Nsites*Norb,MPI_DOUBLE_PRECISION,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(eii_tmp,eii,Nsites*4,MPI_DOUBLE_PRECISION,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(ddii_tmp,ddii,Nsites*4,MPI_DOUBLE_PRECISION,MPI_SUM,MpiComm,mpi_err)
+    call MPI_ALLREDUCE(imp_density_matrix_tmp,imp_density_matrix_ii,Nsites*Nspin*Nspin*Norb*Norb,MPI_DOUBLE_COMPLEX,MPI_SUM,MpiComm,mpi_err)
     !
   end subroutine ed_solve_lattice_mpi
 #endif

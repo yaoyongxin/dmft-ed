@@ -62,6 +62,11 @@ MODULE ED_BATH
   end interface spin_symmetrize_bath
   public :: spin_symmetrize_bath
 
+  interface orb_symmetrize_bath
+     module procedure orb_symmetrize_bath_site
+     module procedure orb_symmetrize_bath_lattice
+  end interface orb_symmetrize_bath
+  public :: orb_symmetrize_bath
 
   interface ph_symmetrize_bath
      module procedure ph_symmetrize_bath_site

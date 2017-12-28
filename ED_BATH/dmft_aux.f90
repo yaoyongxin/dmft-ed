@@ -299,65 +299,6 @@ subroutine init_dmft_bath_mask(dmft_bath_)
      enddo
   enddo
   !
-  ! LS
-  !
-!  LS=zero
-!  LS(1:2,3:4)= +Xi * pauli_z !/ 2.d0
-!  LS(1:2,5:6)= -Xi * pauli_y !/ 2.d0
-!  LS(3:4,5:6)= +Xi * pauli_x !/ 2.d0
-!  do io=1,Nspin*Norb
-!     do jo=io+1,Nspin*Norb
-!        LS(jo,io)=conjg(LS(io,jo))
-!     enddo
-!  enddo
-!  LS=so2os_reshape(LS,Nspin,Norb)
-!  !
-!  ! LS eigenvectors
-!  !
-!  LS_rot=zero
-!  !J=1/2 jz=-1/2
-!  LS_rot(1,1)=-Xi
-!  LS_rot(3,1)=-1.0d0
-!  LS_rot(6,1)=+Xi
-!  LS_rot(:,1)=LS_rot(:,1)/sqrt(3.)
-!  !J=1/2 jz=+1/2
-!  LS_rot(2,2)=-Xi
-!  LS_rot(4,2)=+1.0d0
-!  LS_rot(5,2)=-Xi
-!  LS_rot(:,2)=LS_rot(:,2)/sqrt(3.)
-!  !J=3/2 jz=-3/2
-!  LS_rot(2,3)=-Xi
-!  LS_rot(4,3)=+1.0d0
-!  LS_rot(5,3)=+2.0d0*Xi
-!  LS_rot(:,3)=LS_rot(:,3)/sqrt(6.)
-!  !J=3/2 jz=-1/2
-!  LS_rot(1,4)=+Xi
-!  LS_rot(3,4)=-1.0d0
-!  LS_rot(:,4)=LS_rot(:,4)/sqrt(2.)
-!  !J=3/2 jz=+1/2
-!  LS_rot(2,5)=-Xi 
-!  LS_rot(4,5)=-1.0d0
-!  LS_rot(:,5)=LS_rot(:,5)/sqrt(2.)
-!  !J=3/2 jz=+3/2
-!  LS_rot(1,6)=+Xi
-!  LS_rot(3,6)=+1.0d0
-!  LS_rot(6,6)=+2.0d0*Xi
-!  LS_rot(:,6)=LS_rot(:,6)/sqrt(6.)
-!  LS_rot=so2os_reshape(LS_rot,Nspin,Norb)
-!  !
-!  do ispin=1,Nspin
-!     do jspin=1,Nspin
-!        do iorb=1,Norb
-!           do jorb=1,Norb
-!              io = iorb + (ispin-1)*Norb
-!              jo = jorb + (jspin-1)*Norb
-!              dmft_bath_%LS(ispin,jspin,iorb,jorb,1)=LS(io,jo)
-!              dmft_bath_%LS(ispin,jspin,iorb,jorb,2)=LS_rot(io,jo)
-!           enddo
-!        enddo
-!     enddo
-!  enddo
-  !
 end subroutine init_dmft_bath_mask
 
 
@@ -374,7 +315,6 @@ subroutine write_dmft_bath(dmft_bath_,unit)
   integer              :: io,jo,iorb,ispin
   complex(8)           :: hybr_aux
   complex(8)           :: hrep_aux(Nspin*Norb,Nspin*Norb)
-  ! if(ED_MPI_ID==0)then
   unit_=LOGfile;if(present(unit))unit_=unit
   if(.not.dmft_bath_%status)stop "write_dmft_bath error: bath not allocated"
   select case(bath_type)
@@ -492,7 +432,6 @@ subroutine write_dmft_bath(dmft_bath_,unit)
      end select
      !
   end select
-  ! endif
 end subroutine write_dmft_bath
 
 
@@ -718,8 +657,17 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
               eps_k=0.0d0;lambda_k=0.0d0
               !
               !off-diagonal lambda_k
-              i=i+1
-              lambda_k=bath_(i)
+              if(Jz_basis)then
+                 if(dmft_bath_%mask(1,2,3,2,1).or.dmft_bath_%mask(1,2,3,2,2))then
+                    i=i+1
+                    lambda_k=bath_(i)
+                 endif
+              else
+                 if(dmft_bath_%mask(1,2,3,1,1).or.dmft_bath_%mask(1,2,3,1,2))then
+                    i=i+1
+                    lambda_k=bath_(i)
+                 endif
+              endif
               !
               !diagonal eps_k
               i=i+1
@@ -974,15 +922,20 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
                  hrep_aux=matmul(U,matmul(hrep_aux,Udag))
                  !
                  !off-diagonal lambda_k
-                 i=i+1
-                 bath_(i)=real(hrep_aux(3,4))   !real(dmft_bath_%h(1,2,1,3,ibath))/sqrt(2.d0)
+                 if(dmft_bath_%mask(1,2,3,2,1).or.dmft_bath_%mask(1,2,3,2,2))then
+                    i=i+1
+                    bath_(i)=real(hrep_aux(3,4))*2.d0
+                 endif
                  !diagonal eps_k
                  i=i+1
-                 bath_(i)=real(hrep_aux(1,1))   !real(dmft_bath_%h(1,1,1,1,ibath))-bath_(i-1)
+                 bath_(i)=real(hrep_aux(1,1))
               else
+                 !
                  !off-diagonal lambda_k
-                 i=i+1
-                 bath_(i)=real(dmft_bath_%h(1,2,3,1,ibath))
+                 if(dmft_bath_%mask(1,2,3,1,1).or.dmft_bath_%mask(1,2,3,1,2))then
+                    i=i+1
+                    bath_(i)=real(dmft_bath_%h(1,2,3,1,ibath))*2.d0
+                 endif
                  !diagonal eps_k
                  i=i+1
                  bath_(i)=real(dmft_bath_%h(1,1,1,1,ibath))
