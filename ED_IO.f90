@@ -9,104 +9,175 @@ MODULE ED_IO
   private
 
   !Retrieve self-energy through routines:
+  interface ed_get_Smats
+     module procedure ed_get_sigma_matsubara_1
+     module procedure ed_get_sigma_matsubara_2
+     module procedure ed_get_sigma_matsubara_lattice_1
+     module procedure ed_get_sigma_matsubara_lattice_2
+     !
+     module procedure ed_get_all_sigma_matsubara_1
+     module procedure ed_get_all_sigma_matsubara_2
+     module procedure ed_get_all_sigma_matsubara_lattice_1
+     module procedure ed_get_all_sigma_matsubara_lattice_2
+  end interface ed_get_Smats
+
+  interface ed_get_Sreal
+     module procedure ed_get_sigma_real_1
+     module procedure ed_get_sigma_real_2
+     module procedure ed_get_sigma_real_lattice_1
+     module procedure ed_get_sigma_real_lattice_2
+     !
+     module procedure ed_get_all_sigma_real_1
+     module procedure ed_get_all_sigma_real_2
+     module procedure ed_get_all_sigma_real_lattice_1
+     module procedure ed_get_all_sigma_real_lattice_2
+  end interface ed_get_Sreal
+
+  interface ed_get_SAmats
+     module procedure ed_get_self_matsubara_1
+     module procedure ed_get_self_matsubara_2
+     module procedure ed_get_self_matsubara_lattice_1
+     module procedure ed_get_self_matsubara_lattice_2
+  end interface ed_get_SAmats
+
+  interface ed_get_SAreal
+     module procedure ed_get_self_real_1
+     module procedure ed_get_self_real_2
+     module procedure ed_get_self_real_lattice_1
+     module procedure ed_get_self_real_lattice_2
+  end interface ed_get_SAreal
+
+
+
+
+
   interface ed_get_sigma_matsubara
      module procedure ed_get_sigma_matsubara_1
      module procedure ed_get_sigma_matsubara_2
-     module procedure ed_get_sigma_matsubara_3
      module procedure ed_get_sigma_matsubara_lattice_1
      module procedure ed_get_sigma_matsubara_lattice_2
-     module procedure ed_get_sigma_matsubara_lattice_3
-     module procedure ed_get_sigma_matsubara_lattice_11
-     module procedure ed_get_sigma_matsubara_lattice_21
-     module procedure ed_get_sigma_matsubara_lattice_31
+     !
+     module procedure ed_get_all_sigma_matsubara_1
+     module procedure ed_get_all_sigma_matsubara_2
+     module procedure ed_get_all_sigma_matsubara_lattice_1
+     module procedure ed_get_all_sigma_matsubara_lattice_2
   end interface ed_get_sigma_matsubara
 
   interface ed_get_self_matsubara
      module procedure ed_get_self_matsubara_1
      module procedure ed_get_self_matsubara_2
-     module procedure ed_get_self_matsubara_3
      module procedure ed_get_self_matsubara_lattice_1
      module procedure ed_get_self_matsubara_lattice_2
-     module procedure ed_get_self_matsubara_lattice_3
-     module procedure ed_get_self_matsubara_lattice_11
-     module procedure ed_get_self_matsubara_lattice_21
-     module procedure ed_get_self_matsubara_lattice_31
   end interface ed_get_self_matsubara
+
+
+
 
   interface ed_get_sigma_real
      module procedure ed_get_sigma_real_1
      module procedure ed_get_sigma_real_2
-     module procedure ed_get_sigma_real_3
      module procedure ed_get_sigma_real_lattice_1
      module procedure ed_get_sigma_real_lattice_2
-     module procedure ed_get_sigma_real_lattice_3
-     module procedure ed_get_sigma_real_lattice_11
-     module procedure ed_get_sigma_real_lattice_21
-     module procedure ed_get_sigma_real_lattice_31
+     !
+     module procedure ed_get_all_sigma_real_1
+     module procedure ed_get_all_sigma_real_2
+     module procedure ed_get_all_sigma_real_lattice_1
+     module procedure ed_get_all_sigma_real_lattice_2
   end interface ed_get_sigma_real
 
   interface ed_get_self_real
      module procedure ed_get_self_real_1
      module procedure ed_get_self_real_2
-     module procedure ed_get_self_real_3
      module procedure ed_get_self_real_lattice_1
      module procedure ed_get_self_real_lattice_2
-     module procedure ed_get_self_real_lattice_3
-     module procedure ed_get_self_real_lattice_11
-     module procedure ed_get_self_real_lattice_21
-     module procedure ed_get_self_real_lattice_31
   end interface ed_get_self_real
 
 
 
 
   !Retrieve imp GF through routines.
+  interface ed_get_Gmats
+     module procedure ed_get_gimp_matsubara_1
+     module procedure ed_get_gimp_matsubara_2
+     module procedure ed_get_gimp_matsubara_lattice_1
+     module procedure ed_get_gimp_matsubara_lattice_2
+     !
+     module procedure ed_get_all_gimp_matsubara_1
+     module procedure ed_get_all_gimp_matsubara_2
+     module procedure ed_get_all_gimp_matsubara_lattice_1
+     module procedure ed_get_all_gimp_matsubara_lattice_2
+  end interface ed_get_Gmats
+
+  interface ed_get_Fmats
+     module procedure ed_get_fimp_matsubara_1
+     module procedure ed_get_fimp_matsubara_2
+     module procedure ed_get_fimp_matsubara_lattice_1
+     module procedure ed_get_fimp_matsubara_lattice_2
+  end interface ed_get_Fmats
+
+
+
+  interface ed_get_Greal
+     module procedure ed_get_gimp_real_1
+     module procedure ed_get_gimp_real_2
+     module procedure ed_get_gimp_real_lattice_1
+     module procedure ed_get_gimp_real_lattice_2
+     !
+     module procedure ed_get_all_gimp_real_1
+     module procedure ed_get_all_gimp_real_2
+     module procedure ed_get_all_gimp_real_lattice_1
+     module procedure ed_get_all_gimp_real_lattice_2
+  end interface ed_get_Greal
+
+  interface ed_get_Freal
+     module procedure ed_get_fimp_real_1
+     module procedure ed_get_fimp_real_2
+     module procedure ed_get_fimp_real_lattice_1
+     module procedure ed_get_fimp_real_lattice_2
+  end interface ed_get_Freal
+
+
+
+
   interface ed_get_gimp_matsubara
      module procedure ed_get_gimp_matsubara_1
      module procedure ed_get_gimp_matsubara_2
-     module procedure ed_get_gimp_matsubara_3
      module procedure ed_get_gimp_matsubara_lattice_1
      module procedure ed_get_gimp_matsubara_lattice_2
-     module procedure ed_get_gimp_matsubara_lattice_3
-     module procedure ed_get_gimp_matsubara_lattice_11
-     module procedure ed_get_gimp_matsubara_lattice_21
-     module procedure ed_get_gimp_matsubara_lattice_31
+     !
+     module procedure ed_get_all_gimp_matsubara_1
+     module procedure ed_get_all_gimp_matsubara_2
+     module procedure ed_get_all_gimp_matsubara_lattice_1
+     module procedure ed_get_all_gimp_matsubara_lattice_2
   end interface ed_get_gimp_matsubara
 
   interface ed_get_fimp_matsubara
      module procedure ed_get_fimp_matsubara_1
      module procedure ed_get_fimp_matsubara_2
-     module procedure ed_get_fimp_matsubara_3
      module procedure ed_get_fimp_matsubara_lattice_1
      module procedure ed_get_fimp_matsubara_lattice_2
-     module procedure ed_get_fimp_matsubara_lattice_3
-     module procedure ed_get_fimp_matsubara_lattice_11
-     module procedure ed_get_fimp_matsubara_lattice_21
-     module procedure ed_get_fimp_matsubara_lattice_31
   end interface ed_get_fimp_matsubara
+
+
+
 
   interface ed_get_gimp_real
      module procedure ed_get_gimp_real_1
      module procedure ed_get_gimp_real_2
-     module procedure ed_get_gimp_real_3
      module procedure ed_get_gimp_real_lattice_1
      module procedure ed_get_gimp_real_lattice_2
-     module procedure ed_get_gimp_real_lattice_3
-     module procedure ed_get_gimp_real_lattice_11
-     module procedure ed_get_gimp_real_lattice_21
-     module procedure ed_get_gimp_real_lattice_31
+     !
+     module procedure ed_get_all_gimp_real_1
+     module procedure ed_get_all_gimp_real_2
+     module procedure ed_get_all_gimp_real_lattice_1
+     module procedure ed_get_all_gimp_real_lattice_2
   end interface ed_get_gimp_real
 
   interface ed_get_fimp_real
      module procedure ed_get_fimp_real_1
      module procedure ed_get_fimp_real_2
-     module procedure ed_get_fimp_real_3
      module procedure ed_get_fimp_real_lattice_1
      module procedure ed_get_fimp_real_lattice_2
-     module procedure ed_get_fimp_real_lattice_3
-     module procedure ed_get_fimp_real_lattice_11
-     module procedure ed_get_fimp_real_lattice_21
-     module procedure ed_get_fimp_real_lattice_31
   end interface ed_get_fimp_real
 
 
@@ -192,11 +263,21 @@ MODULE ED_IO
 
 
 
+  public :: ed_get_Smats
+  public :: ed_get_SAmats
+  public :: ed_get_Sreal
+  public :: ed_get_SAreal
 
   public :: ed_get_sigma_matsubara
   public :: ed_get_self_matsubara
   public :: ed_get_sigma_real
   public :: ed_get_self_real
+
+
+  public :: ed_get_Gmats
+  public :: ed_get_Fmats
+  public :: ed_get_Greal
+  public :: ed_get_Freal
 
   public :: ed_get_gimp_matsubara
   public :: ed_get_fimp_matsubara
@@ -236,12 +317,6 @@ MODULE ED_IO
   !****************************************************************************************!
 
 
-  interface ed_read_impSigma
-     module procedure :: ed_read_impSigma_single
-     module procedure :: ed_read_impSigma_lattice
-  end interface ed_read_impSigma
-  public :: ed_read_impSigma
-
 
   !Frequency and time arrays:
   !=========================================================
@@ -253,6 +328,8 @@ MODULE ED_IO
 
 
 contains
+
+
 
 
   !+------------------------------------------------------------------+
@@ -308,66 +385,14 @@ contains
 
 
   !+-----------------------------------------------------------------------------+!
-  ! PURPOSE: Read self-energy function(s) - also for inequivalent sites.
-  !+-----------------------------------------------------------------------------+!
-  include "ED_IO/read_impSigma.f90"
-  subroutine ed_read_impSigma_single
-    !
-    if(allocated(impSmats))deallocate(impSmats)
-    if(allocated(impSreal))deallocate(impSreal)
-    if(allocated(impSAmats))deallocate(impSAmats)
-    if(allocated(impSAreal))deallocate(impSAreal)
-    allocate(impSmats(Nspin,Nspin,Norb,Norb,Lmats))
-    allocate(impSreal(Nspin,Nspin,Norb,Norb,Lreal))
-    allocate(impSAmats(Nspin,Nspin,Norb,Norb,Lmats)) !THIS SHOULD NOT DEPEND ON SPIN: NSPIN=>1
-    allocate(impSAreal(Nspin,Nspin,Norb,Norb,Lreal)) !THIS SHOULD NOT DEPEND ON SPIN: NSPIN=>1
-    impSmats=zero
-    impSreal=zero
-    impSAmats=zero
-    impSAreal=zero
-    !
-    select case(ed_mode)
-    case ("normal");call read_impSigma_normal
-    case ("superc");call read_impSigma_superc
-    case ("nonsu2");call read_impSigma_nonsu2
-    case default;stop "ed_read_impSigma error: ed_mode not in the list"
-    end select
-  end subroutine ed_read_impSigma_single
-
-  subroutine ed_read_impSigma_lattice(Nineq)
-    integer :: Nineq
-    integer :: ilat
-    !
-    if(allocated(Smatsii))deallocate(Smatsii)
-    if(allocated(Srealii))deallocate(Srealii)
-    if(allocated(SAmatsii))deallocate(SAmatsii)
-    if(allocated(SArealii))deallocate(SArealii)
-    allocate(Smatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
-    allocate(Srealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
-    allocate(SAmatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
-    allocate(SArealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
-    Smatsii  = zero 
-    Srealii  = zero 
-    SAmatsii = zero 
-    SArealii = zero
-    !
-    do ilat=1,Nineq
-       ed_file_suffix=ineq_site_suffix//str(ilat,site_indx_padding)
-       call ed_read_impSigma_single
-       Smatsii(ilat,:,:,:,:,:)  = impSmats
-       Srealii(ilat,:,:,:,:,:)  = impSreal
-       SAmatsii(ilat,:,:,:,:,:) = impSAmats
-       SArealii(ilat,:,:,:,:,:) = impSAreal
-    enddo
-    ed_file_suffix=""
-  end subroutine ed_read_impSigma_lattice
-
 
 
 
   !+-----------------------------------------------------------------------------+!
   ! PURPOSE: Retrieve measured values of the impurity self-energy 
   !+-----------------------------------------------------------------------------+!
+  include "ED_IO/get_all_sigma_matsubara.f90"
+  include "ED_IO/get_all_sigma_realaxis.f90"
   include "ED_IO/get_sigma_matsubara.f90"
   include "ED_IO/get_self_matsubara.f90"
   include "ED_IO/get_sigma_realaxis.f90"
@@ -377,6 +402,8 @@ contains
   !+-----------------------------------------------------------------------------+!
   ! PURPOSE: Retrieve measured values of the impurity green's functions 
   !+-----------------------------------------------------------------------------+!
+  include "ED_IO/get_all_gimp_matsubara.f90"
+  include "ED_IO/get_all_gimp_realaxis.f90"
   include "ED_IO/get_gimp_matsubara.f90"
   include "ED_IO/get_fimp_matsubara.f90"
   include "ED_IO/get_gimp_realaxis.f90"
@@ -670,3 +697,64 @@ contains
 
 
 END MODULE ED_IO
+
+
+
+
+
+
+
+
+! ! PURPOSE: Read self-energy function(s) - also for inequivalent sites.
+! !+-----------------------------------------------------------------------------+!
+! include "ED_IO/read_impSigma.f90"
+! subroutine ed_read_impSigma_single
+!   !
+!   if(allocated(impSmats))deallocate(impSmats)
+!   if(allocated(impSreal))deallocate(impSreal)
+!   if(allocated(impSAmats))deallocate(impSAmats)
+!   if(allocated(impSAreal))deallocate(impSAreal)
+!   allocate(impSmats(Nspin,Nspin,Norb,Norb,Lmats))
+!   allocate(impSreal(Nspin,Nspin,Norb,Norb,Lreal))
+!   allocate(impSAmats(Nspin,Nspin,Norb,Norb,Lmats)) !THIS SHOULD NOT DEPEND ON SPIN: NSPIN=>1
+!   allocate(impSAreal(Nspin,Nspin,Norb,Norb,Lreal)) !THIS SHOULD NOT DEPEND ON SPIN: NSPIN=>1
+!   impSmats=zero
+!   impSreal=zero
+!   impSAmats=zero
+!   impSAreal=zero
+!   !
+!   select case(ed_mode)
+!   case ("normal");call read_impSigma_normal
+!   case ("superc");call read_impSigma_superc
+!   case ("nonsu2");call read_impSigma_nonsu2
+!   case default;stop "ed_read_impSigma error: ed_mode not in the list"
+!   end select
+! end subroutine ed_read_impSigma_single
+
+! subroutine ed_read_impSigma_lattice(Nineq)
+!   integer :: Nineq
+!   integer :: ilat
+!   !
+!   if(allocated(Smatsii))deallocate(Smatsii)
+!   if(allocated(Srealii))deallocate(Srealii)
+!   if(allocated(SAmatsii))deallocate(SAmatsii)
+!   if(allocated(SArealii))deallocate(SArealii)
+!   allocate(Smatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
+!   allocate(Srealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
+!   allocate(SAmatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
+!   allocate(SArealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
+!   Smatsii  = zero 
+!   Srealii  = zero 
+!   SAmatsii = zero 
+!   SArealii = zero
+!   !
+!   do ilat=1,Nineq
+!      ed_file_suffix=ineq_site_suffix//str(ilat,site_indx_padding)
+!      call ed_read_impSigma_single
+!      Smatsii(ilat,:,:,:,:,:)  = impSmats
+!      Srealii(ilat,:,:,:,:,:)  = impSreal
+!      SAmatsii(ilat,:,:,:,:,:) = impSAmats
+!      SArealii(ilat,:,:,:,:,:) = impSAreal
+!   enddo
+!   ed_file_suffix=""
+! end subroutine ed_read_impSigma_lattice

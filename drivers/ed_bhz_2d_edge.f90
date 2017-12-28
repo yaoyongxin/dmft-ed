@@ -1,3 +1,5 @@
+!!! ### ACTHUNG: post-processing has been partly done using the
+!!! TightBinding code, updated to read and process SelfEnergy.
 program ed_bhz_2d_edge
   USE DMFT_ED
   USE SCIFOR

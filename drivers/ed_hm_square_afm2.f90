@@ -1,16 +1,18 @@
-!  1UP----2DW
-program ed_bhz_afm2_2d
+!   Solve the Hubbard model with AFM 2 atoms in the basis 
+program ed_hm_square_afm2
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
   USE MPI
   implicit none
+
   integer                                       :: ip,iloop,ilat,ineq,Lk,Nso,Nlso,ispin,iorb
   logical                                       :: converged
   integer                                       :: Nineq,Nlat
   !Bath:
   integer                                       :: Nb
   real(8),allocatable                           :: Bath_ineq(:,:),Bath_prev(:,:)
+
   !The local hybridization function:
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Weiss_ineq
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Smats,Smats_ineq
@@ -19,18 +21,16 @@ program ed_bhz_afm2_2d
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Greal,Greal_ineq
   !Hamiltonian input:
   complex(8),allocatable,dimension(:,:,:)       :: Hk ![Nlat*Nspin*Norb,Nlat*Nspin*Norb,Nk]
-  complex(8),allocatable,dimension(:,:)         :: bhzHloc
+  complex(8),allocatable,dimension(:,:)         :: modelHloc ![Nlat*Nspin*Norb,Nlat*Nspin*Norb]
   complex(8),allocatable,dimension(:,:,:,:,:)   :: Hloc
   complex(8),allocatable,dimension(:,:,:,:,:)   :: Hloc_ineq
   real(8),allocatable,dimension(:)              :: Wtk
   !variables for the model:
-  integer                                       :: Nktot,Nkx,Nkpath,unit
-  real(8)                                       :: mh,lambda,wmixing
   character(len=16)                             :: finput
-  character(len=32)                             :: hkfile
-  logical                                       :: waverage,spinsym,fullsym
-  !Dirac matrices:
-  complex(8),dimension(4,4)                     :: Gamma1,Gamma2,Gamma3,Gamma4,Gamma5
+  real(8)                                       :: ts,wmixing
+  integer                                       :: Nktot,Nkx,Nkpath
+  logical                                       :: spinsym,neelsym
+
   integer                                       :: comm,rank
   logical                                       :: master
 
@@ -41,19 +41,16 @@ program ed_bhz_afm2_2d
   rank = get_Rank_MPI(comm)
   master = get_Master_MPI(comm)
 
+  call parse_cmd_variable(finput   , "FINPUT" , default='inputED.conf')
+  call parse_input_variable(ts     , "TS"     , finput, default=1.d0)
+  call parse_input_variable(nkx    , "NKX"    , finput, default=25)
+  call parse_input_variable(nkpath , "NKPATH" , finput, default=500)
+  call parse_input_variable(wmixing, "WMIXING", finput, default=0.75d0)
+  call parse_input_variable(spinsym, "SPINSYM", finput, default=.false.)
+  call parse_input_variable(neelsym, "NEELSYM", finput, default=.true.)
 
-  !Parse additional variables && read Input && read H(k)^4x4
-  call parse_cmd_variable(finput,"FINPUT",default='inputED_BHZ.conf')
-  call parse_input_variable(nkx,"NKX",finput,default=25)
-  call parse_input_variable(Nkpath,"Nkpath",finput,default=500)
-  call parse_input_variable(mh,"MH",finput,default=0.d0)
-  call parse_input_variable(lambda,"LAMBDA",finput,default=0.d0)
-  call parse_input_variable(wmixing,"WMIXING",finput,default=0.75d0)
-  call parse_input_variable(waverage,"WAVERAGE",finput,default=.false.)
-  call parse_input_variable(spinsym,"spinsym",finput,default=.false.)
-  call parse_input_variable(fullsym,"fullsym",finput,default=.true.)
-  call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call ed_read_input(trim(finput),comm)
+
 
   !Add DMFT CTRL Variables:
   call add_ctrl_var(Norb,"norb")
@@ -64,31 +61,23 @@ program ed_bhz_afm2_2d
   call add_ctrl_var(wfin,'wfin')
   call add_ctrl_var(eps,"eps")
 
-  Nlat=2                      !number of independent sites, 4 for AFM ordering
-  Nineq=Nlat
+
+  Nlat=2
+  Nineq=2
   Nso=Nspin*Norb
   Nlso=Nlat*Nso
-  if(Norb/=2)stop "Norb != 2"
+  if(Norb/=1)stop  "Norb != 1"
   if(Nspin/=2)stop "Nspin != 2"
-  if(Nso/=4)stop "Nso != 4"
-  if(Nlso/=8)stop "Nlso != 8"
 
-  if(fullsym)then
+  if(neelsym)then
      Nineq=1
+     write(*,*)"Using Neel symmetry to refold BZ"
      write(*,*)"Using Nineq sites=",Nineq
-     open(free_unit(unit),file="symmetries.used")
-     write(unit,*)"Symmetries used are:"
-     write(unit,*)"(site=2,l,s)=(site=1,l,-s)"
-     close(unit)
+     write(*,*)"Symmetries used are:"
+     write(*,*)"(site=2,l,s)=(site=1,l,-s)"
   endif
 
   if(spinsym)sb_field=0.d0
-
-  Gamma1 = kron_pauli(pauli_z,pauli_x)
-  Gamma2 =-kron_pauli(pauli_0,pauli_y)
-  Gamma3 = kron_pauli(pauli_x,pauli_x)
-  Gamma4 = kron_pauli(pauli_y,pauli_x)
-  Gamma5 = kron_pauli(pauli_0,pauli_z)
 
   !Allocate Weiss Field:
   allocate(Smats(Nlat,Nspin,Nspin,Norb,Norb,Lmats))
@@ -106,13 +95,11 @@ program ed_bhz_afm2_2d
   allocate(Hloc_ineq(Nineq,Nspin,Nspin,Norb,Norb))
 
 
-  !Buil the Hamiltonian on a grid or on  path
   call build_hk(trim(hkfile))
   Hloc = lso2nnn_reshape(bhzHloc,Nlat,Nspin,Norb)
   do ip=1,Nineq
      Hloc_ineq(ip,:,:,:,:) = Hloc(ip,:,:,:,:)
   enddo
-
 
   !Setup solver
   Nb=get_bath_dimension()
@@ -128,17 +115,21 @@ program ed_bhz_afm2_2d
   iloop=0;converged=.false.
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
-     if(master) call start_loop(iloop,nloop,"DMFT-loop")
+     if(master)call start_loop(iloop,nloop,"DMFT-loop")
      !
+     !solve the impurity problem:
+     call ed_solve(Comm,Bath_ineq,Hloc_ineq)
      !
-     call ed_solve(Comm,Bath_ineq,Hloc_ineq,iprint=1)
+     !retrieve inequivalent self-energies:
      call ed_get_sigma_matsubara(Smats_ineq,Nineq)
      call ed_get_sigma_real(Sreal_ineq,Nineq)
+     !
+     !extend them to the lattice using symmetry if this applies
      do ip=1,Nineq
         Smats(ip,:,:,:,:,:) = Smats_ineq(ip,:,:,:,:,:)
         Sreal(ip,:,:,:,:,:) = Sreal_ineq(ip,:,:,:,:,:)
      enddo
-     if(fullsym)then
+     if(neelsym)then
         do ispin=1,2
            Smats(2,ispin,ispin,:,:,:)=Smats(1,3-ispin,3-ispin,:,:,:)
            Sreal(2,ispin,ispin,:,:,:)=Sreal(1,3-ispin,3-ispin,:,:,:)
@@ -147,17 +138,21 @@ program ed_bhz_afm2_2d
      !
      !
      ! compute the local gf:
-     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats,iprint=4) !tridiag option off
+     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
+     call dmft_print_gf_matsubara(pi/beta*(2*arange(1,Lmats)-1),Gmats,"Gloc",iprint=4)
+     !
+     !fold to the inequivalent sites
      do ip=1,Nineq
         Gmats_ineq(ip,:,:,:,:,:) = Gmats(ip,:,:,:,:,:)
      enddo
      !
      !
+     !
      ! compute the Weiss field (only the Nineq ones)
      if(cg_scheme=='weiss')then
-        call dmft_weiss(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq,iprint=4)
+        call dmft_weiss(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
      else
-        call dmft_delta(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq,iprint=4)
+        call dmft_delta(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
      endif
      !
      !
@@ -173,7 +168,7 @@ program ed_bhz_afm2_2d
      ! Mixing:
      if(iloop>1)Bath_ineq = wmixing*Bath_ineq + (1.d0-wmixing)*Bath_prev
      Bath_prev=Bath_ineq
-     !
+
      ! Convergence
      if(master)converged = check_convergence(Weiss_ineq(:,1,1,1,1,:),dmft_error,nsuccess,nloop)
      call Bcast_MPI(Comm,converged)
@@ -182,16 +177,13 @@ program ed_bhz_afm2_2d
   enddo
 
 
-  call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal,iprint=4)
+  call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
+  call dmft_print_gf_realaxis(linspace(-wmax,wmax,L),Greal,"Gloc",4)
 
 
-  call finalize_MPI()
 
-
-  print*,"Bravo"
 
 contains
-
 
 
 
@@ -213,57 +205,24 @@ contains
     complex(8)                              :: Smats(Nlso,Nlso,Lmats),Sreal(Nlso,Nlso,Lreal)
     !
     Nktot=Nkx*Nkx
-    allocate(Hk(Nlso,Nlso,Nktot))
-    allocate(kxgrid(Nkx),kygrid(Nkx))
-    write(LOGfile,*)"Build H(k) AFM2-BHZ 2d:"
     write(LOGfile,*)"Using Nk_total="//txtfy(Nktot)
     !
-    ! kxgrid = kgrid(Nkx)
-    ! Hk = build_hk_model(hk_model,Nlso,kxgrid,kxgrid,[0d0])
-    ! call write_hk_w90(trim(file),Nlso,&
-    !      Nd=Nso,&
-    !      Np=0,   &
-    !      Nineq=2,&
-    !      hk=Hk,  &
-    !      kxgrid=kxgrid,&
-    !      kygrid=kygrid,&
-    !      kzgrid=[0d0])
-    bk1 = pi*[1,-1]
-    bk2 = 2*pi*[0,1]
-    ik=0
-    do iy=1,Nkx
-       ky = dble(iy-1)/Nkx
-       do ix=1,Nkx
-          kx=dble(ix-1)/Nkx
-          ik=ik+1
-          kvec = kx*bk1 + ky*bk2
-          Hk(:,:,ik) = hk_model(kvec,Nlso)
-       enddo
-    enddo
+    !
+    !>Reciprocal lattice basis vector  
+    bk1=  pi*[ 1d0, -1d0 ]
+    bk2=2*pi*[ 0d0,  1d0 ]
+    call TB_set_bk(bk1,bk2)
     !
     !
-    allocate(bhzHloc(Nlso,Nlso))
-    bhzHloc = sum(Hk(:,:,:),dim=3)/Nktot
-    where(abs(dreal(bhzHloc))<1.d-9)bhzHloc=0.d0
-    !
+    !>Get TB Hamiltonian matrix
+    allocate(Hk(Nlso,Nlso,Nktot))
     allocate(Wtk(Nktot))
+    allocate(modelHloc(Nlso,Nlso))
+    call TB_build_model(Hk,hk_model,Nlso,[Nkx,Nkx])
     Wtk=1.d0/dble(Nktot)
-    !
-    !
-    ! Gmats=zero
-    ! Greal=zero
-    ! Smats=zero
-    ! Sreal=zero
-    ! call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats,iprint=1)
-    ! call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal,iprint=1)
-    ! do iorb=1,Nlso
-    !    n(iorb) = fft_get_density(Gmats(iorb,iorb,:),beta)
-    ! enddo
-    ! !
-    ! open(10,file="observables.nint")
-    ! write(10,"(20F20.12)")(n(iorb),iorb=1,Nlso),sum(n)
-    ! close(10)
-    ! write(*,"(A,20F14.9)")"Occupations =",(n(iorb),iorb=1,Nlso),sum(n)/size(n)
+    modelHloc = sum(Hk(:,:,:),dim=3)/Nktot
+    where(abs(dreal(modelHloc))<1.d-9)modelHloc=0.d0
+    call TB_write_Hloc(Hloc,"Hloc.dat")
     !
     !
     !solve along the standard path in the 2D BZ.
@@ -274,7 +233,7 @@ contains
     kpath(3,:)=kpoint_M1
     kpath(4,:)=kpoint_Gamma
     call solve_Hk_along_BZpath(Hk_model,Nlso,kpath,Nkpath,&
-         colors_name=[red1,blue1,red1,blue1, red1,blue1,red1,blue1],&
+         colors_name=[red1,blue1, red1,blue1],&
          points_name=[character(len=20) :: 'G', 'X', 'M', 'G'],&
          file="Eigenbands_afm2.nint")
   end subroutine build_hk
@@ -282,48 +241,28 @@ contains
 
 
 
-
-  !+-----------------------------------------------------------------------------+!
-  !PURPOSE: 
-  !+-----------------------------------------------------------------------------+!
   function hk_model(kpoint,N) result(hk)
     real(8),dimension(:)          :: kpoint
     integer                       :: N
     real(8)                       :: kx,ky
     complex(8),dimension(N,N)     :: hk
     complex(8),dimension(N,N)     :: h0,tk
-    complex(8),dimension(Nso,Nso) :: M
-    complex(8),dimension(Nso,Nso) :: tx,ty,thx,thy
     !
     if(N/=Nlso)stop "hk_model error: N != Nlso" 
     kx = kpoint(1)
     ky = kpoint(2)
     !
+    ! Hk =  -t * | 0                  1 + e^ikx(e^ikx + e^iky) |
+    !            | 1 + e^-ikx(e^-ikx + e^-iky)   0             |
     !
-    M  = Mh*Gamma5
-    tx = -0.5d0*Gamma5 - xi*0.5d0*lambda*Gamma1
-    thx= -0.5d0*Gamma5 + xi*0.5d0*lambda*Gamma1
-    !
-    ty = -0.5d0*Gamma5 - xi*0.5d0*lambda*Gamma2
-    thy= -0.5d0*Gamma5 + xi*0.5d0*lambda*Gamma2
-    !
-    ! H2 =  | m1                       tx + tx^+.e^i.2.kx + ty^+.e^i.(kx+ky) + ty^+.e^i.(kx-ky) |
-    !       | tx^+ + tx.e^-i.2.kx + ty.e^-i.(kx+ky)+ ty^+.e^-i.(kx-ky)          m2              |
-    !
-    hk(1:4,1:4)    = M
-    hk(1:4,5:8)    = tx  + thx*exp(xi*2*kx) + thy*exp(xi*(kx+ky)) + ty*exp(xi*(kx-ky))
-    !
-    hk(5:8,1:4)    = thx + tx*exp(-xi*2*kx) + ty*exp(-xi*(kx+ky)) + thy*exp(-xi*(kx-ky))
-    hk(5:8,5:8)    = M
-    !
+    hk=zero
+    hk(1,2) = -ts*(one+exp(xi*2*kx)+exp(xi*(kx+ky))+exp(xi*(kx-ky)))
+    hk(2,1) = -ts*(one+exp(-xi*2*kx)+exp(-xi*(kx+ky))+exp(-xi*(kx-ky)))
   end function hk_model
 
 
 
-
-
-
-end program ed_bhz_afm2_2d
+end program ed_hm_square_afm2
 
 
 

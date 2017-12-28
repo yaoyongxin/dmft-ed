@@ -5,48 +5,50 @@ program ed_bhz_2d_edge
   USE DMFT_TOOLS
   USE MPI
   implicit none
-  integer                                       :: iloop
-  integer                                       :: Ly
-  integer                                       :: Nineq
-  integer                                       :: Ncell
-  integer                                       :: Nlat
-  integer                                       :: Nso
-  integer                                       :: ilat,iy,iorb,ispin,ineq,i
-  logical                                       :: converged
+  integer                                         :: iloop
+  integer                                         :: Ly
+  integer                                         :: Nineq
+  integer                                         :: Ncell
+  integer                                         :: Nlat
+  integer                                         :: Nso
+  integer                                         :: ilat,iy,iorb,ispin,ineq,i
+  logical                                         :: converged
   !Bath:
-  integer                                       :: Nb
-  real(8),allocatable,dimension(:,:)            :: Bath_ineq
-  real(8),allocatable,dimension(:,:)            :: Bath_prev
+  integer                                         :: Nb
+  real(8),allocatable,dimension(:,:)              :: Bath_ineq
+  real(8),allocatable,dimension(:,:)              :: Bath_prev
   !The local hybridization function:
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Smats
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Gmats
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Sreal
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Greal
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Smats
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Gmats
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Sreal
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Greal
   !Nineq:
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Weiss_ineq
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Weiss_ineq_prev
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Smats_ineq
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Gmats_ineq
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Sreal_ineq
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Weiss_ineq
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Weiss_ineq_prev
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Smats_ineq
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Gmats_ineq
+  complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Sreal_ineq
   !
-  complex(8),allocatable,dimension(:,:,:,:,:)   :: S0
-  real(8),dimension(:,:),allocatable            :: Zmats
-  complex(8),dimension(:,:,:),allocatable       :: Zfoo
+  complex(8),allocatable,dimension(:,:,:,:,:)     :: S0
+  real(8),dimension(:,:),allocatable              :: Zmats
+  complex(8),dimension(:,:,:),allocatable         :: Zfoo
   !Hmiltonian input:
-  complex(8),allocatable,dimension(:,:,:)       :: Hkr
-  real(8),allocatable,dimension(:)              :: Wtk,sbpattern
-  complex(8),allocatable,dimension(:,:)         :: bhzHloc
-  complex(8),allocatable,dimension(:,:,:,:,:)   :: Hloc
-  complex(8),allocatable,dimension(:,:,:,:,:)   :: Hloc_ineq
+  complex(8),allocatable,dimension(:,:,:)         :: Hkr
+  real(8),allocatable,dimension(:)                :: Wtk,sbpattern
+  complex(8),allocatable,dimension(:,:)           :: bhzHloc
+  complex(8),allocatable,dimension(:,:,:,:,:)     :: Hloc
+  complex(8),allocatable,dimension(:,:,:,:,:)     :: Hloc_ineq
   !
-  integer                                       :: Nk,Nkpath                           
-  real(8)                                       :: e0,mh,lambda,wmixing
-  logical                                       :: spinsym,lysym,neelsym,mix_weiss
-  character(len=60)                             :: finput
-  character(len=32)                             :: hkfile
+  integer                                         :: Nk,Nkpath,Nky                           
+  real(8)                                         :: e0,mh,lambda,wmixing
+  logical                                         :: spinsym,lysym,neelsym,mix_weiss
+  character(len=60)                               :: finput
+  character(len=32)                               :: hkfile
   !
-  integer                                       :: comm,rank,ierr
-  logical                                       :: master
+  complex(8),allocatable,dimension(:,:,:,:,:,:,:) :: Gkmats
+  !
+  integer                                         :: comm,rank,ierr
+  logical                                         :: master
 
 
   call init_MPI()
@@ -142,17 +144,12 @@ program ed_bhz_2d_edge
   enddo
 
 
-
-
-
-
   !Setup solver
   Nb=get_bath_dimension()
   allocate(Bath_ineq(Nineq,Nb))
   allocate(Bath_prev(Nineq,Nb))
   !
   call ed_init_solver(Comm,Bath_ineq,Hloc_ineq)
-
 
 
   call MPI_Barrier(Comm,ierr)
@@ -165,6 +162,9 @@ program ed_bhz_2d_edge
         sbpattern(ineq)=(-1d0)**(mod(ineq,2)+1)
      enddo
   endif
+
+  if(spinsym)sb_field=0.d0
+
   do ineq=1,Nineq
      call break_symmetry_bath(Bath_ineq(ineq,:),sb_field,sbpattern(ineq))
   enddo
@@ -280,6 +280,15 @@ program ed_bhz_2d_edge
   enddo
   if(master)call build_eigenbands()
   call MPI_Barrier(comm,ierr)
+
+
+
+  allocate(Gkmats(Nk,Ncell*Ly,Nspin,Nspin,Norb,Norb,Lfreq))
+  do ik=1,Nk
+     call dmft_gk_matsubara(comm,Hkr(:,:,ik),1d0,Gkmats(ik,:,:,:,:,:,:),zeros(Ncell*Ly,Nspin,Nspin,Norb,Norb,Lfreq))
+  enddo
+
+
 
   call finalize_MPI()
 

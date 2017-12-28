@@ -278,7 +278,7 @@ contains
     if(ed_mode=="superc")then
        if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ." 
        ! if(Norb>1)stop "ED WARNING: SC in multi-band is not tested. Remove this line in ED_SETUP to go on."
-       if(ed_twin)stop  "ED WARNING: SC + ED_TWIN is not tested. Remove this line in ED_SETUP to go on."
+       ! if(ed_twin)stop  "ED WARNING: SC + ED_TWIN is not tested. Remove this line in ED_SETUP to go on."
     endif
     if(ed_mode=="nonsu2")then
        if(Nspin/=2)then
@@ -537,8 +537,7 @@ contains
     endif
     twin_mask=.true.
     if(ed_twin)then
-       write(LOGfile,*)"TWIN STATES IN SC CHANNEL: NOT TESTED!!"
-       call sleep(3)
+       write(LOGfile,*)"USE WITH CAUTION: TWIN STATES IN SC CHANNEL!!";call sleep(1)
        do isector=1,Nsectors
           sz=getsz(isector)
           if(sz>0)twin_mask(isector)=.false.
