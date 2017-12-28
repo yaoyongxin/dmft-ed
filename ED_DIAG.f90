@@ -192,7 +192,7 @@ contains
           call eigh(eig_basis,eig_values,'V','U')
           if(dim==1)eig_basis(dim,dim)=one
        endif
-       !
+       !print *,eig_values
        if(spH0%status)call sp_delete_matrix(spH0)
        !
        if(finiteT)then

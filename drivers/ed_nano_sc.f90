@@ -147,7 +147,7 @@ program ed_nano_sc
 !     !
 !     ! extract the linear response (zero-bias) transmission function
 !     ! i.e. the conductance in units of the quantum G0 [e^2/h]
-!     call ed_get_conductance(Gijreal)
+!     call ed_transport(Gijreal)
 !     !
 !     deallocate(Gijreal)
 !     stop
@@ -547,7 +547,7 @@ contains
 !  ! on the real axis, given the non-local Green's function and the L/R hybridization matrix, 
 !  ! of size [2*Nlat*Nspin*Norb**2*Lreal]
 !  !----------------------------------------------------------------------------------------!
-!  subroutine ed_get_conductance(Gret)
+!  subroutine ed_transport(Gret)
 !    complex(8),intent(inout)              :: Gret(:,:,:,:,:,:,:)  ![Nlat][Nlat][Nspin][Nspin][Norb][Norb][Lreal]
 !    ! auxiliary variables for matmul        
 !    complex(8),dimension(:,:),allocatable :: GR,HR,GA,HL,Re,Le,Te ![Nlat*Norb]**2
@@ -667,7 +667,7 @@ contains
 !
 !    deallocate(GR,HR,GA,HL,rmask,lmask,Re,Le,Te,jcurrs) 
 !
-!  end subroutine ed_get_conductance
+!  end subroutine ed_transport
 
 
 !  !----------------------------------------------------------------------------------------!

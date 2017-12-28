@@ -131,7 +131,8 @@ MODULE ED_VARS_GLOBAL
   complex(8),dimension(:,:,:,:,:,:),allocatable,save :: SAmatsii,SArealii        ![Nlat][Nspin][Nspin][Norb][Norb][L]
   complex(8),dimension(:,:,:,:,:,:),allocatable,save :: Gmatsii,Grealii          ![Nlat][Nspin][Nspin][Norb][Norb][L]
   complex(8),dimension(:,:,:,:,:,:),allocatable,save :: Fmatsii,Frealii          ![Nlat][Nspin][Nspin][Norb][Norb][L]
-
+  complex(8),dimension(:,:,:,:,:)  ,allocatable,save :: imp_density_matrix_ii    ![Nlat][Nspin][Nspin][Norb][Norb]
+  !complex(8),dimension(:,:,:,:,:,:),allocatable,save :: bth_density_matrix_ii    ![Nlat][Nspin][Nspin][Norb][Norb][Nbath]
 
   !Spin Susceptibilities
   !=========================================================
@@ -195,13 +196,6 @@ MODULE ED_VARS_GLOBAL
   !PRIVATE (now public but accessible thru routine)
   !=========================================================
   complex(8),allocatable,dimension(:,:,:,:)          :: imp_density_matrix
-  complex(8),allocatable,dimension(:,:,:)            :: impStot
-  complex(8),allocatable,dimension(:,:,:)            :: impLtot
-  complex(8),allocatable,dimension(:)                :: impj_aplha
-  complex(8),allocatable,dimension(:)                :: impj_aplha_sq
-  complex(8)                                         :: impLdotS
-  !
-  complex(8),allocatable,dimension(:)                :: bthLdotS
   complex(8),allocatable,dimension(:,:,:,:,:)        :: bth_density_matrix
 
   integer,parameter,dimension(3)                     :: Lzdiag = [-1,+1,0]
