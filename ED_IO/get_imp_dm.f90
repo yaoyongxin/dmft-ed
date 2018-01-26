@@ -12,8 +12,6 @@
     complex(8),allocatable                       :: dm_custom_rot(:,:)
     real(8)                                      :: soc
     !
-    !call add_ctrl_var(soc,"soc")
-    !
     if (.not.allocated(imp_density_matrix)) then
        write(LOGfile,"(A)") "imp_density_matrix is not allocated"
        stop
@@ -76,7 +74,6 @@
     complex(8),allocatable                       :: dm_rot_tmp(:,:)
     complex(8),allocatable                       :: dm_custom_rot_tmp(:,:)
     !
-    !call add_ctrl_var(soc,"soc")
     Nlat=size(imp_density_matrix_ii,1)
     !
     if (.not.allocated(imp_density_matrix)) then
