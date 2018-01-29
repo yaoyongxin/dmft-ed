@@ -81,6 +81,7 @@ program ed_SOC_ineq
   call parse_cmd_variable(finput,           "FINPUT",              default='inputED_SOC.in')
   call parse_input_variable(hkfile,         "HKFILE",finput,       default="hkfile.in")
   call parse_input_variable(nk,             "NK",finput,           default=10)
+  call parse_input_variable(NLAT,           "NLAT",finput,         default=2)
   call parse_input_variable(nkpath,         "NKPATH",finput,       default=500)
   call parse_input_variable(wmixing,        "WMIXING",finput,      default=0.5d0)
   call parse_input_variable(soc,            "SOC",finput,          default=0.0d0)
@@ -147,7 +148,7 @@ program ed_SOC_ineq
   !
   !#########        BUILD Hk        #########
   !
-  !call read_hk(trim(hkfile)) !TO WRITE PROPERLY                             !;stop
+  call build_hk(trim(hkfile),trim(hlocfile))                             !;stop
   !stop
   if(nonint_mu_shift)stop
   !
@@ -346,57 +347,65 @@ contains
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: build the Non interacting Hamiltonian with SOC and IVSB
   !+------------------------------------------------------------------------------------------+!
-!  subroutine build_hk(file1,file2)
-!    implicit none
-!    character(len=*),optional                    :: file1
-!    character(len=*),optional                    :: file2
-!    real(8),dimension(3)                         :: bk_x,bk_y,bk_z
-!    integer                                      :: ik,Lk
-!    !integer                                      :: i_mu,max_mu=500
-!    !real(8)                                      :: mu_edge=0.5
-!    integer                                      :: i_mu,max_mu=100
-!    real(8)                                      :: mu_edge=2.0d0
-!    complex(8),dimension(Nso,Nso,Lmats)          :: Gmats
-!    complex(8),dimension(Nso,Nso,Lreal)          :: Greal
-!    complex(8),allocatable                       :: Gso(:,:,:,:,:)
-!    real(8)                                      :: wm(Lmats),wr(Lreal),dw,mu
-!    !
-!    if(master)then
-!       write(LOGfile,*)"Build H(Nso,Nso,k)"
-!       write(LOGfile,*)"# of k-points per direction :",Nk
-!       write(LOGfile,*)"# of SO-bands               :",Nso
-!    endif
-!    if(allocated(Bath))stop" H(K) must be build before bath allocation, errors shall come otherwise"
-!    !
-!    bk_x = [1.d0,0.d0,0.d0]*2*pi
-!    bk_y = [0.d0,1.d0,0.d0]*2*pi
-!    bk_z = [0.d0,0.d0,1.d0]*2*pi
-!    !
-!    if(allocated(Hk))deallocate(Hk)
-!    !
-!    if(surface) then
-!       call TB_set_bk(bk_x,bk_y)
-!       Lk=Nk*Nk
-!       if(master)write(LOGfile,*)"surface tot k-points:",Lk
-!       allocate(Hk(Nso,Nso,Lk));Hk=zero
-!       Sigma_correction=zero
-!       call TB_build_model(Hk,hk_Ti3dt2g,Nso,[Nk,Nk])
-!       if(master.AND.present(file1)) call TB_write_hk(Hk,file1,Nso,Norb,1,1,[Nk,Nk])
-!    else
-!       call TB_set_bk(bk_x,bk_y,bk_z)
-!       Lk=Nk*Nk*Nk
-!       if(master)write(LOGfile,*)"bulk tot k-points:",Lk
-!       allocate(Hk(Nso,Nso,Lk));Hk=zero
-!       Sigma_correction=zero
-!       call TB_build_model(Hk,hk_Ti3dt2g,Nso,[Nk,Nk,Nk])
-!       if(master.AND.present(file1)) call TB_write_hk(Hk,file1,Nso,Norb,1,1,[Nk,Nk,Nk])
-!    endif
-!    !
-!    d_t2g_Hloc_nso = sum(Hk(:,:,:),dim=3)/Lk
-!    where(abs((d_t2g_Hloc_nso))<1.d-9)d_t2g_Hloc_nso=0d0
-!    d_t2g_Hloc_nnn=so2nn_reshape(d_t2g_Hloc_nso,Nspin,Norb)
-!    call TB_write_hloc(d_t2g_Hloc_nso,file2)
-!    !
+  subroutine build_hk(file1,file2)
+    implicit none
+    character(len=*),optional                    :: file1
+    character(len=*),optional                    :: file2
+    real(8),dimension(3)                         :: bk_x,bk_y,bk_z
+    integer                                      :: ik,Lk
+    !integer                                      :: i_mu,max_mu=500
+    !real(8)                                      :: mu_edge=0.5
+    integer                                      :: i_mu,max_mu=100
+    real(8)                                      :: mu_edge=2.0d0
+    complex(8),dimension(Nso,Nso,Lmats)          :: Gmats
+    complex(8),dimension(Nso,Nso,Lreal)          :: Greal
+    complex(8),allocatable                       :: Gso(:,:,:,:,:)
+    real(8)                                      :: wm(Lmats),wr(Lreal),dw,mu
+    !
+    if(master)then
+       write(LOGfile,*)"Build H(Nso,Nso,k)"
+       write(LOGfile,*)"# of k-points per direction :",Nk
+       write(LOGfile,*)"# of SO-bands               :",Nso
+    endif
+    if(allocated(Bath))stop" H(K) must be build before bath allocation, errors shall come otherwise"
+    !
+    bk_x = [1.d0,0.d0,0.d0]*2*pi
+    bk_y = [0.d0,1.d0,0.d0]*2*pi
+    bk_z = [0.d0,0.d0,1.d0]*2*pi
+    !
+    if(allocated(Hk))deallocate(Hk)
+    !
+    if(surface) then
+       call TB_set_bk(bk_x,bk_y)
+       Lk=Nk*Nk
+       if(master)write(LOGfile,*)"surface tot k-points:",Lk
+       allocate(Hk(Nlat*Nso,Nlat*Nso,Lk));Hk=zero
+    else
+       call TB_set_bk(bk_x,bk_y,bk_z)
+       Lk=Nk*Nk*Nk
+       if(master)write(LOGfile,*)"bulk tot k-points:",Lk
+       allocate(Hk(Nlat*Nso,Nlat*Nso,Lk));Hk=zero
+    endif
+    !
+    do ilat=1,Nlat
+       file1=file1//'_l'//str(ilat)
+       file2=file2//'_l'//str(ilat)
+       if(surface) then
+          Sigma_correction=zero
+          call TB_build_model(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),hk_Ti3dt2g,Nso,[Nk,Nk])
+          if(master.AND.present(file1)) call TB_write_hk(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),file1,Nso,Norb,1,1,[Nk,Nk])
+       else
+          Sigma_correction=zero
+          call TB_build_model(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),hk_Ti3dt2g,Nso,[Nk,Nk,Nk])
+          if(master.AND.present(file1)) call TB_write_hk(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),file1,Nso,Norb,1,1,[Nk,Nk,Nk])
+       endif
+       d_t2g_Hloc_nso(ilat,:,:) = sum(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),dim=3)/Lk
+       where(abs((d_t2g_Hloc_nso(ilat,:,:)))<1.d-9)d_t2g_Hloc_nso(ilat,:,:)=0d0
+       d_t2g_Hloc_nnn(ilat,:,:,:,:)=so2nn_reshape(d_t2g_Hloc_nso(ilat,:,:),Nspin,Norb)
+       call TB_write_hloc(d_t2g_Hloc_nso(ilat,:,:),file2)
+    enddo
+    !
+    !
 !    !-----  Build the local GF in the spin-orbital Basis   -----
 !    !
 !    !matsu freq
@@ -462,138 +471,138 @@ contains
 !       endif
 !       !
 !    enddo
-!    !
-!  end subroutine build_hk
+    !
+  end subroutine build_hk
 
 
 
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: function that produces the full non interacting Hamiltonian
   !+------------------------------------------------------------------------------------------+!
-!  function hk_Ti3dt2g(kvec,Nso_) result(hk)
-!    real(8),dimension(:)                         :: kvec
-!    real(8)                                      :: kx,ky,kz
-!    integer                                      :: Nso_,ndx
-!    complex(8),dimension(Nso_,Nso_)              :: hk
-!    real(8),allocatable                          :: HoppingMatrix(:,:)
-!    complex(8),allocatable                       :: U(:,:),Udag(:,:)
-!    !
-!    if(surface)then
-!       kx=kvec(1);ky=kvec(2)
-!    else
-!       kx=kvec(1);ky=kvec(2);kz=kvec(3)
-!    endif
-!    !
-!    allocate(HoppingMatrix(Norb,0:6));HoppingMatrix=0.0d0
-!    call get_hopping(HoppingMatrix)
-!    !
-!    Hk=zero
-!    do i=1,Norb
-!       ndx=2*i-1
-!       Hk(ndx:ndx+1,ndx:ndx+1) = diagonal_orbital_dispersion(kx,ky,kz,HoppingMatrix(i,:))
-!    enddo
-!    !
-!    if((SOC/=zero.or.IVB/=zero).and.bath_type=="replica")then
-!       Hk = Hk + SOC*H_LS() + IVB*H_IVB(kx,ky,kz)
-!    endif
-!    !
-!    !correction with Sigma(iw=0)
-!    do ispin=1,Nspin
-!       do jspin=1,Nspin
-!          do iorb=1,Norb
-!             do jorb=1,Norb
-!                io = ispin + (iorb-1)*Nspin
-!                jo = jspin + (jorb-1)*Nspin
-!                Hk(io,jo) = Hk(io,jo) + real(Sigma_correction(1,ispin,jspin,iorb,jorb,1))
-!             enddo
-!          enddo
-!       enddo
-!    enddo
-!    !
-!    !shape:  [Norb*Norb]*Nspin
-!    !
-!    !basis:  {a,Sz}
-!    Hk = so2os_reshape(Hk,Nspin,Norb)
-!    !basis:  {Lz,Sz}
-!    if(Jz_basis)then
-!       allocate(U(Nspin*Norb,Nspin*Norb));U=zero
-!       allocate(Udag(Nspin*Norb,Nspin*Norb));Udag=zero
-!       U=orbital_Lz_rotation_NorbNspin()
-!       Udag=transpose(conjg(orbital_Lz_rotation_NorbNspin()))
-!       Hk=matmul(Udag,matmul(Hk,U))
-!    endif
-!    !
-!  end function hk_Ti3dt2g
+  function hk_Ti3dt2g(kvec,Nso_) result(hk)
+    real(8),dimension(:)                         :: kvec
+    real(8)                                      :: kx,ky,kz
+    integer                                      :: Nso_,ndx
+    complex(8),dimension(Nso_,Nso_)              :: hk
+    real(8),allocatable                          :: HoppingMatrix(:,:)
+    complex(8),allocatable                       :: U(:,:),Udag(:,:)
+    !
+    if(surface)then
+       kx=kvec(1);ky=kvec(2)
+    else
+       kx=kvec(1);ky=kvec(2);kz=kvec(3)
+    endif
+    !
+    allocate(HoppingMatrix(Norb,0:6));HoppingMatrix=0.0d0
+    call get_hopping(HoppingMatrix)
+    !
+    Hk=zero
+    do i=1,Norb
+       ndx=2*i-1
+       Hk(ndx:ndx+1,ndx:ndx+1) = diagonal_orbital_dispersion(kx,ky,kz,HoppingMatrix(i,:))
+    enddo
+    !
+    if((SOC/=zero.or.IVB/=zero).and.bath_type=="replica")then
+       Hk = Hk + SOC*H_LS() + IVB*H_IVB(kx,ky,kz)
+    endif
+    !
+    !correction with Sigma(iw=0)
+    do ispin=1,Nspin
+       do jspin=1,Nspin
+          do iorb=1,Norb
+             do jorb=1,Norb
+                io = ispin + (iorb-1)*Nspin
+                jo = jspin + (jorb-1)*Nspin
+                Hk(io,jo) = Hk(io,jo) + real(Sigma_correction(1,ispin,jspin,iorb,jorb,1))
+             enddo
+          enddo
+       enddo
+    enddo
+    !
+    !shape:  [Norb*Norb]*Nspin
+    !
+    !basis:  {a,Sz}
+    Hk = so2os_reshape(Hk,Nspin,Norb)
+    !basis:  {Lz,Sz}
+    if(Jz_basis)then
+       allocate(U(Nspin*Norb,Nspin*Norb));U=zero
+       allocate(Udag(Nspin*Norb,Nspin*Norb));Udag=zero
+       U=orbital_Lz_rotation_NorbNspin()
+       Udag=transpose(conjg(orbital_Lz_rotation_NorbNspin()))
+       Hk=matmul(Udag,matmul(Hk,U))
+    endif
+    !
+  end function hk_Ti3dt2g
 
 
 
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: (DIAGONAL) build local SOC contribution in the Z formulation
   !+------------------------------------------------------------------------------------------+!
-!  function diagonal_orbital_dispersion(kx,ky,kz,t) result(hk)
-!    real(8),intent(in)                           :: kx,ky,kz
-!    real(8),intent(in),dimension(0:6)            :: t
-!    complex(8),dimension(2,2)                    :: hk
-!    real(8)                                      :: t0
-!    !
-!    if(Hk_test)then
-!       t0=0.1
-!    else
-!       t0=1.d0
-!    endif
-!    !
-!    !perovskite dispersion
-!    hk = zero
-!    if (surface) then
-!       if(Hk_test)then
-!          !surface model dispersion cosine on x, y
-!          !up
-!          hk(1,1) = t(0)+(                       & !onsite_orbX
-!                -2.*t(1)*cos(kx)                 & !t_100_orbX
-!                -2.*t(2)*cos(ky)                 & !t_010_orbX
-!          !      -1.*t(3))*t0                       !t_001_orbX
-!                )*t0                       !t_001_orbX
+  function diagonal_orbital_dispersion(kx,ky,kz,t) result(hk)
+    real(8),intent(in)                           :: kx,ky,kz
+    real(8),intent(in),dimension(0:6)            :: t
+    complex(8),dimension(2,2)                    :: hk
+    real(8)                                      :: t0
+    !
+    if(Hk_test)then
+       t0=0.1
+    else
+       t0=1.d0
+    endif
+    !
+    !perovskite dispersion
+    hk = zero
+    if (surface) then
+       if(Hk_test)then
+          !surface model dispersion cosine on x, y
+          !up
+          hk(1,1) = t(0)+(                       & !onsite_orbX
+                -2.*t(1)*cos(kx)                 & !t_100_orbX
+                -2.*t(2)*cos(ky)                 & !t_010_orbX
+          !      -1.*t(3))*t0                       !t_001_orbX
+                )*t0                       !t_001_orbX
 
-!          !dw
-!          hk(2,2) = hk(1,1)
-!       else
-!          !surface realistic dispersion on x, y
-!          !up
-!          hk(1,1) = t(0)+(                       & !onsite_orbX
-!                -2.*t(1)*cos(kx)                 & !t_100_orbX
-!                -2.*t(2)*cos(ky)                 & !t_010_orbX
-!                -1.*t(3)                         & !t_001_orbX
-!                -2.*t(4)*cos(ky)                 & !t_011_orbX
-!                -2.*t(5)*cos(kx)                 & !t_101_orbX
-!                -4.*t(6)*cos(kx)*cos(ky))*t0       !t_110_orbX
-!          !dw
-!          hk(2,2) = hk(1,1)
-!       endif
-!    else
-!       if(Hk_test)then
-!          !bulk model dispersion cosine on x, y, z
-!          !up
-!          hk(1,1) = t(0)+(                       & !onsite_orbX
-!                -2.*t(1)*cos(kx)                 & !t_100_orbX
-!                -2.*t(2)*cos(ky)                 & !t_010_orbX
-!                -2.*t(3)*cos(kz))*t0               !t_001_orbX
-!          !dw
-!          hk(2,2) = hk(1,1)
-!       else
-!          !bulk realistic dispersion on x, y, z
-!          !up
-!          hk(1,1) = t(0)+(                       & !onsite_orbX
-!                -2.*t(1)*cos(kx)                 & !t_100_orbX
-!                -2.*t(2)*cos(ky)                 & !t_010_orbX
-!                -2.*t(3)*cos(kz)                 & !t_001_orbX
-!                -4.*t(4)*cos(ky)*cos(kz)         & !t_011_orbX
-!                -4.*t(5)*cos(kx)*cos(kz)         & !t_101_orbX
-!                -4.*t(6)*cos(kx)*cos(ky))*t0       !t_110_orbX
-!          !dw
-!          hk(2,2) = hk(1,1)
-!       endif
-!    endif
-!  end function diagonal_orbital_dispersion
+          !dw
+          hk(2,2) = hk(1,1)
+       else
+          !surface realistic dispersion on x, y
+          !up
+          hk(1,1) = t(0)+(                       & !onsite_orbX
+                -2.*t(1)*cos(kx)                 & !t_100_orbX
+                -2.*t(2)*cos(ky)                 & !t_010_orbX
+                -1.*t(3)                         & !t_001_orbX
+                -2.*t(4)*cos(ky)                 & !t_011_orbX
+                -2.*t(5)*cos(kx)                 & !t_101_orbX
+                -4.*t(6)*cos(kx)*cos(ky))*t0       !t_110_orbX
+          !dw
+          hk(2,2) = hk(1,1)
+       endif
+    else
+       if(Hk_test)then
+          !bulk model dispersion cosine on x, y, z
+          !up
+          hk(1,1) = t(0)+(                       & !onsite_orbX
+                -2.*t(1)*cos(kx)                 & !t_100_orbX
+                -2.*t(2)*cos(ky)                 & !t_010_orbX
+                -2.*t(3)*cos(kz))*t0               !t_001_orbX
+          !dw
+          hk(2,2) = hk(1,1)
+       else
+          !bulk realistic dispersion on x, y, z
+          !up
+          hk(1,1) = t(0)+(                       & !onsite_orbX
+                -2.*t(1)*cos(kx)                 & !t_100_orbX
+                -2.*t(2)*cos(ky)                 & !t_010_orbX
+                -2.*t(3)*cos(kz)                 & !t_001_orbX
+                -4.*t(4)*cos(ky)*cos(kz)         & !t_011_orbX
+                -4.*t(5)*cos(kx)*cos(kz)         & !t_101_orbX
+                -4.*t(6)*cos(kx)*cos(ky))*t0       !t_110_orbX
+          !dw
+          hk(2,2) = hk(1,1)
+       endif
+    endif
+  end function diagonal_orbital_dispersion
 
 
 
@@ -701,114 +710,114 @@ contains
   !PURPOSE:   Build the hopping integrals matrix for realistic bandstructure
   !STRUCTURE: T[orbital(yz,zx,xy) nn direction(100,010,001),nnn direction(011,101,110)]
   !+------------------------------------------------------------------------------------------+!
-!  subroutine get_hopping(T)
-!    real(8),dimension(Norb,0:6),intent(out)      ::  T
-!    real(8),dimension(3,0:6)                     ::  T_bulk,T_LAOSTO
-!    real(8)                                      ::  Eo,t1,t2,t3
-!    real(8)                                      ::  t_010_yz,t_001_yz
-!    real(8)                                      ::  t_100_zx,t_001_zx
-!    real(8)                                      ::  t_100_xy,t_010_xy,t_001_xy
-!    !
-!    T=0.d0
-!    !
-!    !pristine lattice
-!    Eo = 3.31
-!    t1 = 0.276536
-!    t2 = 0.031329
-!    t3 = 0.076842
-!    !
-!    !lattice distortion
-!    t_010_yz = 0.232 !se c'è solo l'abbassamento del Ti questo dovrebbe essere uguale a t1, magari c'è anche altro dovuto ad LAO
-!    t_001_yz = 0.475
-!    !
-!    t_100_zx = 0.232
-!    t_001_zx = 0.475
-!    !
-!    t_100_xy = 0.286
-!    t_010_xy = 0.286
-!    t_001_xy = 0.03
-!    !
-!    !####  BULK STO  ####
-!    !orbital_1 = YZ
-!    T_bulk(1,0) = Eo
-!    T_bulk(1,1) = t2
-!    T_bulk(1,2) = t1
-!    T_bulk(1,3) = t1
-!    T_bulk(1,4) = t3
-!    T_bulk(1,5) = 0.d0
-!    T_bulk(1,6) = 0.d0
-!    !orbital_2 = ZX
-!    T_bulk(2,0) = Eo
-!    T_bulk(2,1) = t1
-!    T_bulk(2,2) = t2
-!    T_bulk(2,3) = t1
-!    T_bulk(2,4) = 0.d0
-!    T_bulk(2,5) = t3
-!    T_bulk(2,6) = 0.d0
-!    !orbital_3 = XY
-!    T_bulk(3,0) = Eo
-!    T_bulk(3,1) = t1
-!    T_bulk(3,2) = t1
-!    T_bulk(3,3) = t2
-!    T_bulk(3,4) = 0.d0
-!    T_bulk(3,5) = 0.d0
-!    T_bulk(3,6) = t3
-!    !
-!    !####  LAO/STO  ####
-!    !orbital_1 = YZ
-!    T_LAOSTO(1,0) = 1.087
-!    T_LAOSTO(1,1) = t2
-!    T_LAOSTO(1,2) = t_010_yz
-!    T_LAOSTO(1,3) = t_001_yz
-!    T_LAOSTO(1,4) = t3
-!    T_LAOSTO(1,5) = 0.d0
-!    T_LAOSTO(1,6) = 0.d0
-!    !orbital_2 = ZX
-!    T_LAOSTO(2,0) = 1.087
-!    T_LAOSTO(2,1) = t_100_zx
-!    T_LAOSTO(2,2) = t2
-!    T_LAOSTO(2,3) = t_001_zx
-!    T_LAOSTO(2,4) = 0.d0
-!    T_LAOSTO(2,5) = t3
-!    T_LAOSTO(2,6) = 0.d0
-!    !orbital_3 = XY
-!    T_LAOSTO(3,0) = 1.035
-!    T_LAOSTO(3,1) = t_100_xy
-!    T_LAOSTO(3,2) = t_010_xy
-!    T_LAOSTO(3,3) = t_001_xy
-!    T_LAOSTO(3,4) = 0.d0
-!    T_LAOSTO(3,5) = 0.d0
-!    T_LAOSTO(3,6) = t3
-!    !
-!    !
-!    if(Hk_test)then
-!       if(bath_type=="replica")then
-!          T=1.0d0
-!          T(1,0) = 0.0d0
-!          T(2,0) = 0.0d0
-!          T(3,0) = 0.0d0
-!       else
-!          T=1.0d0
-!          if(surface)then
-!             T(1,0) = +SOC
-!             T(2,0) = 0.0d0
-!             T(3,0) = 0.0d0
-!          else
-!             T(1,0) = +SOC
-!             T(2,0) = -SOC/2.d0
-!             T(3,0) = -SOC/2.d0
-!          endif
-!       endif
-!    else
-!       if(surface)then
-!          T=T_LAOSTO(1:Norb,:)
-!       else
-!          T=T_bulk(1:Norb,:)
-!       endif
-!    endif
-!    !
-!    !
-!  end subroutine get_hopping
+  subroutine get_hopping(T)
+    real(8),dimension(Norb,0:6),intent(out)      ::  T
+    real(8),dimension(3,0:6)                     ::  T_bulk,T_LAOSTO
+    real(8)                                      ::  Eo,t1,t2,t3
+    real(8)                                      ::  t_010_yz,t_001_yz
+    real(8)                                      ::  t_100_zx,t_001_zx
+    real(8)                                      ::  t_100_xy,t_010_xy,t_001_xy
+    !
+    T=0.d0
+    !
+    !pristine lattice
+    Eo = 3.31
+    t1 = 0.276536
+    t2 = 0.031329
+    t3 = 0.076842
+    !
+    !lattice distortion
+    t_010_yz = 0.232 !se c'è solo l'abbassamento del Ti questo dovrebbe essere uguale a t1, magari c'è anche altro dovuto ad LAO
+    t_001_yz = 0.475
+    !
+    t_100_zx = 0.232
+    t_001_zx = 0.475
+    !
+    t_100_xy = 0.286
+    t_010_xy = 0.286
+    t_001_xy = 0.03
+    !
+    !####  BULK STO  ####
+    !orbital_1 = YZ
+    T_bulk(1,0) = Eo
+    T_bulk(1,1) = t2
+    T_bulk(1,2) = t1
+    T_bulk(1,3) = t1
+    T_bulk(1,4) = t3
+    T_bulk(1,5) = 0.d0
+    T_bulk(1,6) = 0.d0
+    !orbital_2 = ZX
+    T_bulk(2,0) = Eo
+    T_bulk(2,1) = t1
+    T_bulk(2,2) = t2
+    T_bulk(2,3) = t1
+    T_bulk(2,4) = 0.d0
+    T_bulk(2,5) = t3
+    T_bulk(2,6) = 0.d0
+    !orbital_3 = XY
+    T_bulk(3,0) = Eo
+    T_bulk(3,1) = t1
+    T_bulk(3,2) = t1
+    T_bulk(3,3) = t2
+    T_bulk(3,4) = 0.d0
+    T_bulk(3,5) = 0.d0
+    T_bulk(3,6) = t3
+    !
+    !####  LAO/STO  ####
+    !orbital_1 = YZ
+    T_LAOSTO(1,0) = 1.087
+    T_LAOSTO(1,1) = t2
+    T_LAOSTO(1,2) = t_010_yz
+    T_LAOSTO(1,3) = t_001_yz
+    T_LAOSTO(1,4) = t3
+    T_LAOSTO(1,5) = 0.d0
+    T_LAOSTO(1,6) = 0.d0
+    !orbital_2 = ZX
+    T_LAOSTO(2,0) = 1.087
+    T_LAOSTO(2,1) = t_100_zx
+    T_LAOSTO(2,2) = t2
+    T_LAOSTO(2,3) = t_001_zx
+    T_LAOSTO(2,4) = 0.d0
+    T_LAOSTO(2,5) = t3
+    T_LAOSTO(2,6) = 0.d0
+    !orbital_3 = XY
+    T_LAOSTO(3,0) = 1.035
+    T_LAOSTO(3,1) = t_100_xy
+    T_LAOSTO(3,2) = t_010_xy
+    T_LAOSTO(3,3) = t_001_xy
+    T_LAOSTO(3,4) = 0.d0
+    T_LAOSTO(3,5) = 0.d0
+    T_LAOSTO(3,6) = t3
+    !
+    !
+    if(Hk_test)then
+       if(bath_type=="replica")then
+          T=1.0d0
+          T(1,0) = 0.0d0
+          T(2,0) = 0.0d0
+          T(3,0) = 0.0d0
+       else
+          T=1.0d0
+          if(surface)then
+             T(1,0) = +SOC
+             T(2,0) = 0.0d0
+             T(3,0) = 0.0d0
+          else
+             T(1,0) = +SOC
+             T(2,0) = -SOC/2.d0
+             T(3,0) = -SOC/2.d0
+          endif
+       endif
+    else
+       if(surface)then
+          T=T_LAOSTO(1:Norb,:)
+       else
+          T=T_bulk(1:Norb,:)
+       endif
+    endif
+    !
+    !
+  end subroutine get_hopping
 
 
   !____________________________________________________________________________________________!

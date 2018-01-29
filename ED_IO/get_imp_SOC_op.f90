@@ -10,13 +10,13 @@
     integer                           ::  unit_
     integer                           ::  iorb,ispin,jorb,jspin,io,ibath
     !
-    if(Norb/=3)stop "SOC_operators implemented only for 3 orbitals"
-    if(Norb/=2)stop "SOC_operators implemented only for 2 spins"
+    if(Norb/=3)  stop "SOC_operators implemented only for 3 orbitals"
+    if(Nspin/=2) stop "SOC_operators implemented only for 2 spins"
     !
     if(allocated(Simp))   deallocate(Simp)   ;allocate(Simp(3,Norb,Norb))            ;Simp=zero
     if(allocated(Limp))   deallocate(Limp)   ;allocate(Limp(3,Nspin,Nspin))          ;Limp=zero
     if(allocated(Jimp))   deallocate(Jimp)   ;allocate(Jimp(3))                      ;Jimp=zero
-    if(allocated(Jimp_sq))deallocate(Jimp_sq);allocate(Jimp(3))                      ;Jimp_sq=zero
+    if(allocated(Jimp_sq))deallocate(Jimp_sq);allocate(Jimp_sq(3))                   ;Jimp_sq=zero
     !
     !rotations definition
     if(allocated(U))      deallocate(U)      ;allocate(U(Nspin*Norb,Nspin*Norb))     ;U=zero
@@ -128,8 +128,8 @@
     complex(8),allocatable            ::  Jimp_tmp(:),Jimp_sq_tmp(:)
     complex(8)                        ::  LSimp_tmp
     !
-    if(Norb/=3)stop "SOC_operators implemented only for 3 orbitals"
-    if(Norb/=2)stop "SOC_operators implemented only for 2 spins"
+    if(Norb/=3)  stop "SOC_operators implemented only for 3 orbitals"
+    if(Nspin/=2) stop "SOC_operators implemented only for 2 spins"
     !
     Nlat=size(imp_density_matrix_ii,1)
     !
