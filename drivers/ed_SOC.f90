@@ -54,8 +54,9 @@ program ed_SOC
   integer                                        :: conv_n_loop=0
   integer                                        :: shift_n_loop=0
   real(8)                                        :: zJ1_2=0.d0,zJ3_2=0.d0
+  real(8)                                        :: bottom,top
   real(8)                                        :: Alvl=0.d0
-  real(8)                                        :: bottom,top,shift
+  real(8)                                        :: shift
   real(8)                                        :: dw,sumdens,xmu_old
   real(8),allocatable,dimension(:)               :: w
   real(8),allocatable,dimension(:)               :: orb_dens
@@ -852,40 +853,41 @@ contains
   subroutine Jz_rotate(Fso,type_funct,type_freq,bottom_,top_,lvl_)
     implicit none
     !input variables
-    complex(8),allocatable,intent(in)            ::   Fso(:,:,:,:,:)
-    character(len=4),      intent(in)            ::   type_funct
-    character(len=2),      intent(in)            ::   type_freq
-    real(8),               intent(out),optional  ::   bottom_,top_
-    real(8),               intent(in), optional  ::   lvl_
+    complex(8),allocatable,intent(in)                ::   Fso(:,:,:,:,:)
+    character(len=4)      ,intent(in)                ::   type_funct
+    character(len=2)      ,intent(in)                ::   type_freq
+    real(8)               ,intent(out),optional      ::   bottom_,top_
+    real(8)               ,intent(in) ,optional      ::   lvl_
     !aux rotated fnct in so/nso
-    complex(8),allocatable                       ::   f_in(:,:,:),f_out(:,:,:),Gimp(:,:,:,:,:)
+    complex(8),allocatable                           ::   f_in(:,:,:),f_out(:,:,:),Gimp(:,:,:,:,:)
     !output fnct in nn/nnn
-    complex(8),allocatable                       ::   Fso_out(:,:,:,:,:)
+    complex(8),allocatable                           ::   Fso_out(:,:,:,:,:)
     !array & indexes
-    real(8),allocatable,dimension(:)             ::   w
-    integer                                      ::   io,jo,ndx,Lfreq,ik
-    integer                                      ::   ispin,jspin,iorb,jorb
+    real(8)   ,allocatable,dimension(:)              ::   w
+    integer                                          ::   io,jo,ndx,Lfreq,ik
+    integer                                          ::   ispin,jspin,iorb,jorb
     !flags & names
-    integer                                      ::   isetup=0
-    logical                                      ::   level
-    character(len=10)                            ::   file_rotation
-    character(len=91)                            ::   header
+    integer                                          ::   isetup=0
+    logical                                          ::   level
+    character(len=10)                                ::   file_rotation
+    character(len=91)                                ::   header
     !rotations & dm
-    complex(8),dimension(Nspin*Norb,Nspin*Norb)  ::   theta_C
-    real(8),dimension(Nspin*Norb,Nspin*Norb)     ::   dens_rot,rho_ab
+    complex(8),dimension(Nspin*Norb,Nspin*Norb)      ::   theta_C
+    complex(8),dimension(Nspin*Norb,Nspin*Norb)      ::   rho_ab
+    real(8)   ,dimension(Nspin*Norb,Nspin*Norb)      ::   dens_rot
     !top bottom
-    integer                                      ::   posupper,poslower
-    integer                                      ::   icount,max_count
-    integer,dimension(200)                       ::   posmax
-    real(8)                                      ::   second_derivative
+    integer                                          ::   posupper,poslower
+    integer                                          ::   icount,max_count
+    integer   ,dimension(200)                        ::   posmax
+    real(8)                                          ::   second_derivative
     !observables
-    real(8)                                      ::   norm,fact,lvl,dw
-    complex(8),allocatable,dimension(:)          ::   Luttinger,z_rot
-    real(8)                                      ::   bttm,tp
-    real(8)                                      ::   LS_0,jz_0,jz_0_sq,Ek0
+    real(8)                                          ::   norm,fact,lvl,dw
+    real(8)   ,dimension(Nspin*Norb)                 ::   z_rot
+    complex(8),dimension(Nspin*Norb)                 ::   Luttinger
+    real(8)                                          ::   LS_0,jz_0,jz_0_sq!,Ek0
     !non interacting Ek
-    real(8)                                      ::   Ek0bis
-    complex(8),allocatable                       ::   Hkj(:,:,:)
+!    real(8)                                      ::   Ek0bis
+!    complex(8),allocatable                       ::   Hkj(:,:,:)
     !
     if(type_funct=="G0lc") isetup=1
     if(type_funct=="Gloc") isetup=2
@@ -906,15 +908,13 @@ contains
     !
     !observables allocation
     if(isetup==1) then
-       if(master)write(LOGfile,*) "  G0loc rotation"
+       write(LOGfile,*) "  G0loc rotation"
     elseif(isetup==2) then
-       if(master)write(LOGfile,*) "  Gloc rotation"
+       write(LOGfile,*) "  Gloc rotation"
     elseif(isetup==3) then
-       if(master)write(LOGfile,*) "  impS rotation"
-       if(allocated(z_rot))deallocate(z_rot);allocate(z_rot(Nspin*Norb));z_rot=0.d0
+       write(LOGfile,*) "  impS rotation"
     elseif(isetup==4) then
-       if(master)write(LOGfile,*) "  impG rotation"
-       if(allocated(Luttinger))deallocate(Luttinger);allocate(Luttinger(2*Nspin*Norb));Luttinger=zero
+       write(LOGfile,*) "  impG rotation"
        if(allocated(Gimp))deallocate(Gimp);allocate(Gimp(Nspin,Nspin,Norb,Norb,Lfreq));Gimp=zero
        call ed_get_gimp_matsubara(Gimp)
     endif
@@ -926,14 +926,14 @@ contains
        w = linspace(wini,wfin,Lreal,mesh=dw)
        norm=dw
        fact=-1.d0/pi
-       if(master)write(LOGfile,'(A11,2F9.4)') "   real freq",norm,fact
+       write(LOGfile,'(A11,2F9.4)') "   real freq",norm,fact
     elseif(type_freq=="wm")then
        if(allocated(w))deallocate(w)
        allocate(w(Lmats));w=0.d0
        w = pi/beta*(2*arange(1,Lmats)-1)
        norm=1.d0/beta
        fact=1.d0
-       if(master)write(LOGfile,'(A11,2F9.4)') "   imag freq",norm,fact
+       write(LOGfile,'(A11,2F9.4)') "   imag freq",norm,fact
     endif
     !
     !function intake
@@ -950,29 +950,27 @@ contains
     enddo
     !
     !save the integral before rotation
-    if(master)then
-       if(isetup==1) then
-          open(unit=106,file='sum_'//type_freq//'_G0loc.dat',status='unknown',action='write',position='rewind')
-       elseif(isetup==2) then
-          open(unit=106,file='sum_'//type_freq//'_Gloc.dat',status='unknown',action='write',position='rewind')
-       elseif(isetup==3) then
-          open(unit=106,file='sum_'//type_freq//'_impS.dat',status='unknown',action='write',position='rewind')
-       elseif(isetup==4) then
-          open(unit=106,file='sum_'//type_freq//'_impG.dat',status='unknown',action='write',position='rewind')
-       endif
-       do ispin=1,Nspin
-          do jspin=1,Nspin
-             do iorb=1,Norb
-                do jorb=1,Norb
-                   io = iorb + (ispin-1)*Norb
-                   jo = jorb + (jspin-1)*Norb
-                   write(106,"(I3,I3,A3,4I3,F18.12)")io,jo,"---",ispin,jspin,iorb,jorb,sum(abs(f_in(io,jo,:)))*norm
-                enddo
+    if(isetup==1) then
+       open(unit=106,file='sum_'//type_freq//'_G0loc.dat',status='unknown',action='write',position='rewind')
+    elseif(isetup==2) then
+       open(unit=106,file='sum_'//type_freq//'_Gloc.dat',status='unknown',action='write',position='rewind')
+    elseif(isetup==3) then
+       open(unit=106,file='sum_'//type_freq//'_impS.dat',status='unknown',action='write',position='rewind')
+    elseif(isetup==4) then
+       open(unit=106,file='sum_'//type_freq//'_impG.dat',status='unknown',action='write',position='rewind')
+    endif
+    do ispin=1,Nspin
+       do jspin=1,Nspin
+          do iorb=1,Norb
+             do jorb=1,Norb
+                io = iorb + (ispin-1)*Norb
+                jo = jorb + (jspin-1)*Norb
+                write(106,"(I3,I3,A3,4I3,F18.12)")io,jo,"---",ispin,jspin,iorb,jorb,sum(abs(f_in(io,jo,:)))*norm
              enddo
           enddo
        enddo
-       close(106)
-    endif
+    enddo
+    close(106)
     !
     !
     !
@@ -983,186 +981,181 @@ contains
     !###############################################################
     !
     write(LOGfile,*) "  Rotation with analytic LS"
-       !
-       !1)rotation
-       f_out=zero
-       do i=1,Lfreq
-          f_out(:,:,i)=matmul(transpose(conjg(theta_C)),matmul(f_in(:,:,i),theta_C))
+    !
+    !1)rotation
+    f_out=zero
+    do i=1,Lfreq
+       f_out(:,:,i)=matmul(transpose(conjg(theta_C)),matmul(f_in(:,:,i),theta_C))
+    enddo
+    !
+    !2)Zqp save in the case f_in = Smats(iw)
+    if(isetup==3 .and. type_freq=="wm")then
+       z_rot=0d0
+       do io=1,Nspin*Norb
+          z_rot(io)   = 1.d0/( 1.d0 + abs( dimag(f_out(io,io,1))/(pi/beta) ))
+       enddo
+       zJ1_2=z_rot(1)
+       zJ3_2=z_rot(4)
+       open(unit=106,file='Zqp_rot.dat',status='unknown',action='write',position='rewind')
+       write(106,'(A)') header
+       write(106,'(90F15.9,1X)')(z_rot(io),io=1,Nspin*Norb)
+       close(106)
+    endif
+    !
+    !3)Luttinger save in the case f_in = impG(iw)
+    if(isetup==4 .and. type_freq=="wm")then
+       Luttinger=zero
+       do io=1,Nspin*Norb
+          Luttinger(Nspin*Norb)=f_out(io,io,1)  
+       enddo
+       open(unit=106,file='Luttinger.dat',status='unknown',action='write',position='rewind')
+       write(106,'(A)') header
+       write(106,'(6F15.9,1X,6F15.9)') (real(Luttinger(io)),io=1,Nspin*Norb),(aimag(luttinger(io)),io=1,Nspin*Norb)
+       close(106)
+    endif
+    !
+    !4)top-bottom find of the half-filled band in the case f_in = Gloc(w) and N=2,5
+    if(isetup==2 .and. type_freq=="wr" )then ! .and. upprshft )then
+       if( (abs(nread-2.d0)<=2*nerr).or.(abs(nread-5.d0)<=2*nerr) )then
+          if(abs(nread-5.d0)<=2*nerr)ndx=1
+          if(abs(nread-2.d0)<=2*nerr)ndx=3
+          if(present(top_).and.present(bottom_))then
+             top_=0.d0;bottom_=0.d0
+             posupper=10*Lfreq;poslower=-posupper
+             max_count=0;posmax=0
+             !
+             freqloop:do i=Lfreq,1,-1
+                if(( abs(real(f_out(ndx,ndx,i))).lt.lvl  ).and.( real(f_out(ndx,ndx,i))>0.d0)) then
+                   max_count=max_count+1
+                   posmax(max_count)=i
+                   if(w(i)<-wfin) exit freqloop
+                endif
+             enddo freqloop
+             !
+             maxloop:do icount=1,max_count
+                level=.false.
+                if( -aimag(f_out(ndx,ndx,posmax(icount)))/pi>0.85 )level=.true.
+                second_derivative = (real(f_out(ndx,ndx,posmax(icount)+1))-real(f_out(ndx,ndx,posmax(icount)-1)))/(w(posmax(icount)+1)-w(posmax(icount)-1))
+                if(second_derivative>0.d0)then
+                   if((posmax(icount)<posupper).and.(w(posmax(icount))>0.d0).and.level)then
+                      posupper=posmax(icount)
+                      top_=w(posupper)
+                   elseif((w(posmax(icount))<0.d0).and.level)then
+                      poslower=posmax(icount)
+                      bottom_=w(poslower)
+                      exit maxloop
+                   endif
+                endif
+             enddo maxloop
+             !
+          endif
+       endif
+    endif
+    !
+    !5)first moment of A(w) in the case f_in = Gloc(w) and N=2,5
+    if(isetup==2 .and. type_freq=="wr" )then
+       call compute_spectral_moments_so(f_out,w,fact,norm)
+    endif
+    !
+    !6)save the integral after rotation
+    if(isetup==1) then
+       open(unit=106,file='sum_'//type_freq//'_G0loc_rot.dat',status='unknown',action='write',position='rewind')
+    elseif(isetup==2) then
+       open(unit=106,file='sum_'//type_freq//'_Gloc_rot.dat' ,status='unknown',action='write',position='rewind')
+    elseif(isetup==3) then
+       open(unit=106,file='sum_'//type_freq//'_impS_rot.dat' ,status='unknown',action='write',position='rewind')
+    elseif(isetup==4) then
+       open(unit=106,file='sum_'//type_freq//'_impG_rot.dat' ,status='unknown',action='write',position='rewind')
+    endif
+    do ispin=1,Nspin
+       do jspin=1,Nspin
+          do iorb=1,Norb
+             do jorb=1,Norb
+                io = iorb + (ispin-1)*Norb
+                jo = jorb + (jspin-1)*Norb
+                write(106,"(I3,I3,A3,4I3,F18.12)")io,jo,"---",ispin,jspin,iorb,jorb,sum(abs(f_out(io,jo,:)))*norm
+             enddo
+          enddo
+       enddo
+    enddo
+    close(106)
+    !
+    !7)save the rotated function
+    if(isetup==1) then
+       file_rotation="G0lc_rot_"
+     elseif(isetup==2) then
+       file_rotation="Gloc_rot_"
+    elseif(isetup==3) then
+       file_rotation="impS_rot_"
+    elseif(isetup==4) then
+       file_rotation="impG_rot_"
+    endif
+    Fso_out=zero
+    do i=1,Lfreq
+       Fso_out(:,:,:,:,i)=so2nn_reshape(f_out(:,:,i),Nspin,Norb)
+    enddo
+    if(type_freq=="wr") call dmft_print_gf_realaxis( Fso_out,file_rotation,iprint=3)
+    if(type_freq=="wm") call dmft_print_gf_matsubara(Fso_out,file_rotation,iprint=3)
+    !
+    !8)non interacting rho and observables in the case f_in = G0loc(w)
+    if(isetup==1.and.type_freq=="wr")then
+       dens_rot=0.d0
+       do io=1,Nspin*Norb
+          do i=1,Lreal
+             dens_rot(io,io)=dens_rot(io,io)+fact*dimag(f_out(io,io,i))*norm
+             if(abs(w(i))<dw) exit
+          enddo
        enddo
        !
-       !2)Zqp save in the case f_in = Smats(iw)
-       if(isetup==3 .and. type_freq=="wm")then
-          do io=1,Nspin*Norb
-             z_rot(io)   = 1.d0/( 1.d0 + abs( dimag(f_out(io,io,1))/(pi/beta) ))
-          enddo
-          zJ1_2=z_rot(1)
-          zJ3_2=z_rot(4)
-          if(master)then
-             open(unit=106,file='Zqp_rot.dat',status='unknown',action='write',position='rewind')
-             write(106,'(A)') header
-             write(106,'(90F15.9,1X)')(real(z_rot(io)),io=1,Nspin*Norb)
-             close(106)
-          endif
-       endif
+       rho_ab = matmul(theta_C,matmul(dens_rot,transpose(conjg(theta_C))))
+       LS_0=trace(matmul(rho_ab,atomic_SOC()))
+       jz_0=trace(matmul(rho_ab,atomic_j("z")))
+       jz_0_sq=trace(matmul(rho_ab,matmul(atomic_j("z"),atomic_j("z"))))
        !
-       !3)Luttinger save in the case f_in = impG(iw)
-       if(isetup==4 .and. type_freq=="wm")then
-          do io=1,Nspin*Norb
-             Luttinger(Nspin*Norb+io)=f_out(io,io,1)  
-          enddo
-          if(master)then
-             open(unit=106,file='Luttinger.dat',status='unknown',action='write',position='rewind')
-             write(106,'(A)') header
-             write(106,'(90F15.9,1X)') (real(Luttinger(io)),io=1,2*Nspin*Norb),(aimag(luttinger(io)),io=1,2*Nspin*Norb)
-             close(106)
-          endif
-       endif
+!               Ek0=zero
+!               do ik=1,Nk*Nk*Nk
+!                  Ek0 = Ek0 + trace(matmul(rho_ab,Hk(:,:,ik)))/(Nk*Nk*Nk)
+!               enddo
+!               !
+!               if(allocated(HkJ))deallocate(HkJ);allocate(HkJ(Nspin*Norb,Nspin*Norb,Nk*Nk*Nk));HkJ=zero
+!               Ek0bis=zero
+!               do ik=1,Nk*Nk*Nk
+!                  HkJ(:,:,ik)=matmul(transpose(conjg(theta_C)),matmul(Hk(:,:,ik),theta_C))-mu*eye(Nspin*Norb)
+!                  do io=1,Nspin*Norb
+!                     if(real(HkJ(io,io,ik))>0.d0)cycle
+!                     Ek0bis = Ek0bis + HkJ(io,io,ik)/(Nk*Nk*Nk)
+!                  enddo
+!               enddo
        !
-       !4)top-bottom find of the half-filled band in the case f_in = Gloc(w) and N=2,5
-       if(isetup==2 .and. type_freq=="wr" )then ! .and. upprshft )then
-          if( (abs(nread-2.d0)<=2*nerr).or.(abs(nread-5.d0)<=2*nerr) )then
-             if(abs(nread-5.d0)<=2*nerr)ndx=1
-             if(abs(nread-2.d0)<=2*nerr)ndx=3
-             if(present(top_).and.present(bottom_))then
-                top_=0.d0;bottom_=0.d0
-                posupper=10*Lfreq;poslower=-posupper
-                max_count=0;posmax=0
-                !
-                freqloop:do i=Lfreq,1,-1
-                   if(( abs(real(f_out(ndx,ndx,i))).lt.lvl  ).and.( real(f_out(ndx,ndx,i))>0.d0)) then
-                      max_count=max_count+1
-                      posmax(max_count)=i
-                      if(w(i)<-wfin) exit freqloop
-                   endif
-                enddo freqloop
-                !
-                maxloop:do icount=1,max_count
-                   level=.false.
-                   if( -aimag(f_out(ndx,ndx,posmax(icount)))/pi>0.85 )level=.true.
-                   second_derivative = (real(f_out(ndx,ndx,posmax(icount)+1))-real(f_out(ndx,ndx,posmax(icount)-1)))/(w(posmax(icount)+1)-w(posmax(icount)-1))
-                   if(second_derivative>0.d0)then
-                      if((posmax(icount)<posupper).and.(w(posmax(icount))>0.d0).and.level)then
-                         posupper=posmax(icount)
-                         top_=w(posupper)
-                      elseif((w(posmax(icount))<0.d0).and.level)then
-                         poslower=posmax(icount)
-                         bottom_=w(poslower)
-                         exit maxloop
-                      endif
-                   endif
-                enddo maxloop
-                !
-             endif
-          endif
-       endif
+       write(LOGfile,'(1A12,A72,1A12)') "mu","non-interacting J basis densities","Ntot"
+       write(LOGfile,'(20F12.4)') mu,(dens_rot(io,io),io=1,Nso),sum(dens_rot)
+       write(LOGfile,'(20A12)')   " LS_0","jz_0","jz_0_sq"!,"Ek0"
+       write(LOGfile,'(20F12.4)') LS_0,jz_0,jz_0_sq!,Ek0,Ek0bis
        !
-       !5)first moment of A(w) in the case f_in = Gloc(w) and N=2,5
-       if(isetup==2 .and. type_freq=="wr" )then
-          call compute_spectral_moments_so(f_out,w,fact,norm)
-       endif
+       open(unit=106,file='nonint_dens_rot.dat',status='unknown',action='write',position='append')
+       write(106,'(20F18.12)')   mu,(dens_rot(io,io),io=1,Nso),LS_0,jz_0,jz_0_sq!,Ek0
+       close(106)
        !
-       !6)save the integral after rotation
-       if(master)then
-          if(isetup==1) then
-             open(unit=106,file='sum_'//type_freq//'_G0loc_rot.dat',status='unknown',action='write',position='rewind')
-          elseif(isetup==2) then
-             open(unit=106,file='sum_'//type_freq//'_Gloc_rot.dat' ,status='unknown',action='write',position='rewind')
-          elseif(isetup==3) then
-             open(unit=106,file='sum_'//type_freq//'_impS_rot.dat' ,status='unknown',action='write',position='rewind')
-          elseif(isetup==4) then
-             open(unit=106,file='sum_'//type_freq//'_impG_rot.dat' ,status='unknown',action='write',position='rewind')
-          endif
-          do ispin=1,Nspin
-             do jspin=1,Nspin
-                do iorb=1,Norb
-                   do jorb=1,Norb
-                      io = iorb + (ispin-1)*Norb
-                      jo = jorb + (jspin-1)*Norb
-                      write(106,"(I3,I3,A3,4I3,F18.12)")io,jo,"---",ispin,jspin,iorb,jorb,sum(abs(f_out(io,jo,:)))*norm
-                   enddo
-                enddo
-             enddo
-          enddo
-          close(106)
-          !
-          !7)save the rotated function
-          if(isetup==1) then
-             file_rotation="G0lc_rot_"
-          elseif(isetup==2) then
-             file_rotation="Gloc_rot_"
-          elseif(isetup==3) then
-             file_rotation="impS_rot_"
-          elseif(isetup==4) then
-             file_rotation="impG_rot_"
-          endif
-          Fso_out=zero
-          do i=1,Lfreq
-             Fso_out(:,:,:,:,i)=so2nn_reshape(f_out(:,:,i),Nspin,Norb)
-          enddo
-          if(type_freq=="wr") call dmft_print_gf_realaxis( Fso_out,file_rotation,iprint=3)
-          if(type_freq=="wm") call dmft_print_gf_matsubara(Fso_out,file_rotation,iprint=3)
-          !
-          !8)non interacting rho and observables in the case f_in = G0loc(w)
-          if(isetup==1.and.type_freq=="wr")then
-             dens_rot=0.d0
-             do io=1,Nspin*Norb
-                do i=1,Lreal
-                   dens_rot(io,io)=dens_rot(io,io)+fact*dimag(f_out(io,io,i))*norm
-                   if(abs(w(i))<dw) exit
-                enddo
-             enddo
-             !
-             rho_ab = matmul(theta_C,matmul(dens_rot,transpose(conjg(theta_C))))
-             LS_0=trace(matmul(rho_ab,atomic_SOC()))
-             jz_0=trace(matmul(rho_ab,atomic_j("z")))
-             jz_0_sq=trace(matmul(rho_ab,matmul(atomic_j("z"),atomic_j("z"))))
-             !
-             Ek0=zero
-             do ik=1,Nk*Nk*Nk
-                Ek0 = Ek0 + trace(matmul(rho_ab,Hk(:,:,ik)))/(Nk*Nk*Nk)
-             enddo
-             !
-             if(allocated(HkJ))deallocate(HkJ);allocate(HkJ(Nspin*Norb,Nspin*Norb,Nk*Nk*Nk));HkJ=zero
-             Ek0bis=zero
-             do ik=1,Nk*Nk*Nk
-                HkJ(:,:,ik)=matmul(transpose(conjg(theta_C)),matmul(Hk(:,:,ik),theta_C))-mu*eye(Nspin*Norb)
-                do io=1,Nspin*Norb
-                   if(real(HkJ(io,io,ik))>0.d0)cycle
-                   Ek0bis = Ek0bis + HkJ(io,io,ik)/(Nk*Nk*Nk)
-                enddo
-             enddo
-             !
-             write(LOGfile,'(1A12,A72,1A12)') "mu","non-interacting J basis densities","Ntot"
-             write(LOGfile,'(20F12.4)') mu,(dens_rot(io,io),io=1,Nso),sum(dens_rot)
-             write(LOGfile,'(20A12)')   " LS_0","jz_0","jz_0_sq","Ek0"
-             write(LOGfile,'(20F12.4)') LS_0,jz_0,jz_0_sq,Ek0,Ek0bis
-             !
-             open(unit=106,file='nonint_dens_rot.dat',status='unknown',action='write',position='append')
-             write(106,'(20F18.12)')   mu,(dens_rot(io,io),io=1,Nso),LS_0,jz_0,jz_0_sq,Ek0
-             close(106)
-             !
-             open(106,file="nonint_density_matrix.dat",action="write",position="append",status='unknown')
-             write(106,*)
-             write(106,"(A10,F22.12)")"# mu:",mu
-             write(106,*)
-             write(106,"(A10)")"# Re{rho_nonint}: [Norb*Norb]*Nspin"
-             do io=1,Nspin*Norb
-                write(106,"(90(F15.9,1X))") (real(rho_ab(io,jo)),jo=1,Nspin*Norb)
-             enddo
-             write(106,"(A10)")
-             write(106,"(A10)")"# Im{rho_nonint}: [Norb*Norb]*Nspin"
-             do io=1,Nspin*Norb
-                write(106,"(90(F15.9,1X))") (aimag(rho_ab(io,jo)),jo=1,Nspin*Norb)
-             enddo
-             write(106,"(A10)")
-             write(106,"(4A22)")"#mu","rho_tilda","trace{rho_tilda}","LS_nonint"
-             write(106,'(10F22.12)')  mu,(dens_rot(io,io),io=1,Nso),sum(dens_rot),LS_0
-             write(106,"(A10)")
-             close(106)
-             !
-          endif
-       endif
-!    endif
+       open(106,file='nonint_density_matrix.dat',action='write',position='append',status='unknown')
+       write(106,*)
+       write(106,"(A10,F22.12)")"# mu:",mu
+       write(106,*)
+       write(106,"(A10)")"# Re{rho_nonint}: [Norb*Norb]*Nspin"
+       do io=1,Nspin*Norb
+          write(106,"(90(F15.9,1X))")  (real(rho_ab(io,jo)),jo=1,Nspin*Norb)
+       enddo
+       write(106,"(A10)")
+         write(106,"(A10)")"# Im{rho_nonint}: [Norb*Norb]*Nspin"
+       do io=1,Nspin*Norb
+          write(106,"(90(F15.9,1X))") (aimag(rho_ab(io,jo)),jo=1,Nspin*Norb)
+       enddo
+       write(106,"(A10)")
+       write(106,"(4A22)")"#mu","rho_tilda","trace{rho_tilda}","LS_nonint"
+       write(106,'(10F22.12)')  mu,(dens_rot(io,io),io=1,Nso),sum(dens_rot),LS_0
+       write(106,"(A10)")
+       close(106)
+       !
+    endif
     !
   end subroutine Jz_rotate
 
