@@ -61,45 +61,52 @@ program lancED
      iloop=iloop+1
      call start_loop(iloop,nloop,"DMFT-loop")
      !
-     !Solve the EFFECTIVE IMPURITY PROBLEM (first w/ a guess for the bath)
-     call ed_solve(bath) 
+     ! Solve the EFFECTIVE IMPURITY PROBLEM
+     call ed_solve(bath)
+
+     ! Retrieve the Self-energy from ED
      call ed_get_sigma_matsubara(Smats)
      call ed_get_sigma_real(Sreal)
-     !
-     ! compute the local gf:
-     call dmft_gloc_matsubara(one*He,Wte,Gmats,Smats,iprint=1)
-     !
+
+     
+     ! compute the local gf & print it
+     call dmft_gloc_matsubara(one*He,Wte,Gmats,Smats)
+     call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=1)
+
+     
      !Get the Weiss field/Delta function to be fitted
      if(cg_scheme=='weiss')then
-        call dmft_weiss(Gmats,Smats,Weiss,Hloc,iprint=1)
+        call dmft_weiss(Gmats,Smats,Weiss,Hloc)
      else
-        call dmft_delta(Gmats,Smats,Weiss,Hloc,iprint=1)
+        call dmft_delta(Gmats,Smats,Weiss,Hloc)
      endif
-     !
-     !
-     !Perform the SELF-CONSISTENCY by fitting the new bath
+     
+     
+     ! Fit Weiss/Delta to get new bath
      call ed_chi2_fitgf(Weiss,bath,ispin=1)
-     !
-     !MIXING:
+     
+     ! mixing:
      if(iloop>1)Bath = wmixing*Bath + (1.d0-wmixing)*Bath_
      Bath_=Bath
 
-     !Check convergence (if required change chemical potential)
+     ! Check  convergence
      converged = check_convergence(Weiss(1,1,1,1,:),dmft_error,nsuccess,nloop,reset=.false.)
-     !
+     
      call end_loop
   enddo
 
 
-  call dmft_gloc_realaxis(one*He,Wte,Greal,Sreal,iprint=1)
+  call dmft_gloc_realaxis(one*He,Wte,Greal,Sreal)
+  call dmft_print_gf_realaxis(Greal,"Greal",iprint=1)
   call dmft_kinetic_energy(one*He,Wte,Smats)
 
-  ! allocate(Wte(Le),He(Le))
-  ! call bethe_lattice(Wte,He,Le,wband)
-  ! Eout = ed_kinetic_energy(one*He,Wte,Smats(1,1,1,1,:))
+
+end program lancED
 
 
-contains
+
+
+
 
 
   ! !+----------------------------------------+
@@ -111,10 +118,8 @@ contains
   !   real(8)                     :: wm(Lmats),wr(Lreal),tau(0:Lmats),C0,C1,n0
   !   real(8),dimension(0:Lmats)  :: sigt,gtau,Ttau
   !   real(8),dimension(3)  :: Scoeff
-
   !   wm = pi/beta*(2*arange(1,Lmats)-1)
   !   wr = linspace(wini,wfin,Lreal)
-
   !      do i=1,Lmats
   !         iw = xi*wm(i)
   !         zita    = iw + xmu - impSmats(1,1,1,1,i)
@@ -125,7 +130,6 @@ contains
   !            delta(i)= iw + xmu - impSmats(1,1,1,1,i) - one/gloc(i)
   !         endif
   !      enddo
-
   !      do i=1,Lreal
   !         iw=cmplx(wr(i),eps)
   !         zita     = iw + xmu - impSreal(1,1,1,1,i)
@@ -136,32 +140,24 @@ contains
   !         call splot("Delta_iw.ed",wm,delta)
   !         call splot("Gloc_realw.ed",wr,-dimag(grloc)/pi,dreal(grloc))
   !      endif
-
   !      ! tau(0:) = linspace(0.d0,beta,Lmats+1)
-
   !      ! C0=Uloc(1)*(ed_dens_up(1)-0.5d0)
   !      ! C1=Uloc(1)**2*ed_dens_up(1)*(1.d0-ed_dens_dw(1))
   !      ! Tiw=dcmplx(C0,-C1/wm)
   !      ! call splot("Tail_iw.ed",wm,Tiw)
-
   !      ! Ttau = -C1/2.d0
   !      ! Sigma = impSmats(1,1,1,1,:)  - Tiw
   !      ! call fftgf_iw2tau(Sigma,Sigt(0:),beta,notail=.true.)
   !      ! Sigt=Sigt + Ttau
   !      ! call splot("Sigma_tau.ed",tau,sigt)
-
   !      ! Sigt=Sigt !+ Ttau
   !      ! call fftgf_tau2iw(sigt(0:),sigma,beta)
   !      ! Sigma=Sigma !+ Tiw
   !      ! call splot("Sigma_iw.ed",wm,sigma)
-
-
   !      ! call fftgf_iw2tau(gloc,gtau(0:),beta)
   !      ! call splot("Gloc_tau.ed",tau(0:),gtau(0:))
-
   ! end subroutine get_delta_bethe
   ! !+----------------------------------------+
-
 
 
 
@@ -199,7 +195,6 @@ contains
   !   Hk  = one*linspace(-Wband,Wband,Lk,mesh=de)
   !   Wtk = dens_bethe(dreal(Hk(:)),wband)*de
   !   Sigma = impSmats(1,1,1,1,:) 
-
   !   Sigma_HF = dreal(Sigma(Lmats))
   !   !
   !   H0=0.d0
@@ -230,8 +225,6 @@ contains
   ! end function get_energy
   ! !>DEBUG
 
-
-end program lancED
 
 
 

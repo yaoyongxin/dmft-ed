@@ -14,15 +14,19 @@ ENDIF(NOT CMAKE_Fortran_COMPILER_SUPPORTS_F90)
 
 # Set some options the user may choose
 OPTION(USE_MPI "Set MPI pre-compilation flag" ON)
-OPTION(USE_MPI_FC "Use MPI fortran compiler" ON)
+# OPTION(USE_MPI_FC "Use MPI fortran compiler" ON)
 OPTION(VERBOSE "Build a verbose Makefile" OFF)
 
-# reSet compiler to MPI is required 
-IF(USE_MPI_FC)
+# reSet compiler to MPI is required
+IF(USE_MPI)
+  OPTION(USE_MPI_FC "Use MPI fortran compiler" ON)
   FIND_PACKAGE(MPI REQUIRED)
   SET(CMAKE_Fortran_COMPILER ${MPI_Fortran_COMPILER})
   MESSAGE(STATUS "Set Fortran compiler FC to ${CMAKE_Fortran_COMPILER}")
-ENDIF(USE_MPI_FC)
+ELSE(USE_MPI)
+  OPTION(USE_MPI_FC "Use MPI fortran compiler" OFF)  
+ENDIF(USE_MPI)
+
 
 # Set verbosity of the Makefile according to option
 IF(VERBOSE)
