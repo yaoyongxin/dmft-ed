@@ -2,6 +2,7 @@ program ed_SOC_ineq
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
+  USE MPI
   implicit none
   !
   !#########   VARIABLEs DECLARATION   #########
@@ -74,7 +75,15 @@ program ed_SOC_ineq
   !
   !#########   MPI INITIALIZATION   #########
   !
+#ifdef _MPI
+  call init_MPI()
+  comm = MPI_COMM_WORLD
+  call StartMsg_MPI(comm)
+  !rank = get_Rank_MPI(comm)
+  master = get_Master_MPI(comm)
+#else
   master=.true.
+#endif
   !
   !#########    VARIABLE PARSING    #########
   !
@@ -92,7 +101,11 @@ program ed_SOC_ineq
   call parse_input_variable(rotateG0loc,    "ROTATEG0loc",finput,  default=.false.)
   call parse_input_variable(nonint_mu_shift,"NONINTMUSHIFT",finput,default=.false.)
   !
+#ifdef _MPI
+  call ed_read_input(trim(finput),comm)
+#else
   call ed_read_input(trim(finput))
+#endif
   !
   Nso=Nspin*Norb
   !
@@ -116,7 +129,7 @@ program ed_SOC_ineq
   allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));            Sreal=zero
   allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));            Greal=zero
   allocate(Weiss(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Weiss=zero
-  allocate(delta(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            delta=zero
+  allocate(Delta(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Delta=zero
   !
   allocate(weiss_old(Nlat,Nspin,Nspin,Norb,Norb,Lmats));        weiss_old=zero
   allocate(delta_old(Nlat,Nspin,Nspin,Norb,Norb,Lmats));        delta_old=zero
@@ -148,8 +161,12 @@ program ed_SOC_ineq
   !
   !#########        BUILD Hk        #########
   !
-  call build_hk(trim(hkfile),trim(hlocfile))                             !;stop
-  !stop
+  call build_hk()                             !;stop
+  if(surface)then
+      allocate(Wtk(Nk*Nk));Wtk=1.d0/(Nk*Nk)
+  else
+      allocate(Wtk(Nk*Nk*Nk));Wtk=1.d0/(Nk*Nk*Nk)
+  endif
   if(nonint_mu_shift)stop
   !
   !#########          BATH          #########
@@ -165,7 +182,11 @@ program ed_SOC_ineq
   !
   !#########      INIT SOLVER       #########
   !
+#ifdef _MPI
+  call ed_init_solver(Comm,Bath,d_t2g_Hloc_nnn)
+#else
   call ed_init_solver(Bath,d_t2g_Hloc_nnn)
+#endif
   !
   !#########          DMFT          #########
   !
@@ -175,47 +196,74 @@ program ed_SOC_ineq
      if(master)call start_loop(iloop,nloop,"DMFT-loop")
      !
      !solve impurity
+#ifdef _MPI
+     call ed_solve(comm,Bath,d_t2g_Hloc_nnn)
+#else
      call ed_solve(Bath,d_t2g_Hloc_nnn)
+#endif
      !
      !get sigmas
-     call ed_get_sigma_matsubara(Smats)
-     call ed_get_sigma_real(Sreal)
+     call ed_get_sigma_matsubara(Smats,Nlat)
+     call ed_get_sigma_real(Sreal,Nlat)
      !
      !get local Gf's
-     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats);                    call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=3)
-     call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal) ;                    call dmft_print_gf_realaxis(Greal,"Gloc",iprint=3)
+#ifdef _MPI
+     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats);              call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=6)
+     call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal);               call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
+#else
+     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats);                   call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=6)
+     call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal) ;                   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
+#endif
      !
      !operations on Weiss/Delta
      if(cg_scheme=='weiss')then
         !get Weiss
-        call dmft_weiss(Gmats,Smats,Weiss,d_t2g_Hloc_nnn) ;           call dmft_print_gf_matsubara(Gmats,"WeissG0",iprint=3)
+        call dmft_weiss(Gmats,Smats,Weiss,d_t2g_Hloc_nnn) ;          call dmft_print_gf_matsubara(Weiss,"WeissG0",iprint=6)
         !mix Weiss
         if(iloop>1)Weiss = wmixing*Weiss + (1.d0-wmixing)*Weiss_old
         !old Weiss
         Weiss_old=Weiss
         !fit Weiss
-        if (ed_mode=="normal") then
-           call ed_chi2_fitgf(bath,Weiss,d_t2g_Hloc_nnn,ispin=1)
-           call spin_symmetrize_bath(bath,save=.true.)
-           !call  orb_symmetrize_bath(bath,save=.true.)
-        else
-           call ed_chi2_fitgf(bath,Weiss,d_t2g_Hloc_nnn)
-        endif
+        do ilat=1,Nlat
+           if (ed_mode=="normal") then
+#ifdef _MPI
+              call ed_chi2_fitgf(Comm,Weiss(ilat,:,:,:,:,:),bath(ilat,:),ispin=1)
+#else
+              call ed_chi2_fitgf(Weiss(ilat,:,:,:,:,:),bath(ilat,:),ispin=1)
+#endif
+              call spin_symmetrize_bath(bath(ilat,:),save=.true.)
+           else
+#ifdef _MPI
+              call ed_chi2_fitgf(Comm,Weiss(ilat,:,:,:,:,:),bath(ilat,:))
+#else
+              call ed_chi2_fitgf(Weiss(ilat,:,:,:,:,:),bath(ilat,:))
+#endif
+           endif
+        enddo
      else
         !get Delta
-        call dmft_delta(Gmats,Smats,Delta,d_t2g_Hloc_nnn);            call dmft_print_gf_matsubara(Gmats,"Delta",iprint=3)
+        call dmft_delta(Gmats,Smats,Delta,d_t2g_Hloc_nnn);           call dmft_print_gf_matsubara(Delta,"Delta",iprint=6)
         !mix Delta
         if(iloop>1)Delta = wmixing*Delta + (1.d0-wmixing)*Delta_old
         !old Delta
         Delta_old=Delta
         !fit Delta
-        if (ed_mode=="normal") then
-           call ed_chi2_fitgf(bath,Delta,d_t2g_Hloc_nnn,ispin=1)
-           call spin_symmetrize_bath(bath,save=.true.)
-           !call  orb_symmetrize_bath(bath,save=.true.)
-        else
-           call ed_chi2_fitgf(bath,Delta,d_t2g_Hloc_nnn)
-        endif
+        do ilat=1,Nlat
+           if (ed_mode=="normal") then
+#ifdef _MPI
+              call ed_chi2_fitgf(Comm,Delta(ilat,:,:,:,:,:),bath(ilat,:),ispin=1)
+#else
+              call ed_chi2_fitgf(Delta(ilat,:,:,:,:,:),bath(ilat,:),ispin=1)
+#endif
+              call spin_symmetrize_bath(bath(ilat,:),save=.true.)
+           else
+#ifdef _MPI
+              call ed_chi2_fitgf(Comm,Delta(ilat,:,:,:,:,:),bath(ilat,:))
+#else
+              call ed_chi2_fitgf(Delta(ilat,:,:,:,:,:),bath(ilat,:))
+#endif
+           endif
+        enddo
      endif
      !
      !each loop operations
@@ -252,7 +300,7 @@ program ed_SOC_ineq
            call Jz_rotate(Greal,"Gloc","wr",bottom,top,Alvl)
            !
         elseif(bath_type=="normal")then
-           call compute_spectral_moments_nn(Greal,w,-1.d0/pi,dw)
+           call compute_spectral_moments_nnn(Greal,w,-1.d0/pi,dw)
         endif
         write(LOGfile,*) "   ----------------------------------------------------"
         write(LOGfile,*)
@@ -330,6 +378,13 @@ program ed_SOC_ineq
 !        endif
      endif
      !
+#ifdef _MPI
+     call Bcast_MPI(Comm,top)
+     call Bcast_MPI(Comm,bottom)
+     call Bcast_MPI(Comm,xmu)
+     call Bcast_MPI(Comm,converged)
+     call MPI_Barrier(Comm,ier)
+#endif
      !
      if(master)call end_loop
      !
@@ -340,26 +395,28 @@ program ed_SOC_ineq
   !call build_eigenbands()
   !
   !
+#ifdef _MPI
+  call finalize_MPI()
+#endif
+  !
+  !
 contains
-
 
 
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: build the Non interacting Hamiltonian with SOC and IVSB
   !+------------------------------------------------------------------------------------------+!
-  subroutine build_hk(file1,file2)
+  subroutine build_hk()
     implicit none
-    character(len=*),optional                    :: file1
-    character(len=*),optional                    :: file2
+    character(len=10)                            :: file1
+    character(len=12)                            :: file2
     real(8),dimension(3)                         :: bk_x,bk_y,bk_z
     integer                                      :: ik,Lk
-    !integer                                      :: i_mu,max_mu=500
-    !real(8)                                      :: mu_edge=0.5
     integer                                      :: i_mu,max_mu=100
     real(8)                                      :: mu_edge=2.0d0
-    complex(8),dimension(Nso,Nso,Lmats)          :: Gmats
-    complex(8),dimension(Nso,Nso,Lreal)          :: Greal
-    complex(8),allocatable                       :: Gso(:,:,:,:,:)
+    complex(8),dimension(Nlat*Nso,Nlat*Nso,Lmats):: Gmats
+    complex(8),dimension(Nlat*Nso,Nlat*Nso,Lreal):: Greal
+    complex(8),allocatable                       :: Gso(:,:,:,:,:,:)
     real(8)                                      :: wm(Lmats),wr(Lreal),dw,mu
     !
     if(master)then
@@ -388,89 +445,64 @@ contains
     endif
     !
     do ilat=1,Nlat
-       file1=file1//'_l'//str(ilat)
-       file2=file2//'_l'//str(ilat)
+       write(LOGfile,*) "  lattice index:",ilat
+       file1='inputHk_l'//str(ilat)
+       file2='inputHloc_l'//str(ilat)
        if(surface) then
           Sigma_correction=zero
-          call TB_build_model(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),hk_Ti3dt2g,Nso,[Nk,Nk])
-          if(master.AND.present(file1)) call TB_write_hk(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),file1,Nso,Norb,1,1,[Nk,Nk])
+          call TB_build_model(Hk(1+(ilat-1)*Nso:ilat*Nso,1+(ilat-1)*Nso:ilat*Nso,:),hk_Ti3dt2g,Nso,[Nk,Nk])
+          if(master) call TB_write_hk(Hk(1+(ilat-1)*Nso:ilat*Nso,1+(ilat-1)*Nso:ilat*Nso,:),file1,Nso,Norb,1,1,[Nk,Nk])
        else
           Sigma_correction=zero
-          call TB_build_model(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),hk_Ti3dt2g,Nso,[Nk,Nk,Nk])
-          if(master.AND.present(file1)) call TB_write_hk(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),file1,Nso,Norb,1,1,[Nk,Nk,Nk])
+          call TB_build_model(Hk(1+(ilat-1)*Nso:ilat*Nso,1+(ilat-1)*Nso:ilat*Nso,:),hk_Ti3dt2g,Nso,[Nk,Nk,Nk])
+          if(master) call TB_write_hk(Hk(1+(ilat-1)*Nso:ilat*Nso,1+(ilat-1)*Nso:ilat*Nso,:),file1,Nso,Norb,1,1,[Nk,Nk,Nk])
        endif
-       d_t2g_Hloc_nso(ilat,:,:) = sum(Hk(1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,1+(ilat-1)*Nlat:Nso+(ilat-1)*Nlat,:),dim=3)/Lk
+       d_t2g_Hloc_nso(ilat,:,:) = sum(Hk(1+(ilat-1)*Nso:ilat*Nso,1+(ilat-1)*Nso:ilat*Nso,:),dim=3)/Lk
        where(abs((d_t2g_Hloc_nso(ilat,:,:)))<1.d-9)d_t2g_Hloc_nso(ilat,:,:)=0d0
        d_t2g_Hloc_nnn(ilat,:,:,:,:)=so2nn_reshape(d_t2g_Hloc_nso(ilat,:,:),Nspin,Norb)
        call TB_write_hloc(d_t2g_Hloc_nso(ilat,:,:),file2)
     enddo
     !
     !
-!    !-----  Build the local GF in the spin-orbital Basis   -----
-!    !
-!    !matsu freq
-!    wm = pi/beta*real(2*arange(1,Lmats)-1,8)
-!    Gmats=zero
-!    do ik=1,Lk
-!       do i=1,Lmats
-!          Gmats(:,:,i)=Gmats(:,:,i) + inverse_g0k( xi*wm(i) , Hk(:,:,ik) )/Lk
-!       enddo
-!    enddo
-!    !
-!    if(rotateG0loc) then
-!       !
-!       allocate(Gso(Nspin,Nspin,Norb,Norb,Lmats));Gso=zero
-!       do i=1,Lmats
-!          Gso(:,:,:,:,i)=so2nn_reshape(Gmats(:,:,i),Nspin,Norb)
-!       enddo
-!       !
-!       if(master) call dmft_print_gf_matsubara(Gso,"G0loc",iprint=3)
-!       call Jz_rotate(Gso,"G0lc","A","wm")
-!       deallocate(Gso)
-!       !
-!    endif
-!    !
-!    !real freq
-!    if(.not.nonint_mu_shift)then
-!      max_mu=1
-!      mu_edge=0.d0
-!    endif
-!    wr = linspace(wini,wfin,Lreal,mesh=dw)
-!    !
-!    do i_mu=1,max_mu
-!       if(nonint_mu_shift)then
-!          !mu=-mu_edge+(2*abs(mu_edge)/max_mu)*float(i_mu)
-!          mu=0.25d0+(2*abs(mu_edge)/max_mu)*float(i_mu)
-!       else
-!          if(SOC==0.3d0)then
-!             mu=0.3585 !(L=0.3)
-!          elseif(SOC==0.1d0)then
-!             mu=0.2819 !(L=0.1)
-!          else
-!             mu=xmu
-!          endif
-!       endif
-!       Greal=zero
-!       do ik=1,Lk
-!          do i=1,Lreal
-!             Greal(:,:,i)=Greal(:,:,i) + inverse_g0k(dcmplx(wr(i),eps),Hk(:,:,ik),mu)/Lk
-!          enddo
-!       enddo
-!       !
-!       if(rotateG0loc) then
-!          !
-!          allocate(Gso(Nspin,Nspin,Norb,Norb,Lreal));Gso=zero
-!          do i=1,Lreal
-!             Gso(:,:,:,:,i)=so2nn_reshape(Greal(:,:,i),Nspin,Norb)
-!          enddo
-!          !
-!          if(master) call dmft_print_gf_realaxis(Gso,"G0loc",iprint=3)
-!          call Jz_rotate(Gso,"G0lc","A","wr")
-!          deallocate(Gso)
-!          !
-!       endif
-!       !
-!    enddo
+    !
+    !-----  Build the local GF in the spin-orbital Basis   -----
+    mu=0.29d0
+    !
+    !matsu freq
+    wm = pi/beta*real(2*arange(1,Lmats)-1,8)
+    Gmats=zero
+    do ik=1,Lk
+       do i=1,Lmats
+          Gmats(:,:,i)=Gmats(:,:,i) + inverse_g0k(xi*wm(i),Hk(:,:,ik),Nlat,mu)/Lk
+       enddo
+    enddo
+    !
+    allocate(Gso(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Gso=zero
+    do i=1,Lmats
+       Gso(:,:,:,:,:,i)=lso2nnn_reshape(Gmats(:,:,i),Nlat,Nspin,Norb)
+    enddo
+    !
+    if(master)      call dmft_print_gf_matsubara(Gso,"G0loc",iprint=6)
+    if(rotateG0loc) call Jz_rotate(Gso,"G0lc","wm")
+    deallocate(Gso)
+    !
+    !real freq
+    wr = linspace(wini,wfin,Lreal,mesh=dw)
+    Greal=zero
+    do ik=1,Lk
+       do i=1,Lreal
+          Greal(:,:,i)=Greal(:,:,i) + inverse_g0k(dcmplx(wr(i),eps),Hk(:,:,ik),Nlat,mu)/Lk
+       enddo
+    enddo
+    !
+    allocate(Gso(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Gso=zero
+    do i=1,Lreal
+       Gso(:,:,:,:,:,i)=lso2nnn_reshape(Greal(:,:,i),Nlat,Nspin,Norb)
+    enddo
+    !
+    if(master)      call dmft_print_gf_realaxis(Gso,"G0loc",iprint=6)
+    if(rotateG0loc) call Jz_rotate(Gso,"G0lc","wr")
+    deallocate(Gso)
     !
   end subroutine build_hk
 
@@ -914,7 +946,7 @@ contains
     header="#    {1/2,-1/2}     {1/2,+1/2}     {3/2,-3/2}     {3/2,+3/2}     {3/2,-1/2}     {3/2,+1/2}"
     !
     !function allocation
-    Lfreq=size(Fso,dim=5)
+    Lfreq=size(Fso,dim=6)
     if(allocated( f_in))  deallocate( f_in);  allocate(   f_in(Nlat,Nspin*Norb,Nspin*Norb,Lfreq));f_in=zero
     if(allocated(f_out))  deallocate(f_out);  allocate(  f_out(Nlat,Nspin*Norb,Nspin*Norb,Lfreq));f_out=zero
     if(allocated(Fso_out))deallocate(Fso_out);allocate(Fso_out(Nlat,Nspin,Nspin,Norb,Norb,Lfreq));Fso_out=zero
@@ -1003,7 +1035,7 @@ contains
        write(LOGfile,*) "  lattice index:",ilat
        !
        !1)rotation
-       f_out=zero
+       f_out(ilat,:,:,:)=zero
        do i=1,Lfreq
           f_out(ilat,:,:,i)=matmul(transpose(conjg(theta_C)),matmul(f_in(ilat,:,:,i),theta_C))
        enddo
@@ -1105,13 +1137,13 @@ contains
     !
     !7)save the rotated function
     if(isetup==1) then
-       file_rotation="G0lc_rot_"
+       file_rotation="G0lc_rot"
     elseif(isetup==2) then
-       file_rotation="Gloc_rot_"
+       file_rotation="Gloc_rot"
     elseif(isetup==3) then
-       file_rotation="impS_rot_"
+       file_rotation="impS_rot"
     elseif(isetup==4) then
-       file_rotation="impG_rot_"
+       file_rotation="impG_rot"
     endif
     Fso_out=zero
     do ilat=1,Nlat
@@ -1119,8 +1151,8 @@ contains
           Fso_out(ilat,:,:,:,:,i)=so2nn_reshape(f_out(ilat,:,:,i),Nspin,Norb)
        enddo
     enddo
-    if(type_freq=="wr") call dmft_print_gf_realaxis( Fso_out,file_rotation,iprint=3)
-    if(type_freq=="wm") call dmft_print_gf_matsubara(Fso_out,file_rotation,iprint=3)
+    if(type_freq=="wr") call dmft_print_gf_realaxis( Fso_out,file_rotation,iprint=6)
+    if(type_freq=="wm") call dmft_print_gf_matsubara(Fso_out,file_rotation,iprint=6)
     !
     !8)non interacting rho and observables in the case f_in = G0loc(w)
     if(isetup==1.and.type_freq=="wr")then
@@ -1308,30 +1340,28 @@ contains
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: G0_loc functions
   !+------------------------------------------------------------------------------------------+!
-  function inverse_g0k(iw,hk,mu_) result(g0k)
+  function inverse_g0k(iw,hk,Nlat,mu_) result(g0k)
     implicit none
-    complex(8)                                    :: iw
-    complex(8),dimension(Nspin*Norb,Nspin*Norb)   :: hk
-    real(8),intent(in),optional                   :: mu_
-    !real(8)                                       :: mu
-    complex(8),dimension(Nspin*Norb,Nspin*Norb)   :: g0k,g0k_tmp
-    integer                                       :: i,ndx
-    integer (kind=4), dimension(6)                :: ipiv
-    integer (kind=1)                              :: ok
-    integer (kind=4), parameter                   :: lwork=2000
-    complex (kind=8), dimension(lwork)            :: work
-    real    (kind=8), dimension(lwork)            :: rwork
+    complex(8),intent(in)                                  :: iw
+    complex(8),dimension(Nlat*Nspin*Norb,Nlat*Nspin*Norb)  :: hk
+    real(8),intent(in),optional                            :: mu_
+    complex(8),dimension(Nlat*Nspin*Norb,Nlat*Nspin*Norb)  :: g0k,g0k_tmp
+    integer                                                :: i,ndx,Nlat
+    integer (kind=4), dimension(6)                         :: ipiv
+    integer (kind=1)                                       :: ok
+    integer (kind=4), parameter                            :: lwork=2000
+    complex (kind=8), dimension(lwork)                     :: work
+    real    (kind=8), dimension(lwork)                     :: rwork
     !
     mu=0.d0
     if(present(mu_))mu=mu_
-    !
     g0k=zero;g0k_tmp=zero
     !
-    g0k=(iw+mu)*eye(Nspin*Norb)-hk
+    g0k=(iw+mu)*eye(Nlat*Nspin*Norb)-hk
     g0k_tmp=g0k
     !
     call inv(g0k)
-    call inversion_test(g0k,g0k_tmp,1.e-9)
+    call inversion_test(g0k,g0k_tmp,1.e-5,Nlat)
   end function inverse_g0k
 
 
@@ -1342,11 +1372,13 @@ contains
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: Inversion test
   !+------------------------------------------------------------------------------------------+!
-  subroutine inversion_test(A,B,tol)
+  subroutine inversion_test(A,B,tol,Nlat)
     implicit none
-    complex (kind=8), intent(in)   ::   A(Nspin*Norb,Nspin*Norb)
-    complex (kind=8), intent(in)   ::   B(Nspin*Norb,Nspin*Norb)
+    integer (kind=4), intent(in)   ::   Nlat
+    complex (kind=8), intent(in)   ::   A(Nlat*Nspin*Norb,Nlat*Nspin*Norb)
+    complex (kind=8), intent(in)   ::   B(Nlat*Nspin*Norb,Nlat*Nspin*Norb)
     real    (kind=4), intent(in)   ::   tol
+    real    (kind=4)               ::   error
     integer (kind=2)               ::   dime
 
     if (size(A).ne.size(B)) then
@@ -1354,7 +1386,8 @@ contains
        stop
     endif
     dime=maxval(shape(A))
-    if (abs(float(dime)-real(sum(matmul(A,B)))).gt.tol) write(LOGfile,'(A30)') "inversion test fail"
+    error=abs(float(dime)-real(sum(matmul(A,B))))
+    if (error.gt.tol) write(LOGfile,*) "inversion test fail",error
   end subroutine inversion_test
 
 

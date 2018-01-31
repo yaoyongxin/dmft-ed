@@ -148,7 +148,7 @@ program ed_SOC
   allocate(Ltot(3,Nspin,Nspin));                           Ltot=zero
   allocate(jz(3));                                         jz=zero
   !
-  allocate(d_t2g_Hloc_so(Nspin*Norb,Nspin*Norb));             d_t2g_Hloc_so=zero
+  allocate(d_t2g_Hloc_so(Nspin*Norb,Nspin*Norb));          d_t2g_Hloc_so=zero
   allocate(d_t2g_Hloc_nn(Nspin,Nspin,Norb,Norb));          d_t2g_Hloc_nn=zero
   !
   allocate(w(Lreal));                                      w=0.0d0
@@ -223,8 +223,8 @@ program ed_SOC
      !
      !get local Gf's
 #ifdef _MPI
-     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats);                   call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=3)
-     call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal);                   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=3)
+     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats);              call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=3)
+     call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal);               call dmft_print_gf_realaxis(Greal,"Gloc",iprint=3)
 #else
      call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats);                   call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=3)
      call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal) ;                   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=3)
@@ -233,7 +233,7 @@ program ed_SOC
      !operations on Weiss/Delta
      if(cg_scheme=='weiss')then
         !get Weiss
-        call dmft_weiss(Gmats,Smats,Weiss,d_t2g_Hloc_nn) ;           call dmft_print_gf_matsubara(Gmats,"WeissG0",iprint=3)
+        call dmft_weiss(Gmats,Smats,Weiss,d_t2g_Hloc_nn) ;           call dmft_print_gf_matsubara(Weiss,"WeissG0",iprint=3)
         !mix Weiss
         if(iloop>1)Weiss = wmixing*Weiss + (1.d0-wmixing)*Weiss_old
         !old Weiss
@@ -1147,13 +1147,13 @@ contains
     !
     !7)save the rotated function
     if(isetup==1) then
-       file_rotation="G0lc_rot_"
+       file_rotation="G0lc_rot"
      elseif(isetup==2) then
-       file_rotation="Gloc_rot_"
+       file_rotation="Gloc_rot"
     elseif(isetup==3) then
-       file_rotation="impS_rot_"
+       file_rotation="impS_rot"
     elseif(isetup==4) then
-       file_rotation="impG_rot_"
+       file_rotation="impG_rot"
     endif
     Fso_out=zero
     do i=1,Lfreq
