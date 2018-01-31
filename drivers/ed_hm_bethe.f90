@@ -96,7 +96,8 @@ program lancED
   enddo
 
 
-  call dmft_gloc_realaxis(one*He,Wte,Greal,Sreal,iprint=1)
+  call dmft_gloc_realaxis(one*He,Wte,Greal,Sreal)
+  call dmft_print_gf_realaxis(Greal,"Greal",iprint=1)
   call dmft_kinetic_energy(one*He,Wte,Smats)
 
 
