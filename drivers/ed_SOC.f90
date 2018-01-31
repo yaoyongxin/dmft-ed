@@ -2,6 +2,7 @@ program ed_SOC
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
+  USE MPI
   implicit none
   !
   !#########   VARIABLEs DECLARATION   #########
@@ -25,6 +26,7 @@ program ed_SOC
   complex(8),allocatable,dimension(:,:,:,:,:)    :: Smats
   complex(8),allocatable,dimension(:,:,:,:,:)    :: Gmats
   complex(8),allocatable,dimension(:,:,:,:,:)    :: Sreal
+  complex(8),allocatable,dimension(:)            :: Saux_wr,Saux_wm
   complex(8),allocatable,dimension(:,:,:,:,:)    :: Greal
   !Weiss&Hybridization functions
   complex(8),allocatable,dimension(:,:,:,:,:)    :: Weiss
@@ -75,7 +77,15 @@ program ed_SOC
   !
   !#########   MPI INITIALIZATION   #########
   !
+#ifdef _MPI
+  call init_MPI()
+  comm = MPI_COMM_WORLD
+  call StartMsg_MPI(comm)
+  !rank = get_Rank_MPI(comm)
+  master = get_Master_MPI(comm)
+#else
   master=.true.
+#endif
   !
   !#########    VARIABLE PARSING    #########
   !
@@ -92,7 +102,11 @@ program ed_SOC
   call parse_input_variable(rotateG0loc,    "ROTATEG0loc",finput,  default=.false.)
   call parse_input_variable(nonint_mu_shift,"NONINTMUSHIFT",finput,default=.false.)
   !
+#ifdef _MPI
+  call ed_read_input(trim(finput),comm)
+#else
   call ed_read_input(trim(finput))
+#endif
   !
   Nso=Nspin*Norb
   !
@@ -116,6 +130,8 @@ program ed_SOC
   allocate(Greal(Nspin,Nspin,Norb,Norb,Lreal));            Greal=zero
   allocate(Weiss(Nspin,Nspin,Norb,Norb,Lmats));            Weiss=zero
   allocate(delta(Nspin,Nspin,Norb,Norb,Lmats));            delta=zero
+  allocate(Saux_wm(Lmats)); Saux_wm=zero
+  allocate(Saux_wr(Lreal)); Saux_wr=zero
   !
   allocate(weiss_old(Nspin,Nspin,Norb,Norb,Lmats));        weiss_old=zero
   allocate(delta_old(Nspin,Nspin,Norb,Norb,Lmats));        delta_old=zero
@@ -165,7 +181,11 @@ program ed_SOC
   !
   !#########      INIT SOLVER       #########
   !
+#ifdef _MPI
+  call ed_init_solver(Comm,Bath,d_t2g_Hloc_nn)
+#else
   call ed_init_solver(Bath,d_t2g_Hloc_nn)
+#endif
   !
   !#########          DMFT          #########
   !
@@ -175,15 +195,40 @@ program ed_SOC
      if(master)call start_loop(iloop,nloop,"DMFT-loop")
      !
      !solve impurity
+#ifdef _MPI
+     call ed_solve(comm,Bath)
+#else
      call ed_solve(Bath)
+#endif
      !
      !get sigmas
      call ed_get_sigma_matsubara(Smats)
      call ed_get_sigma_real(Sreal)
+     if(ed_mode=="normal".and.SOC==0.0d0)then
+        Saux_wm=zero
+        Saux_wr=zero
+        do ispin=1,Nspin
+           do iorb=1,Norb
+              Saux_wm=Saux_wm+Smats(ispin,ispin,iorb,iorb,:)/6.d0
+              Saux_wr=Saux_wm+Sreal(ispin,ispin,iorb,iorb,:)/6.d0
+           enddo
+        enddo
+        do ispin=1,Nspin
+           do iorb=1,Norb
+              Smats(ispin,ispin,iorb,iorb,:)=Saux_wm
+              Sreal(ispin,ispin,iorb,iorb,:)=Saux_wr
+           enddo
+        enddo
+     endif
      !
      !get local Gf's
+#ifdef _MPI
+     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats);                   call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=3)
+     call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal);                   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=3)
+#else
      call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats);                   call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=3)
      call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal) ;                   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=3)
+#endif
      !
      !operations on Weiss/Delta
      if(cg_scheme=='weiss')then
@@ -195,26 +240,42 @@ program ed_SOC
         Weiss_old=Weiss
         !fit Weiss
         if (ed_mode=="normal") then
+#ifdef _MPI
+           call ed_chi2_fitgf(Comm,Weiss,bath,ispin=1)
+#else
            call ed_chi2_fitgf(Weiss,bath,ispin=1)
+#endif
            call spin_symmetrize_bath(bath,save=.true.)
-           call  orb_symmetrize_bath(bath,save=.true.)
+           !if(SOC==0.0d0)call  orb_symmetrize_bath(bath,save=.true.)
         else
+#ifdef _MPI
+           call ed_chi2_fitgf(Comm,Weiss,bath)
+#else
            call ed_chi2_fitgf(Weiss,bath)
+#endif
         endif
      else
         !get Delta
-        call dmft_delta(Gmats,Smats,Delta,d_t2g_Hloc_nn);            call dmft_print_gf_matsubara(Gmats,"Delta",iprint=3)
+        call dmft_delta(Gmats,Smats,Delta,d_t2g_Hloc_nn);            call dmft_print_gf_matsubara(Delta,"Delta",iprint=3)
         !mix Delta
         if(iloop>1)Delta = wmixing*Delta + (1.d0-wmixing)*Delta_old
         !old Delta
         Delta_old=Delta
         !fit Delta
         if (ed_mode=="normal") then
+#ifdef _MPI
+           call ed_chi2_fitgf(Comm,Delta,bath,ispin=1)
+#else
            call ed_chi2_fitgf(Delta,bath,ispin=1)
+#endif
            call spin_symmetrize_bath(bath,save=.true.)
-           call  orb_symmetrize_bath(bath,save=.true.)
+           !if(SOC==0.0d0)call  orb_symmetrize_bath(bath,save=.true.)
         else
+#ifdef _MPI
+           call ed_chi2_fitgf(Comm,Delta,bath)
+#else
            call ed_chi2_fitgf(Delta,bath)
+#endif
         endif
      endif
      !
@@ -330,6 +391,13 @@ program ed_SOC
         endif
      endif
      !
+#ifdef _MPI
+     call Bcast_MPI(Comm,top)
+     call Bcast_MPI(Comm,bottom)
+     call Bcast_MPI(Comm,xmu)
+     call Bcast_MPI(Comm,converged)
+     call MPI_Barrier(Comm,ier)
+#endif
      !
      if(master)call end_loop
      !
@@ -338,6 +406,11 @@ program ed_SOC
   !#########    BUILD Hk ON PATH    #########
   !
   call build_eigenbands()
+  !
+  !
+#ifdef _MPI
+  call finalize_MPI()
+#endif
   !
   !
 contains
@@ -409,18 +482,14 @@ contains
        enddo
     enddo
     !
-    if(rotateG0loc) then
-       !
-       allocate(Gso(Nspin,Nspin,Norb,Norb,Lmats));Gso=zero
-       do i=1,Lmats
-          Gso(:,:,:,:,i)=so2nn_reshape(Gmats(:,:,i),Nspin,Norb)
-       enddo
-       !
-       if(master) call dmft_print_gf_matsubara(Gso,"G0loc",iprint=3)
-       call Jz_rotate(Gso,"G0lc","wm")
-       deallocate(Gso)
-       !
-    endif
+    allocate(Gso(Nspin,Nspin,Norb,Norb,Lmats));Gso=zero
+    do i=1,Lmats
+       Gso(:,:,:,:,i)=so2nn_reshape(Gmats(:,:,i),Nspin,Norb)
+    enddo
+    !
+    if(master)      call dmft_print_gf_matsubara(Gso,"G0loc",iprint=3)
+    if(rotateG0loc) call Jz_rotate(Gso,"G0lc","wm")
+    deallocate(Gso)
     !
     !real freq
     if(.not.nonint_mu_shift)then
@@ -449,18 +518,14 @@ contains
           enddo
        enddo
        !
-       if(rotateG0loc) then
-          !
-          allocate(Gso(Nspin,Nspin,Norb,Norb,Lreal));Gso=zero
-          do i=1,Lreal
-             Gso(:,:,:,:,i)=so2nn_reshape(Greal(:,:,i),Nspin,Norb)
-          enddo
-          !
-          if(master) call dmft_print_gf_realaxis(Gso,"G0loc",iprint=3)
-          call Jz_rotate(Gso,"G0lc","wr")
-          deallocate(Gso)
-          !
-       endif
+       allocate(Gso(Nspin,Nspin,Norb,Norb,Lreal));Gso=zero
+       do i=1,Lreal
+          Gso(:,:,:,:,i)=so2nn_reshape(Greal(:,:,i),Nspin,Norb)
+       enddo
+       !
+       if(master)      call dmft_print_gf_realaxis(Gso,"G0loc",iprint=3)
+       if(rotateG0loc) call Jz_rotate(Gso,"G0lc","wr")
+       deallocate(Gso)
        !
     enddo
     !

@@ -325,10 +325,10 @@ subroutine lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
      !
      if(getN(isector)/=Nlevels.and.jsector>=0)then
         if(Jz_basis)then
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
         else
-           if(ed_verbose==3)write(LOGfile,"(A15,I3)")' add particle:',getn(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(A15,I3)")' add particle:',getn(jsector)
         endif
         !
         jdim  = getdim(jsector)
@@ -379,10 +379,10 @@ subroutine lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
      !
      if(getN(isector)/=0.and.jsector>=0)then
         if(Jz_basis)then
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==2)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
         else
-           if(ed_verbose==3)write(LOGfile,"(A15,I3)")' del particle:',getn(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(A15,I3)")' del particle:',getn(jsector)
         endif
         !
         jdim  = getdim(jsector)
@@ -474,10 +474,10 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
      !
      if(getN(isector)/=Nlevels.and.jsector>=0)then
         if(Jz_basis)then
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
         else
-           if(ed_verbose==3)write(LOGfile,"(A15,I3)")' add particle:',getn(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(A15,I3)")' add particle:',getn(jsector)
         endif
         !
         jdim_old  = getdim(jsector)
@@ -500,8 +500,8 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
            !
            jsector = getCDGsector_Jz(jorb,jspin,isector)
            !
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
            jdim  = getdim(jsector)
            if(jdim/=jdim_old)stop "lanczos builgf dimensional error"
            deallocate(HJ%map)
@@ -550,10 +550,10 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
      !
      if(getN(isector)/=0.and.jsector>=0)then
         if(Jz_basis)then
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
         else
-           if(ed_verbose==3)write(LOGfile,"(A15,I3)")' del particle:',getn(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(A15,I3)")' del particle:',getn(jsector)
         endif
         !
         jdim_old  = getdim(jsector)
@@ -576,8 +576,8 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
            !
            jsector = getCsector_Jz(jorb,jspin,isector)
            !
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
            jdim  = getdim(jsector)
            if(jdim/=jdim_old)stop "lanczos builgf dimensional error"
            deallocate(HJ%map)
@@ -627,10 +627,10 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
      !
      if(getN(isector)/=Nlevels.and.jsector>=0)then
         if(Jz_basis)then
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
         else
-           if(ed_verbose==3)write(LOGfile,"(A15,I3)")' add particle:',getn(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(A15,I3)")' add particle:',getn(jsector)
         endif
         !
         jdim_old  = getdim(jsector)
@@ -653,8 +653,8 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
            !
            jsector = getCDGsector_Jz(jorb,jspin,isector)
            !
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  add Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
            jdim  = getdim(jsector)
            if(jdim/=jdim_old)stop "lanczos builgf dimensional error"
            deallocate(HJ%map)
@@ -703,10 +703,10 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
      !
      if(getN(isector)/=0.and.jsector>=0)then
         if(Jz_basis)then
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(iorb)+Szdiag(ispin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
         else
-           if(ed_verbose==3)write(LOGfile,"(A15,I3)")' del particle:',getn(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(A15,I3)")' del particle:',getn(jsector)
         endif
         !
         jdim_old  = getdim(jsector)
@@ -729,8 +729,8 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
            !
            jsector = getCsector_Jz(jorb,jspin,isector)
            !
-           if(ed_verbose==3)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
-           if(ed_verbose==3)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
+           if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(3(A,1F5.1,1X))")"  del Jz:",Lzdiag(jorb)+Szdiag(jspin)/2.,"  from:",gettwoJz(isector)/2.,"  to:",gettwoJz(jsector)/2.
+           !if(ed_verbose==3.and.MPI_MASTER)write(LOGfile,"(2(A,I5,1X))")   "  starting n:", getN(isector),"  arrival n:",getN(jsector)
            jdim  = getdim(jsector)
            if(jdim/=jdim_old)stop "lanczos builgf dimensional error"
            deallocate(HJ%map)
