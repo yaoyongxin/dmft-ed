@@ -119,6 +119,7 @@ program ed_SOC
   call add_ctrl_var(wini,'wini')
   call add_ctrl_var(wfin,'wfin')
   call add_ctrl_var(eps,"eps")
+  call add_ctrl_var(ed_para,"ED_PARA")
   call add_ctrl_var(Jz_basis,"JZ_BASIS")
   call add_ctrl_var(ed_file_suffix,"ed_file_suffix")
   !
@@ -723,15 +724,16 @@ contains
           kpath(2,:)=kpoint_X1
           kpath(3,:)=kpoint_Gamma
           kpath(4,:)=kpoint_X1
+          !
           Sigma_correction=zero
-          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Lk,colors_name=colors,&
-               points_name=[character(len=20) :: 'M', 'X', 'G', 'X'],&
-               file="Eigenband_surf.nint")
+          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Nkpath,colors_name=colors,points_name=[character(len=20) :: 'M', 'X', 'G', 'X'],file="Eigenband_surf.nint")
+          !call compute_Akw_along_BZpath(hk_Ti3dt2g,Nso,kpath,Nkpath,Sreal,points_name=[character(len=20) :: 'M', 'X', 'G', 'X'])
+          !
           Sigma_correction=Smats
-          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Lk,colors_name=colors,&
-               points_name=[character(len=20) :: 'M', 'X', 'G', 'X'],&
-               file="Eigenband_surf.sigma")
+          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Lk,colors_name=colors,points_name=[character(len=20) :: 'M', 'X', 'G', 'X'],file="Eigenband_surf.sigma")
+          !
           Sigma_correction=zero
+          !
        else
           write(LOGfile,*)"Build bulk H(k) along the path M-R-G-M-X-G-X"
           Npts = 7
@@ -744,15 +746,16 @@ contains
           kpath(5,:)=kpoint_X1
           kpath(6,:)=kpoint_Gamma
           kpath(7,:)=kpoint_X1
+          !
           Sigma_correction=zero
-          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Lk,colors_name=colors,&
-               points_name=[character(len=20) :: 'M', 'R', 'G', 'M', 'X', 'G', 'X'],&
-               file="Eigenband_bulk.nint")
+          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Nkpath,colors_name=colors,points_name=[character(len=20) :: 'M', 'R', 'G', 'M', 'X', 'G', 'X'],file="Eigenband_bulk.nint")
+          call compute_Akw_along_BZpath(hk_Ti3dt2g,kpath,Nkpath,Sreal)
+          !
           Sigma_correction=Smats
-          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Lk,colors_name=colors,&
-               points_name=[character(len=20) :: 'M', 'R', 'G', 'M', 'X', 'G', 'X'],&
-               file="Eigenband_bulk.sigma")
+          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Lk,colors_name=colors,points_name=[character(len=20) :: 'M', 'R', 'G', 'M', 'X', 'G', 'X'],file="Eigenband_bulk.sigma")
+          !
           Sigma_correction=zero
+          !
        endif
        !
        write(LOGfile,*)"Im done on the path"
@@ -760,6 +763,97 @@ contains
     endif
     !
   end subroutine build_eigenbands
+
+
+
+  !+------------------------------------------------------------------------------------------+!
+  !PURPOSE: Compute A(k,w) along path in the BZ.
+  !+------------------------------------------------------------------------------------------+!
+  subroutine compute_Akw_along_BZpath(hk_model,kpath,Nk,Self)
+    implicit none
+    interface 
+       function hk_model(kpoint,N)
+         real(8),dimension(:)                    :: kpoint
+         integer                                 :: N
+         complex(8),dimension(N,N)               :: hk_model
+       end function hk_model
+    end interface
+    real(8),dimension(:,:),intent(in)            :: kpath
+    integer               ,intent(in)            :: Nk
+    complex(8)            ,intent(in)            :: Self(Nspin,Nspin,Norb,Norb,Lreal)
+    !internal
+    character(len=3)                             :: file_
+    integer                                      :: Npts,Lfreq
+    real(8),dimension(size(kpath,2))             :: kstart,kstop,kpoint,kdiff
+    complex(8),dimension(Nspin*Norb,Nspin*Norb)  :: h,U,Udag
+    complex(8)                                   :: Self_basis(Nspin*Norb,Nspin*Norb,Lreal)
+    integer                                      :: ipts,ik,ic,unit,u1,u2,iorb,ifreq
+    real(8)                                      :: wr(Lreal),dw,mu
+    real(8),allocatable,dimension(:,:,:,:)       :: Akw,Akw_rot
+    !
+    file_="Akw"
+    Npts=size(kpath,1)
+    Lfreq=size(Self,dim=5)
+    if(allocated(Akw))    deallocate(Akw)    ;allocate(Akw(Nspin*Norb,Nspin*Norb,(Npts-1)*Nk,Lfreq))    ;Akw=zero
+    if(allocated(Akw_rot))deallocate(Akw_rot);allocate(Akw_rot(Nspin*Norb,Nspin*Norb,(Npts-1)*Nk,Lfreq));Akw_rot=zero
+    !
+    U=zero;Udag=zero
+    if(ed_para)then
+       if(Jz_basis)then
+          U=matmul(transpose(conjg(orbital_Lz_rotation_NorbNspin())),atomic_SOC_rotation())
+       else
+          U=atomic_SOC_rotation()
+       endif
+    else
+       U=eye(Nspin*Norb)
+    endif
+    Udag=transpose(conjg(U))
+    !
+    do ifreq=1,Lfreq
+       Self_basis(:,:,ifreq)=nn2so_reshape(Self(:,:,:,:,ifreq),Nspin,Norb)
+    enddo
+    !
+    wr = linspace(wini,wfin,Lfreq,mesh=dw)
+    ic = 0
+    do ipts=1,Npts-1
+       kstart = kpath(ipts,:)
+       kstop  = kpath(ipts+1,:)
+       kdiff  = (kstop-kstart)/dble(Nk)
+       do ik=1,Nk
+          ic=ic+1
+          kpoint = kstart + (ik-1)*kdiff
+          h = hk_model(kpoint,Nspin*Norb)
+          do ifreq=1,Lfreq
+             Akw(:,:,ic,ifreq) = -aimag(inverse_g0k(dcmplx(wr(ifreq),eps),h+Self_basis(:,:,ifreq),xmu))/pi
+             Akw_rot(:,:,ic,ifreq) = matmul(Udag,matmul(Akw(:,:,ic,ifreq),U))
+          enddo
+       enddo
+    enddo
+    open(unit=106,file='Akw.dat',status='unknown',action='write',position='rewind')
+    do ifreq=1,Lfreq
+       write(106,'(9000F18.12)')wr(ifreq),(trace(Akw(:,:,ic,ifreq)*2.)+5.*ic,ic=1,(Npts-1)*Nk)
+    enddo
+    close(106)
+    !test
+    open(unit=106,file='Akwbis.dat',status='unknown',action='write',position='rewind')
+    do ifreq=1,Lfreq
+       write(106,'(9000F18.12)')wr(ifreq),(trace(Akw_rot(:,:,ic,ifreq)*2.)+5.*ic,ic=1,(Npts-1)*Nk)
+    enddo
+    close(106)
+    !band 1
+    open(unit=106,file='Akw_b1.dat',status='unknown',action='write',position='rewind')
+    do ifreq=1,Lfreq
+       write(106,'(9000F18.12)')wr(ifreq),((Akw_rot(1,1,ic,ifreq)*12.)+5.*ic,ic=1,(Npts-1)*Nk)
+    enddo
+    close(106)
+    !band 2
+    open(unit=106,file='Akw_b2.dat',status='unknown',action='write',position='rewind')
+    do ifreq=1,Lfreq
+       write(106,'(9000F18.12)')wr(ifreq),((Akw_rot(3,3,ic,ifreq)*12.)+5.*ic,ic=1,(Npts-1)*Nk)
+    enddo
+    close(106)
+
+  end subroutine compute_Akw_along_BZpath
 
 
 
