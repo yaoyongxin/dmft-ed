@@ -81,7 +81,7 @@ contains
     !Init bath:
     call set_Hloc(Hloc)
     !
-    check = check_bath_dimension(bath)
+    check = check_bath_dimension(bath,Hloc)
     if(.not.check)stop "init_ed_solver_single error: wrong bath dimensions"
     !
     bath = 0d0
@@ -129,7 +129,7 @@ contains
     !Init bath:
     call set_hloc(Hloc)
     !
-    check = check_bath_dimension(bath)
+    check = check_bath_dimension(bath,Hloc)
     if(.not.check)stop "init_ed_solver_single error: wrong bath dimensions"
     !
     bath = 0d0
@@ -177,15 +177,19 @@ contains
     !
     !
     Nineq = size(bath,1)
-    Nsect = get_Nsectors() !< get # sectors to allocate the following array
-    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
-    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
     do ilat=1,Nineq             !all nodes check the bath, u never know...
        !
        ed_file_suffix=reg(ineq_site_suffix)//str(ilat,site_indx_padding)
        !
        call ed_init_solver_single(bath(ilat,:),Hloc(ilat,:,:,:,:))
        !
+    end do
+    !
+    Nsect = Nsectors !get_Nsectors() !< get # sectors to allocate the following array
+    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
+    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
+    !
+    do ilat=1,Nineq             !all nodes check the bath, u never know...
        neigen_sectorii(ilat,:) = neigen_sector(:)
        neigen_totalii(ilat)    = lanc_nstates_total
     end do
@@ -206,15 +210,20 @@ contains
     !
     !
     Nineq = size(bath,1)
-    Nsect = get_Nsectors() !< get # sectors to allocate the following array
-    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
-    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
     do ilat=1,Nineq             !all nodes check the bath, u never know...
+
+       write(*,*)ilat, Nineq, Nsect
        !
        ed_file_suffix=reg(ineq_site_suffix)//str(ilat,site_indx_padding)
        !
        call ed_init_solver_single_mpi(MpiComm,bath(ilat,:),Hloc(ilat,:,:,:,:))
        !
+    end do
+    Nsect = Nsectors !get_Nsectors() !< get # sectors to allocate the following array
+    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
+    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
+    !
+    do ilat=1,Nineq             !all nodes check the bath, u never know...
        neigen_sectorii(ilat,:) = neigen_sector(:)
        neigen_totalii(ilat)    = lanc_nstates_total
     end do

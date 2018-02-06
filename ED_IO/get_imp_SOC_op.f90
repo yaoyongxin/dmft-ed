@@ -137,6 +137,7 @@
     if(allocated(Limp))       deallocate(Limp)       ;allocate(Limp(Nlat,3,Nspin,Nspin))          ;Limp=zero
     if(allocated(Jimp))       deallocate(Jimp)       ;allocate(Jimp(Nlat,3))                      ;Jimp=zero
     if(allocated(Jimp_sq))    deallocate(Jimp_sq)    ;allocate(Jimp_sq(Nlat,3))                   ;Jimp_sq=zero
+    if(allocated(LSimp))      deallocate(LSimp)      ;allocate(LSimp(Nlat))                       ;LSimp=zero
     !
     if(allocated(Simp_tmp))   deallocate(Simp_tmp)   ;allocate(Simp_tmp(3,Norb,Norb))             ;Simp_tmp=zero
     if(allocated(Limp_tmp))   deallocate(Limp_tmp)   ;allocate(Limp_tmp(3,Nspin,Nspin))           ;Limp_tmp=zero
