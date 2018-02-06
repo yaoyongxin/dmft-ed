@@ -65,11 +65,15 @@ subroutine lanc_ed_build_pairChi_c(iorb)
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
      isign=-1 !<== ACTHUNG!!!! check this is the correct value of isign
      call add_to_lanczos_pairChi(norm0,state_e,alfa_,beta_,isign,iorb)
      !
@@ -99,11 +103,15 @@ subroutine lanc_ed_build_pairChi_c(iorb)
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
      isign=1 !<== ACTHUNG!!!! check this is the correct value of isign
      call add_to_lanczos_pairChi(norm0,state_e,alfa_,beta_,isign,iorb)
      !

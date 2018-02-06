@@ -68,11 +68,15 @@ subroutine lanc_ed_build_spinChi_c(iorb)
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
      !particles
      isign=1
      call add_to_lanczos_spinChi(norm0,state_e,alfa_,beta_,isign,iorb)
@@ -147,11 +151,15 @@ subroutine lanc_ed_build_spinChi_tot_c()
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MP
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
      !particles
      isign=1
      call add_to_lanczos_spinChi(norm0,state_e,alfa_,beta_,isign,Norb+1)

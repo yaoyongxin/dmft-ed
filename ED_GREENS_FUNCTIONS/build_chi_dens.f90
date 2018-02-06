@@ -89,11 +89,15 @@ subroutine lanc_ed_build_densChi_diag_c(iorb)
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
      cnorm2=one*norm0
      isign=1
      call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,iorb)
@@ -157,11 +161,15 @@ subroutine lanc_ed_build_densChi_tot_c()
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
      cnorm2=one*norm0
      isign=1
      call add_to_lanczos_densChi_tot(cnorm2,state_e,alfa_,beta_,isign)
@@ -234,11 +242,15 @@ subroutine lanc_ed_build_densChi_offdiag_c(iorb,jorb)
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
      cnorm2=one*norm0
      !particle and holes excitations all at once
      isign=1                    !<---
@@ -270,11 +282,15 @@ subroutine lanc_ed_build_densChi_offdiag_c(iorb,jorb)
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,cvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+#endif     
      cnorm2=xi*norm0
      isign=1
      call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,jorb)
@@ -303,11 +319,15 @@ subroutine lanc_ed_build_densChi_offdiag_c(iorb,jorb)
      !
      nlanc=min(idim,lanc_nGFiter)
      allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
      if(MpiStatus)then
         call sp_lanc_tridiag(MpiComm,spHtimesV_cc,cvinit,alfa_,beta_)
      else
         call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
      endif
+#else
+     call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+#endif
      cnorm2=xi*norm0
      isign=-1
      call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,jorb)
@@ -409,11 +429,15 @@ subroutine lanc_ed_build_densChi_mix_c(iorb,jorb)
         !
         nlanc=min(kdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=one*norm2
         call add_to_lanczos_densChi_mix(cnorm2,state_e,alfa_,beta_,1,iorb,jorb)
         !
@@ -469,11 +493,15 @@ subroutine lanc_ed_build_densChi_mix_c(iorb,jorb)
         !
         nlanc=min(kdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=one*norm2
         call add_to_lanczos_densChi_mix(cnorm2,state_e,alfa_,beta_,-1,iorb,jorb)
         !

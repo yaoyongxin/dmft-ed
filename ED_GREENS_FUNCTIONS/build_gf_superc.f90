@@ -117,11 +117,15 @@ subroutine lanc_build_gf_superc_c(iorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=1)
         !
         call delete_Hv_sector()
@@ -156,11 +160,15 @@ subroutine lanc_build_gf_superc_c(iorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=1)
         !
         call delete_Hv_sector()
@@ -196,11 +204,15 @@ subroutine lanc_build_gf_superc_c(iorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=2)
         !
         call delete_Hv_sector()
@@ -236,11 +248,15 @@ subroutine lanc_build_gf_superc_c(iorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=2)
         !
         call delete_Hv_sector()
@@ -286,11 +302,15 @@ subroutine lanc_build_gf_superc_c(iorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=3)
         !
         call delete_Hv_sector()
@@ -337,11 +357,15 @@ subroutine lanc_build_gf_superc_c(iorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=3)
         !
         call delete_Hv_sector()
@@ -430,11 +454,15 @@ subroutine lanc_build_gf_superc_mix_c(iorb,jorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=3)
         !
         call delete_Hv_sector()
@@ -481,11 +509,15 @@ subroutine lanc_build_gf_superc_mix_c(iorb,jorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=3)
         !
         call delete_Hv_sector()
@@ -531,11 +563,15 @@ subroutine lanc_build_gf_superc_mix_c(iorb,jorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,cvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(-xi*norm2,state_e,alfa_,beta_,1,ichan=3)
         !
         call delete_Hv_sector()
@@ -582,11 +618,15 @@ subroutine lanc_build_gf_superc_mix_c(iorb,jorb)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,cvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+#endif
         call add_to_lanczos_gf_superc(-xi*norm2,state_e,alfa_,beta_,-1,ichan=3)
         !
         call delete_Hv_sector()

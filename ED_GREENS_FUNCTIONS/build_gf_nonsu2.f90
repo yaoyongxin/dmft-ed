@@ -354,11 +354,15 @@ subroutine lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=one*norm2
         call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,1,iorb,iorb,ispin,ispin)
         deallocate(alfa_,beta_)
@@ -408,11 +412,15 @@ subroutine lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=one*norm2
         call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,-1,iorb,iorb,ispin,ispin)
         deallocate(alfa_,beta_)
@@ -526,11 +534,15 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=one*norm2
         call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,1,iorb,jorb,ispin,jspin)
         deallocate(alfa_,beta_)
@@ -602,11 +614,15 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=one*norm2
         call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,-1,iorb,jorb,ispin,jspin)
         deallocate(alfa_,beta_)
@@ -679,11 +695,15 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=1*xi*norm2
         call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,1,iorb,jorb,ispin,jspin)
         deallocate(alfa_,beta_)
@@ -755,11 +775,15 @@ subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
         !
         nlanc=min(jdim,lanc_nGFiter)
         allocate(alfa_(nlanc),beta_(nlanc))
+#ifdef _MPI
         if(MpiStatus)then
            call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
         else
            call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
         endif
+#else
+        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
+#endif
         cnorm2=1*xi*norm2
         call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,-1,iorb,jorb,ispin,jspin)
         deallocate(alfa_,beta_)

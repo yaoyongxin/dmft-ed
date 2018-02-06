@@ -175,11 +175,15 @@ contains
           call setup_Hv_sector(isector)
           if(ed_sparse_H)call ed_buildH_c()
           !
+#ifdef _MPI
           if(MpiStatus)then
              call sp_eigh(MpiComm,spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,tol=lanc_tolerance)
           else
              call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,tol=lanc_tolerance)
           endif
+#else
+          call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,tol=lanc_tolerance)
+#endif
           call delete_Hv_sector()
        else
           if(allocated(eig_values))deallocate(eig_values)
