@@ -8,6 +8,7 @@ module ED_MAIN
   USE ED_BATH
   USE ED_HAMILTONIAN_MATVEC
   USE ED_GREENS_FUNCTIONS
+  USE ED_CHI_FUNCTIONS
   USE ED_OBSERVABLES
   USE ED_DIAG
   USE SF_IOTOOLS, only: str,reg
@@ -340,6 +341,7 @@ contains
     call ed_diag_set_MPI(MpiComm)
     call ed_observables_set_MPI(MpiComm)
     call ed_greens_functions_set_MPI(MpiComm)
+    call ed_chi_functions_set_MPI(MpiComm)
     !
 
     write(LOGfile,*)
@@ -362,7 +364,8 @@ contains
     call ed_hamiltonian_matvec_del_MPI()
     call ed_diag_del_MPI()
     call ed_observables_del_MPI()
-    call ed_greens_functions_del_MPI()    
+    call ed_greens_functions_del_MPI()
+    call ed_chi_functions_del_MPI()    
     nullify(spHtimesV_cc)
   end subroutine ed_solve_single_mpi
 #endif
