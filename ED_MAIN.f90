@@ -283,13 +283,12 @@ contains
        stop "ed_solve_single ERROR: ed_sparse_H undefined"
     end select
     !
-
-    write(LOGfile,*)
-    write(LOGfile,*)"----------"
-    write(LOGfile,'(50F10.3)')bath
-    write(LOGfile,*)"----------"
-    write(LOGfile,*)
-
+!    write(LOGfile,*)
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,'(50F10.3)')bath
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,*)
+    !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call observables_impurity()         !obtain impurity observables as thermal averages.  
@@ -343,13 +342,12 @@ contains
     call ed_greens_functions_set_MPI(MpiComm)
     call ed_chi_functions_set_MPI(MpiComm)
     !
-
-    write(LOGfile,*)
-    write(LOGfile,*)"----------"
-    write(LOGfile,'(50F10.3)')bath
-    write(LOGfile,*)"----------"
-    write(LOGfile,*)
-
+!    write(LOGfile,*)
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,'(50F10.3)')bath
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,*)
+    !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call observables_impurity()         !obtain impurity observables as thermal averages.  

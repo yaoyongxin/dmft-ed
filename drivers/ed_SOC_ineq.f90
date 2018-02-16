@@ -160,14 +160,20 @@ program ed_SOC_ineq
   if(master)write(LOGfile,'(a12,I6,2(a12,F10.3))')"Lfit:",Lfit,"iwmax:",(pi/beta)*(2*Lfit-1),"U+2D+Dsoc:",Uloc(1)+1.2+(3*SOC/2)
   !
   !#########        BUILD Hk        #########
-  !
-  !call build_hk()                             !;stop
-  call read_myhk("Hk.dat")                      ;stop
   if(surface)then
       allocate(Wtk(Nk*Nk));Wtk=1.d0/(Nk*Nk)
   else
       allocate(Wtk(Nk*Nk*Nk));Wtk=1.d0/(Nk*Nk*Nk)
   endif
+  !call build_hk()                             
+  call read_myhk("LVO_hr.dat","Hk.dat","Hloc.dat","Kpoints.dat")         !  ;stop 
+
+  call build_eigenbands(comm,"LVO_hr.dat","Bands.dat","Hk_path.dat","Kpoints_path.dat")
+
+  stop
+
+
+
   if(nonint_mu_shift)stop
   !
   !#########          BATH          #########
@@ -518,23 +524,25 @@ contains
   !         translator of the W90 output
   !         The re-ordering part can be used or not, depending on what the user of W90 did.
   !+------------------------------------------------------------------------------------------+!
-  subroutine read_myhk(fileHk)
+  subroutine read_myhk(fileHR,fileHk,fileHloc,fileKpoints)
     implicit none
-    integer                                      :: ispin,iorb,jspin,jorb,ilat,jlat
-    integer                                      :: ik,Lk
-    integer                                      :: io1,jo1,io2,jo2
-    real(8)                                      :: wm(Lmats),wr(Lreal),dw,mu
+    character(len=*),intent(in)                  :: fileHR
     character(len=*),intent(in)                  :: fileHk
+    character(len=*),intent(in)                  :: fileHloc
+    character(len=*),intent(in)                  :: fileKpoints
+    integer                                      :: ispin,iorb,jspin,jorb,ilat,jlat
+    integer                                      :: ik,Lk,i,j
+    integer                                      :: io1,jo1,io2,jo2,ndx
+    real(8)                                      :: wm(Lmats),wr(Lreal),dw,mu
     integer   ,allocatable,dimension(:)          :: Nkvec
     real(8)   ,allocatable,dimension(:,:)        :: Kvec
     complex(8),allocatable,dimension(:,:)        :: Hloc
     complex(8),allocatable,dimension(:,:,:)      :: Hk_aux
-    integer   ,allocatable,dimension(:,:)        :: shift
+    integer   ,dimension(Nlat*Nso,Nlat*Nso)      :: P
     real(8),dimension(3)                         :: bk_x,bk_y,bk_z
     logical                                      :: IOfile
     complex(8),dimension(Nlat*Nso,Nlat*Nso,Lmats):: Gmats
     real(8)   ,dimension(Norb,Lreal)             :: Aw
-    integer   ,dimension(Nlat*Nso,Nlat*Nso)      :: P
     complex(8),dimension(Nlat*Nso,Nlat*Nso,Lreal):: Greal
     complex(8),allocatable                       :: Gso(:,:,:,:,:,:)
     !
@@ -543,6 +551,8 @@ contains
     bk_y = [0.d0,1.d0,0.d0]*2*pi
     bk_z = [0.d0,0.d0,1.d0]*2*pi
     call TB_set_bk(bk_x,bk_y,bk_z)
+    !
+    call Hk_order(P)
     !
     Lk=Nk*Nk*Nk
     if(master)write(LOGfile,*)"bulk tot k-points:",Lk
@@ -556,72 +566,16 @@ contains
     inquire(file=fileHk,exist=IOfile)
     !
     if(IOfile)then
+       write(LOGfile,*) "   Reading existing Hk"
        call TB_read_hk(Hk_aux,fileHk,Nspin*Norb*Nlat,1,1,Nlat,Nkvec,Kvec)
     else
-       call TB_hr_to_hk(Hk_aux,"LVO_hr.dat",Nspin,Norb,Nlat,Nkvec,Kvec,fileHk,"kpoints.dat")
+       write(LOGfile,*) "   Transforming HR from:  ",fileHR
+       call TB_hr_to_hk(Hk_aux,fileHR,Nspin,Norb,Nlat,Nkvec,P,Kvec,fileHk,fileKpoints)
     endif
-    !
     Hk=zero;Hloc=zero
     Hk=Hk_aux
     Hloc=sum(Hk,dim=3)/Lk
-    call TB_write_Hloc(Hloc,"Hloc_S_1.dat")
-    Hk_aux=zero
-    !
-    !
-    !-----  Ordering 1 same orbital position for each Nlat block   -----
-    allocate(shift(2,2));shift=0
-    shift(1,:)=[1,2]
-    shift(2,:)=[7,8]
-    P=0;P=int(eye(Nlat*Nspin*Norb))
-    do i=1,size(shift,2)
-       do j=1,2
-          P(shift(i,j),shift(i,j))=0
-       enddo
-       P(shift(i,1),shift(i,2))=1
-       P(shift(i,2),shift(i,1))=1
-    enddo
-    P(1+Nlat*Norb:Nlat*Norb*Nspin,1+Nlat*Norb:Nlat*Norb*Nspin)=P(1:Nlat*Norb,1:Nlat*Norb)
-
-    do i=1,Nspin*Norb*Nlat
-    write(999,'(100I3)') (P(i,j),j=1,Nspin*Norb*Nlat)
-    enddo
-
-    do ik=1,Lk
-       Hk_aux(:,:,ik)=matmul(transpose(float(P)),matmul(Hk(:,:,ik),float(P)))
-    enddo  
-    !
-    Hk=zero;Hloc=zero
-    Hk=Hk_aux
-    Hloc=sum(Hk,dim=3)/Lk
-    call TB_write_Hloc(Hloc,"Hloc_S_2.dat")
-    Hk_aux=zero
-    !
-    !-----  Ordering 2 as used in the code [[[Norb],Nspin],Nlat]   -----
-    do ilat=1,Nlat
-       do jlat=1,Nlat
-          do ispin=1,Nspin
-             do jspin=1,Nspin
-                do iorb=1,Norb
-                   do jorb=1,Norb
-                      !input
-                      io1 = iorb + (ilat-1)*Norb + (ispin-1)*Norb*Nlat
-                      jo1 = jorb + (jlat-1)*Norb + (jspin-1)*Norb*Nlat
-                      !output
-                      io2 = iorb + (ispin-1)*Norb + (ilat-1)*Norb*Nspin
-                      jo2 = jorb + (jspin-1)*Norb + (jlat-1)*Norb*Nspin
-                      !
-                      Hk_aux(io2,jo2,:)=Hk(io1,jo1,:)
-                   enddo
-                enddo
-             enddo
-          enddo
-       enddo
-    enddo
-    !
-    Hk=zero;Hloc=zero
-    Hk=Hk_aux
-    Hloc=sum(Hk,dim=3)/Lk
-    call TB_write_Hloc(Hloc,"Hloc_F.dat")
+    call TB_write_Hloc(Hloc,fileHloc)
     Hk_aux=zero
     !
     !-----  Build the local GF in the spin-orbital Basis   -----
@@ -659,7 +613,7 @@ contains
        Gso(:,:,:,:,:,i)=lso2nnn_reshape(Greal(:,:,i),Nlat,Nspin,Norb)
     enddo
     !
-    open(unit=106,file="Aw_P.dat",status="unknown",action="write",position="rewind")
+    open(unit=106,file="Aw0.dat",status="unknown",action="write",position="rewind")
     Aw=0d0
     do i=1,Lreal
        do iorb=1,Norb
@@ -680,6 +634,81 @@ contains
     deallocate(Gso)
     !
   end subroutine read_myhk
+
+
+  subroutine Hk_order(Porder)
+    implicit none
+    integer   ,intent(out)                       :: Porder(Nlat*Nso,Nlat*Nso)
+    integer   ,allocatable,dimension(:,:)        :: shift1,shift2
+    integer   ,dimension(Nlat*Nso,Nlat*Nso)      :: P1,P2
+    integer                                      :: ispin,iorb,jspin,jorb,ilat,jlat
+    integer                                      :: io1,jo1,io2,jo2,ndx,i,j
+    !
+    !-----  Ordering 1 same orbital position for each Nlat block   -----
+    allocate(shift1(2,2));shift1=0
+    shift1(1,:)=[1,2]
+    shift1(2,:)=[7,8]
+    P1=0;P1=int(eye(Nlat*Nspin*Norb))
+    do i=1,size(shift1,1)
+       do j=1,2
+          P1(shift1(i,j),shift1(i,j))=0
+       enddo
+       P1(shift1(i,1),shift1(i,2))=1
+       P1(shift1(i,2),shift1(i,1))=1
+    enddo
+    P1(1+Nlat*Norb:Nlat*Norb*Nspin,1+Nlat*Norb:Nlat*Norb*Nspin)=P1(1:Nlat*Norb,1:Nlat*Norb)
+!    do i=1,Nspin*Norb*Nlat
+!       write(900,'(100I3)') (P1(i,j),j=1,Nspin*Norb*Nlat)
+!    enddo
+    !
+    !-----  Ordering 2 as used in the code [[[Norb],Nspin],Nlat]   -----
+    ndx=0
+    do ilat=1,Nlat
+       do ispin=1,Nspin
+          do iorb=1,Norb
+             !input
+             io1 = iorb + (ilat-1)*Norb + (ispin-1)*Norb*Nlat
+             !output
+             io2 = iorb + (ispin-1)*Norb + (ilat-1)*Norb*Nspin
+             !
+             if(io1.ne.io2) ndx=ndx+1
+          enddo
+       enddo
+    enddo
+    allocate(shift2(ndx,2));shift2=0
+    ndx=0
+    do ilat=1,Nlat
+       do ispin=1,Nspin
+          do iorb=1,Norb
+             !input
+             io1 = iorb + (ilat-1)*Norb + (ispin-1)*Norb*Nlat
+             !output
+             io2 = iorb + (ispin-1)*Norb + (ilat-1)*Norb*Nspin
+             !
+             if(io1.ne.io2) then
+                ndx=ndx+1
+                shift2(ndx,:)=[io1,io2]
+             endif
+          enddo
+       enddo
+    enddo
+    P2=0;P2=int(eye(Nlat*Nspin*Norb))
+    do i=1,size(shift2,1)
+       do j=1,2
+          P2(shift2(i,j),shift2(i,j))=0
+       enddo
+       P2(shift2(i,1),shift2(i,2))=1
+    enddo
+!    do i=1,Nspin*Norb*Nlat
+!       write(901,'(100I3)') (P2(i,j),j=1,Nspin*Norb*Nlat)
+!    enddo
+    !
+    Porder=matmul(P1,P2)
+    !
+!    do i=1,Nspin*Norb*Nlat
+!       write(902,'(100I3)') (Ptot(i,j),j=1,Nspin*Norb*Nlat)
+!    enddo
+  end subroutine Hk_order
 
 
 
@@ -855,9 +884,106 @@ contains
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: solve H(k) along path in the BZ.
   !+------------------------------------------------------------------------------------------+!
-  !+------------------------------------------------------------------------------------------+!
-  !PURPOSE: solve H(k) along path in the BZ.
-  !+------------------------------------------------------------------------------------------+!
+  subroutine build_eigenbands(mpicomm,fileHR,fileband,fileHk_path,fileKpoints_path)
+    !implicit none
+    integer         ,intent(in)                     :: MpiComm
+    character(len=*),intent(in)                     :: fileHR
+    character(len=*),intent(in),optional            :: fileband,fileHk_path,fileKpoints_path
+    integer                                         :: ispin,iorb,jspin,jorb,ilat,jlat
+    integer                                         :: io1,jo1,io2,jo2,ndx
+    integer                                         :: Npts,Lk,i,Nkpathread,Mpier
+    integer,dimension(Nlat*Nso,Nlat*Nso)            :: P
+    real(8),dimension(:,:),allocatable              :: kpath!,kpath_write,kpath_read
+    real(8),dimension(:,:),allocatable              :: kgrid!,kgrid_write,kgrid_read
+    real(8),dimension(:,:),allocatable              :: Scorr
+    complex(8),dimension(:,:,:),allocatable         :: Hkpath!,Hkpath_write,Hkpath_read
+    complex(8),dimension(:,:,:,:,:,:,:),allocatable :: Gkreal
+    type(rgb_color),dimension(:),allocatable        :: colors,colors_orb
+    real(8)                                         :: wr(Lreal),dw,mu
+    logical                                         :: IOfile
+    !
+    call Hk_order(P)
+    !
+    allocate(colors(Nso*Nlat))
+    allocate(colors_orb(Norb))
+    colors_orb=[red1,green1,blue1]
+    do i=1,Nspin*Nlat
+       colors(1+(i-1)*Norb:Norb+(i-1)*Norb)=colors_orb
+    enddo
+    !
+    write(LOGfile,*)"Build bulk H(k) along the path M-R-G-M-X-G-X"
+    Npts = 7
+    Lk=(Npts-1)*Nkpath
+    allocate(kpath(Npts,3))
+    kpath(1,:)=kpoint_M1
+    kpath(2,:)=kpoint_R
+    kpath(3,:)=kpoint_Gamma
+    kpath(4,:)=kpoint_M1
+    kpath(5,:)=kpoint_X1 
+    kpath(6,:)=kpoint_Gamma
+    kpath(7,:)=kpoint_X1
+    !
+!    kpath( 1,:)=kpoint_Gamma
+!    kpath( 2,:)=kpoint_X1
+!    kpath( 3,:)=kpoint_M1
+!    kpath( 4,:)=kpoint_X2
+!    kpath( 5,:)=kpoint_Gamma
+!    kpath( 6,:)=kpoint_X3
+!    kpath( 7,:)=kpoint_M3
+!    kpath( 8,:)=kpoint_R
+!    kpath( 9,:)=kpoint_M2
+!    kpath(10,:)=kpoint_X1
+!    kpath(11,:)=kpoint_M1
+!    kpath(12,:)=kpoint_X2
+!    kpath(13,:)=kpoint_Gamma
+!    kpath(14,:)=kpoint_X3
+!    kpath(15,:)=kpoint_M3
+!    kpath(16,:)=kpoint_R
+!    kpath(17,:)=kpoint_M2
+!    kpath(18,:)=kpoint_X3
+    !
+    allocate(kgrid(Lk,3))  ;kgrid=0d0
+    allocate(Hkpath(Nlat*Nspin*Norb,Nlat*Nspin*Norb,Lk));Hkpath=zero
+    allocate(Gkreal(Lk,Nlat,Nspin,Nspin,Norb,Norb,Lreal));Gkreal=0d0
+    allocate(Scorr(Nlat*Nspin*Norb,Nlat*Nspin*Norb));Scorr=0d0
+    Scorr=real(nnn2lso_reshape(Sreal(:,:,:,:,:,1),Nlat,Nspin,Norb),8)
+    !
+    inquire(file=fileHk_path,exist=IOfile)
+    !
+    if(IOfile)then
+       write(LOGfile,*) "   Reading existing Hkpath on: ",fileHk_path
+
+       call TB_read_hk(Hkpath,fileHk_path,Nspin*Norb*Nlat,Nkpathread,kpath,kgrid)
+       if(Nkpathread.ne.Nkpath) stop "Eigenbands wrong Nkpath readed"
+    else
+       write(LOGfile,*) "   Solving model on path"
+       call TB_solve_model(   fileHR,Nspin,Norb,Nlat,kpath,Nkpath                      &
+                          ,   colors                                                   &
+                          ,   [character(len=20) ::'M', 'R', 'G', 'M', 'X', 'G', 'X']  &
+                          ,   P                                                        &
+                          ,   fileband                                                 &
+                          ,   fileHk_path                                              &
+                          ,   fileKpoints_path                                         &
+                          ,   Scorr                                                    &
+                          ,   Hkpath                                                   &
+                          ,   kgrid                                                    )
+       !
+    endif
+    !
+    do i=1,Lk
+       call dmft_gk_realaxis(MpiComm,Hkpath(:,:,i),Wtk(i),Gkreal(i,:,:,:,:,:,:),Sreal)
+    enddo
+    wr = linspace(wini,wfin,Lreal,mesh=dw)
+    open(unit=106,file='Akw.dat',status='unknown',action='write',position='rewind')
+    do j=1,Lreal
+       write(106,'(9000F18.12)')wr(j),(trace(nnn2lso_reshape(-aimag(Gkreal(i,:,:,:,:,:,j))/pi,Nlat,Nspin,Norb)/2.)+10.*i,i=1,Lk)
+    enddo
+    close(106)
+    ! 
+    call MPI_Barrier(MpiComm,Mpier)
+    write(LOGfile,*)"Im done on the path"
+    !
+  end subroutine build_eigenbands
 
 
 

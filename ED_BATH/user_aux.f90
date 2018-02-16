@@ -1094,7 +1094,7 @@ subroutine break_symmetry_bath_lattice(bath_,field,sign,save)
   save_=.true.;if(present(save))save_=save
   Nsites=size(bath_,1)
   do ilat=1,Nsites
-     ed_file_suffix="_site"//reg(txtfy(ilat,Npad=4))
+     ed_file_suffix=reg(ineq_site_suffix)//reg(txtfy(ilat,site_indx_padding))
      call break_symmetry_bath_site(bath_(ilat,:),field,sign,save_)
   enddo
   ed_file_suffix=""
@@ -1136,7 +1136,7 @@ subroutine spin_symmetrize_bath_lattice(bath_,save)
   save_=.true.;if(present(save))save_=save
   Nsites=size(bath_,1)
   do ilat=1,Nsites
-     ed_file_suffix="_site"//reg(txtfy(ilat,Npad=4))
+     ed_file_suffix=reg(ineq_site_suffix)//reg(txtfy(ilat,site_indx_padding))
      call spin_symmetrize_bath_site(bath_(ilat,:),save_)
   enddo
   ed_file_suffix=""
@@ -1183,7 +1183,7 @@ subroutine orb_symmetrize_bath_lattice(bath_,save)
   save_=.true.;if(present(save))save_=save
   Nsites=size(bath_,1)
   do ilat=1,Nsites
-     ed_file_suffix="_site"//reg(txtfy(ilat,Npad=4))
+     ed_file_suffix=reg(ineq_site_suffix)//reg(txtfy(ilat,site_indx_padding))
      call orb_symmetrize_bath_site(bath_(ilat,:),save_)
   enddo
   ed_file_suffix=""
@@ -1227,7 +1227,7 @@ subroutine ph_symmetrize_bath_lattice(bath_,save)
   save_=.true.;if(present(save))save_=save
   Nsites=size(bath_,1)
   do ilat=1,Nsites
-     ed_file_suffix="_site"//reg(txtfy(ilat,Npad=4))
+     ed_file_suffix=reg(ineq_site_suffix)//reg(txtfy(ilat,site_indx_padding))
      call ph_symmetrize_bath_site(bath_(ilat,:),save_)
   enddo
   ed_file_suffix=""
@@ -1280,7 +1280,7 @@ subroutine ph_trans_bath_lattice(bath_,save)
   save_=.true.;if(present(save))save_=save
   Nsites=size(bath_,1)
   do ilat=1,Nsites
-     ed_file_suffix="_site"//reg(txtfy(ilat,Npad=4))
+     ed_file_suffix=reg(ineq_site_suffix)//reg(txtfy(ilat,site_indx_padding))
      call ph_trans_bath_site(bath_(ilat,:),save_)
   enddo
   ed_file_suffix=""
@@ -1309,7 +1309,7 @@ subroutine enforce_normal_bath_lattice(bath_,save)
   save_=.true.;if(present(save))save_=save
   Nsites=size(bath_,1)
   do ilat=1,Nsites
-     ed_file_suffix="_site"//reg(txtfy(ilat,Npad=4))
+     ed_file_suffix=reg(ineq_site_suffix)//reg(txtfy(ilat,site_indx_padding))
      call enforce_normal_bath_site(bath_(ilat,:),save_)
   enddo
   ed_file_suffix=""

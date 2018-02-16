@@ -752,7 +752,7 @@ contains
           call compute_Akw_along_BZpath(hk_Ti3dt2g,kpath,Nkpath,Sreal)
           !
           Sigma_correction=Smats
-          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Lk,colors_name=colors,points_name=[character(len=20) :: 'M', 'R', 'G', 'M', 'X', 'G', 'X'],file="Eigenband_bulk.sigma")
+          call TB_solve_model(hk_Ti3dt2g,Nso,kpath,Nkpath,colors_name=colors,points_name=[character(len=20) :: 'M', 'R', 'G', 'M', 'X', 'G', 'X'],file="Eigenband_bulk.sigma")
           !
           Sigma_correction=zero
           !
@@ -829,6 +829,7 @@ contains
           enddo
        enddo
     enddo
+    !Tr[Akw] and Tr[Akw_rot] give the same result the trace is invariant !! Wht changes is the relative weight of the orbital components
     open(unit=106,file='Akw.dat',status='unknown',action='write',position='rewind')
     do ifreq=1,Lfreq
        write(106,'(9000F18.12)')wr(ifreq),(trace(Akw(:,:,ic,ifreq)*2.)+5.*ic,ic=1,(Npts-1)*Nk)
