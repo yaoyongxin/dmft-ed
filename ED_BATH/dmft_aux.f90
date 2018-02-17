@@ -139,14 +139,14 @@ subroutine init_dmft_bath(dmft_bath_)
      dmft_bath_%h=zero
      do i=1,Nbath
         !
-        dmft_bath_%h(:,:,:,:,i)=impHloc-noise_b(i)*so2nn_reshape(eye(Nspin*Norb),Nspin,Norb)
+        dmft_bath_%h(:,:,:,:,i)=impHloc-(xmu+noise_b(i))*so2nn_reshape(eye(Nspin*Norb),Nspin,Norb)
         !
      enddo
      !HYBR. INITIALIZATION
      dmft_bath_%vr=zero
      do i=1,Nbath
         noise_tot=noise_b(i)
-        dmft_bath_%vr(i)=cmplx(0.1d0+noise_b(i),0.0d0)!*(-1)**(i-1)
+        dmft_bath_%vr(i)=cmplx(0.5d0+noise_b(i),0.0d0)!*(-1)**(i-1)
      enddo
      !
      deallocate(noise_b,noise_s,noise_o)
@@ -653,6 +653,9 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
         else
            Maxspin=2
         endif
+        dmft_bath_%h=zero
+        dmft_bath_%vr=zero
+        i = 0
         !all non-vanishing terms in imploc - all spin
         do ispin=1,Maxspin
            do iorb=1,Norb
@@ -673,6 +676,9 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
                     dmft_bath_%h(ispin,ispin,iorb,jorb,ibath)=cmplx(element_R,element_I)
                     !hermiticity
                     if(iorb/=jorb)dmft_bath_%h(ispin,ispin,jorb,iorb,ibath)=conjg(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
+                    !spin-conservation
+                    if(Maxspin==1)dmft_bath_%h(2,2,iorb,jorb,ibath)=dmft_bath_%h(1,1,iorb,jorb,ibath)
+                    if(Maxspin==1)dmft_bath_%h(2,2,jorb,iorb,ibath)=dmft_bath_%h(1,1,jorb,iorb,ibath)
                  enddo
               enddo
            enddo
@@ -685,7 +691,6 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
            element_R=bath_(i)
            dmft_bath_%vr(ibath)=cmplx(element_R,element_I)
         enddo
-
         !
      case("nonsu2")
         !
@@ -956,6 +961,7 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
         else
            Maxspin=2
         endif
+        i = 0
         !all non-vanishing terms in imploc - all spin
         do ispin=1,Maxspin
            do iorb=1,Norb

@@ -307,6 +307,9 @@ MODULE ED_IO
   public :: ed_get_quantum_SOC_operators_single
   public :: ed_get_quantum_SOC_operators_lattice
 
+  public :: ed_read_impSigma_single
+  public :: ed_read_impSigma_lattice
+
   !****************************************************************************************!
   !****************************************************************************************!
 
@@ -426,6 +429,64 @@ contains
   include "ED_IO/get_imp_dm.f90"
   include "ED_IO/get_imp_SOC_op.f90"
 
+
+
+
+
+
+ ! PURPOSE: Read self-energy function(s) - also for inequivalent sites.
+ !+-----------------------------------------------------------------------------+!
+ include "ED_IO/read_impSigma.f90"
+ subroutine ed_read_impSigma_single
+   !
+   if(allocated(impSmats))deallocate(impSmats)
+   if(allocated(impSreal))deallocate(impSreal)
+   if(allocated(impSAmats))deallocate(impSAmats)
+   if(allocated(impSAreal))deallocate(impSAreal)
+   allocate(impSmats(Nspin,Nspin,Norb,Norb,Lmats))
+   allocate(impSreal(Nspin,Nspin,Norb,Norb,Lreal))
+   allocate(impSAmats(Nspin,Nspin,Norb,Norb,Lmats)) !THIS SHOULD NOT DEPEND ON SPIN: NSPIN=>1
+   allocate(impSAreal(Nspin,Nspin,Norb,Norb,Lreal)) !THIS SHOULD NOT DEPEND ON SPIN: NSPIN=>1
+   impSmats=zero
+   impSreal=zero
+   impSAmats=zero
+   impSAreal=zero
+   !
+   select case(ed_mode)
+   case ("normal");call read_impSigma_normal
+   case ("superc");call read_impSigma_superc
+   case ("nonsu2");call read_impSigma_nonsu2
+   case default;stop "ed_read_impSigma error: ed_mode not in the list"
+   end select
+ end subroutine ed_read_impSigma_single
+
+ subroutine ed_read_impSigma_lattice(Nineq)
+   integer :: Nineq
+   integer :: ilat
+   !
+   if(allocated(Smatsii))deallocate(Smatsii)
+   if(allocated(Srealii))deallocate(Srealii)
+   if(allocated(SAmatsii))deallocate(SAmatsii)
+   if(allocated(SArealii))deallocate(SArealii)
+   allocate(Smatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
+   allocate(Srealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
+   allocate(SAmatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
+   allocate(SArealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
+   Smatsii  = zero 
+   Srealii  = zero 
+   SAmatsii = zero 
+   SArealii = zero
+   !
+   do ilat=1,Nineq
+      ed_file_suffix=reg(ineq_site_suffix)//str(ilat,site_indx_padding)
+      call ed_read_impSigma_single
+      Smatsii(ilat,:,:,:,:,:)  = impSmats
+      Srealii(ilat,:,:,:,:,:)  = impSreal
+      SAmatsii(ilat,:,:,:,:,:) = impSAmats
+      SArealii(ilat,:,:,:,:,:) = impSAreal
+   enddo
+   ed_file_suffix=""
+ end subroutine ed_read_impSigma_lattice
 
 
 END MODULE ED_IO

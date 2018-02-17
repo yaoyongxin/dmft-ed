@@ -11,7 +11,7 @@
 function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
   complex(8),optional,intent(in) :: Hloc_nn(:,:,:,:)
   integer,optional               :: ispin_
-  integer                        :: bath_size,ndx,ispin,iorb,jspin,jorb,io,jo
+  integer                        :: bath_size,ndx,ispin,iorb,jspin,jorb,io,jo,Maxspin
   complex(8),allocatable         :: Hloc(:,:,:,:)
 
   select case(bath_type)
@@ -52,42 +52,78 @@ function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
         stop "ERROR: check_bath_dimension: ed_mode=replica neither Hloc_nn present nor impHloc allocated"
      endif
      !
-     ndx=0
-     do ispin=1,Nspin
-        do jspin=1,Nspin
+     select case(ed_mode)
+     case default
+        !
+        if(ed_para)then
+           Maxspin=1
+        else
+           Maxspin=2
+        endif
+        ndx=0
+        do ispin=1,Maxspin
            do iorb=1,Norb
               do jorb=1,Norb
                  io = iorb + (ispin-1)*Norb
-                 jo = jorb + (jspin-1)*Norb
+                 jo = jorb + (ispin-1)*Norb
                  if(io.lt.jo)then
-                    if(abs(dreal(Hloc(ispin,jspin,iorb,jorb))).gt.1d-6)ndx=ndx+1
-                    if(abs(dimag(Hloc(ispin,jspin,iorb,jorb))).gt.1d-6)then
-                       ndx=ndx+1
-                       if(ed_mode=="d")stop "complex Hloc and ed_mode='d' are not compatible"
-                    endif
+                    if(abs(dreal(Hloc(ispin,ispin,iorb,jorb))).gt.1d-6)ndx=ndx+1
+                    if(abs(dimag(Hloc(ispin,ispin,iorb,jorb))).gt.1d-6)ndx=ndx+1
                  endif
               enddo
            enddo
         enddo
-     enddo
-     !Real diagonal elements (always assumed)
-     ndx= ndx + Nspin * Norb
-     !complex diagonal elements checked
-     do ispin=1,Nspin
-        do iorb=1,Norb
-           if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.1d-6)stop "Hloc is not Hermitian"
+        !Real diagonal elements (always assumed)
+        ndx= ndx + Maxspin * Norb
+        !complex diagonal elements checked
+        do ispin=1,Maxspin
+           do iorb=1,Norb
+              if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.1d-6)stop "Hloc is not Hermitian"
+           enddo
         enddo
-     enddo
-     !number of non vanishing elements for each replica
-     ndx = ndx * Nbath
-     !real diagonal hybridizations
-     ndx = ndx + Nbath
-     !
-     if(ed_para)then
-        bath_size = ( 1+1+1 ) * Nbath
-     else
+        !number of non vanishing elements for each replica
+        ndx = ndx * Nbath
+        !real diagonal hybridizations
+        ndx = ndx + Nbath
+        !
         bath_size = ndx
-     endif
+        !
+     case("nonsu2")
+        !
+        ndx=0
+        do ispin=1,Nspin
+           do jspin=1,Nspin
+              do iorb=1,Norb
+                 do jorb=1,Norb
+                    io = iorb + (ispin-1)*Norb
+                    jo = jorb + (jspin-1)*Norb
+                    if(io.lt.jo)then
+                       if(abs(dreal(Hloc(ispin,jspin,iorb,jorb))).gt.1d-6)ndx=ndx+1
+                       if(abs(dimag(Hloc(ispin,jspin,iorb,jorb))).gt.1d-6)ndx=ndx+1
+                    endif
+                 enddo
+              enddo
+           enddo
+        enddo
+        !Real diagonal elements (always assumed)
+        ndx= ndx + Nspin * Norb
+        !complex diagonal elements checked
+        do ispin=1,Nspin
+           do iorb=1,Norb
+              if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.1d-6)stop "Hloc is not Hermitian"
+           enddo
+        enddo
+        !number of non vanishing elements for each replica
+        ndx = ndx * Nbath
+        !real diagonal hybridizations
+        ndx = ndx + Nbath
+        !
+        if(ed_para)then
+           bath_size = ( 1+1+1 ) * Nbath
+        else
+           bath_size = ndx
+        endif
+     end select
      !
   end select
 end function get_bath_dimension

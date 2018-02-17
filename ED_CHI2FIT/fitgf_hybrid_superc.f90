@@ -27,7 +27,7 @@ subroutine chi2_fitgf_hybrid_superc(fg,bath_,ispin)
   logical                              :: check
   type(effective_bath)                 :: dmft_bath
   complex(8)                           :: fgand
-  character(len=20)                    :: suffix
+  character(len=256)                   :: suffix
   integer                              :: unit
   !
   if(size(fg,1)/=2)stop "chi2_fitgf_normal_superc error: size[fg,1]!=2"
