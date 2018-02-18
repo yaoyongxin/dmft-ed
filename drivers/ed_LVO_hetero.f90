@@ -27,21 +27,24 @@ program ed_LVO_hetero
   logical                                        :: master
   !Bath:
   integer                                        :: Nb,unit
-  real(8),allocatable                            :: Bath(:,:),Bath_red(:,:)
-  !Local functions:
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Smats
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Gmats
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Sreal
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Greal
+  real(8)   ,allocatable,dimension(:,:)          :: Bath
+  real(8)   ,allocatable,dimension(:)            :: Bath_red
+  !Local lattice functions:
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Smats,Sreal
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Gmats,Greal
   !Weiss&Hybridization functions
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Weiss,Weiss_old,Weiss_red
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Delta,Delta_old,Delta_red
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Weiss,Weiss_old
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Delta,Delta_old
+  !reduced functions
+  complex(8),allocatable,dimension(:,:,:,:,:)    :: Smats_red,Sreal_red
+  complex(8),allocatable,dimension(:,:,:,:,:)    :: Weiss_red,Delta_red
   !Hmiltonian input:
   integer                                        :: Nk,Nkpath
   real(8)   ,allocatable,dimension(:)            :: Wtk
   complex(8),allocatable,dimension(:,:,:)        :: Hk
   complex(8),allocatable,dimension(:,:)          :: Hloc_nso
-  complex(8),allocatable,dimension(:,:,:,:,:)    :: Hloc_nnn,Hloc_red_nnn
+  complex(8),allocatable,dimension(:,:,:,:,:)    :: Hloc_nnn
+  complex(8),allocatable,dimension(:,:,:,:)      :: Hloc_red_nnn
   !custom variables for convergence test:
   complex(8),allocatable,dimension(:)            :: conv_funct
   !custom variables for chempot search:
@@ -51,8 +54,9 @@ program ed_LVO_hetero
   real(8)   ,allocatable,dimension(:)            :: bottom,top,shift
   real(8)                                        :: Alvl=0.d0
   real(8)                                        :: dw,sumdens,xmu_old
-  real(8),allocatable,dimension(:)               :: wr,wm
-  real(8),allocatable,dimension(:,:)             :: orb_dens
+  real(8)   ,allocatable,dimension(:)            :: wr,wm
+  real(8)   ,allocatable,dimension(:,:)          :: orb_dens
+  real(8)   ,allocatable,dimension(:)            :: orb_dens_red
   logical                                        :: look4n=.true.
   !custom variables misc:
   logical                                        :: computeG0loc
@@ -66,7 +70,7 @@ program ed_LVO_hetero
   !
   !#########    VARIABLE PARSING    #########
   !
-  call parse_cmd_variable(finput,           "FINPUT",              default='inputED_LVO_hetero.in')
+  call parse_cmd_variable(finput,           "FINPUT",              default='inputED_LVO.in')
   call parse_input_variable(hkfile,         "HKFILE",finput,       default="Hk.dat")
   call parse_input_variable(nk,             "NK",finput,           default=10)
   call parse_input_variable(NLAT,           "NLAT",finput,         default=4)
@@ -97,20 +101,24 @@ program ed_LVO_hetero
   allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));            Greal=zero
   allocate(Weiss(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Weiss=zero
   allocate(Delta(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Delta=zero
+  !
   allocate(weiss_old(Nlat,Nspin,Nspin,Norb,Norb,Lmats));        weiss_old=zero
   allocate(delta_old(Nlat,Nspin,Nspin,Norb,Norb,Lmats));        delta_old=zero
-  allocate(weiss_red(2,Nspin,Nspin,Norb,Norb,Lmats));           weiss_red=zero
-  allocate(delta_red(2,Nspin,Nspin,Norb,Norb,Lmats));           delta_red=zero
   !
   allocate(Hk(Nlat*Nspin*Norb,Nlat*Nspin*Norb,Nk*Nk*Nk));       Hk=zero
   allocate(Hloc_nso(Nlat*Nspin*Norb,Nlat*Nspin*Norb));          Hloc_nso=zero
   allocate(Hloc_nnn(Nlat,Nspin,Nspin,Norb,Norb));               Hloc_nnn=zero
-  allocate(Hloc_red_nnn(2,Nspin,Nspin,Norb,Norb));              Hloc_red_nnn=zero
+  !
+  allocate(Hloc_red_nnn(Nspin,Nspin,Norb,Norb));                Hloc_red_nnn=zero
+  allocate(Smats_red(Nspin,Nspin,Norb,Norb,Lmats));             Smats_red=zero
+  allocate(Sreal_red(Nspin,Nspin,Norb,Norb,Lreal));             Sreal_red=zero
+  allocate(weiss_red(Nspin,Nspin,Norb,Norb,Lmats));             weiss_red=zero
+  allocate(delta_red(Nspin,Nspin,Norb,Norb,Lmats));             delta_red=zero
   !
   allocate(conv_funct(Lmats));                                  conv_funct=zero
-  allocate(wr(Lreal));wr=0.0d0;wr=linspace(wini,wfin,Lreal,mesh=dw)
-  allocate(wm(Lmats));wm=0.0d0;wm = pi/beta*real(2*arange(1,Lmats)-1,8)
-  allocate(Wtk(Nk*Nk*Nk));Wtk=1.d0/(Nk*Nk*Nk)
+  allocate(wr(Lreal));wr=0.0d0;                                 wr=linspace(wini,wfin,Lreal,mesh=dw)
+  allocate(wm(Lmats));wm=0.0d0;                                 wm = pi/beta*real(2*arange(1,Lmats)-1,8)
+  allocate(Wtk(Nk*Nk*Nk));                                      Wtk=1.d0/(Nk*Nk*Nk)
   !
   Lfit=min(int((Uloc(1)+3.)*(beta/pi))+100,Lmats)
   if(master)write(LOGfile,'(a12,I6,2(a12,F10.3))')"Lfit:",Lfit,"iwmax:",(pi/beta)*(2*Lfit-1),"U+2D:",Uloc(1)+3.
@@ -118,10 +126,11 @@ program ed_LVO_hetero
   !#########        BUILD Hk        #########
   !
   call read_myhk("LVO_hr.dat","Hk.dat","Hloc.dat","Kpoints.dat")
-  Hloc_red_nnn=Hloc_nnn(1:2,:,:,:,:)
+  Hloc_red_nnn=Hloc_nnn(1,:,:,:,:)
+  !
   !call ed_read_impSigma_lattice(Nlat)
   !call ed_get_Sreal(Sreal,Nlat)
-  !if(master)call build_eigenbands("LVO_hr.dat","Bands.dat","Hk_path.dat","Kpoints_path.dat",Sreal)
+  !if(master)call build_eigenbands("LVO_hr.dat","Bands","Hk_path.dat","Kpoints_path.dat",Sreal)
   !stop
   !
   !#########          BATH          #########
@@ -133,7 +142,7 @@ program ed_LVO_hetero
   endif
   if(master)write(LOGfile,*)"   Bath_size:",Nb
   allocate(Bath(Nlat,Nb));      Bath=0.0d0
-  allocate(Bath_red(2,Nb));     Bath_red=0.0d0
+  allocate(Bath_red(Nb));       Bath_red=0.0d0
   !
   !#########      INIT SOLVER       #########
   !
@@ -157,10 +166,14 @@ program ed_LVO_hetero
         call ed_solve(comm,Bath,Hloc_nnn)
      endif
      !
-     !------    get sigmas    ------
+     !------    get sigmas    ------ FIN QUI
      if (ed_para)then
-        call ed_get_sigma_matsubara(Smats(1:2,:,:,:,:,:))  ;Smats(3:4,:,:,:,:,:)=Smats(1:2,:,:,:,:,:)
-        call ed_get_sigma_real(Sreal(1:2,:,:,:,:,:))       ;Sreal(3:4,:,:,:,:,:)=Sreal(1:2,:,:,:,:,:)
+        call ed_get_sigma_matsubara(Smats_red)
+        call ed_get_sigma_real(Sreal_red)
+        do ilat=1,Nlat
+           Smats(ilat,:,:,:,:,:)=Smats_red
+           Smats(ilat,:,:,:,:,:)=Smats_red
+        enddo
      else
         call ed_get_sigma_matsubara(Smats)
         call ed_get_sigma_real(Sreal)
@@ -172,74 +185,82 @@ program ed_LVO_hetero
      call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=6)
      !
      !-  operations on Weiss/Delta -
-     if(cg_scheme=='weiss')then
-        !get Weiss
-        call dmft_weiss(Gmats,Smats,Weiss,Hloc_nnn)
-        call dmft_print_gf_matsubara(Weiss,"WeissG0",iprint=6)
-        !mix Weiss
-        if(iloop>1)Weiss = wmixing*Weiss + (1.d0-wmixing)*Weiss_old
-        !old Weiss
-        Weiss_old=Weiss
-        !fit Weiss
-        if(ed_para) then
-           Weiss_red=Weiss(1:2,:,:,:,:,:)
-           if (bath_type/="replica") then
-              if(ed_para)then
-                 call ed_chi2_fitgf(Comm,bath_red,Weiss_red,Hloc_red_nnn,ispin=1)
-                 call spin_symmetrize_bath(bath_red,.true.)
-              else
-                 call ed_chi2_fitgf(Comm,bath_red,Weiss_red,Hloc_red_nnn)
-              endif
+     if(ed_para)then
+        !
+        if(cg_scheme=='weiss')then
+           !
+           !get Weiss
+           call dmft_weiss(Gmats,Smats,Weiss,Hloc_nnn)
+           call dmft_print_gf_matsubara(Weiss,"WeissG0",iprint=6)
+           !mix Weiss
+           if(iloop>1)Weiss = wmixing*Weiss + (1.d0-wmixing)*Weiss_old
+           !old Weiss
+           Weiss_old=Weiss
+           !fit Weiss
+           call set_Hloc(Hloc_red_nnn)
+           Weiss_red=Weiss(1,:,:,:,:,:)
+           if(bath_type/="replica")then
+              call ed_chi2_fitgf(Comm,Weiss_red,bath_red,ispin=1)
+              call spin_symmetrize_bath(bath_red,save=.true.)
            else
-              call ed_chi2_fitgf(Comm,bath_red,Weiss_red,Hloc_red_nnn)
+              call ed_chi2_fitgf(Comm,Weiss_red,bath_red)
            endif
-           Weiss(1:2,:,:,:,:,:)=Weiss_red;Weiss(3:4,:,:,:,:,:)=Weiss_red
-        else
-           if (bath_type/="replica") then
-              if(ed_para)then
-                 call ed_chi2_fitgf(Comm,bath,Weiss,Hloc_nnn,ispin=1)
-                 call spin_symmetrize_bath(bath,.true.)
-              else
-                 call ed_chi2_fitgf(Comm,bath,Weiss,Hloc_nnn)
-              endif
+           do ilat=1,Nlat
+              Weiss(ilat,:,:,:,:,:)=Weiss_red
+           enddo
+           !
+        elseif(cg_scheme=='delta')then
+           !
+           !get Delta
+           call dmft_delta(Gmats,Smats,Delta,Hloc_nnn)
+           call dmft_print_gf_matsubara(Delta,"Delta",iprint=6)
+           !mix Delta
+           if(iloop>1)Delta = wmixing*Delta + (1.d0-wmixing)*Delta_old
+           !old Delta
+           Delta_old=Delta
+           !fit Delta
+           call set_Hloc(Hloc_red_nnn)
+           Delta_red=Delta(1,:,:,:,:,:)
+           if(bath_type/="replica")then
+              call ed_chi2_fitgf(Comm,Delta_red,bath_red,ispin=1)
+              call spin_symmetrize_bath(bath_red,save=.true.)
            else
-              call ed_chi2_fitgf(Comm,bath,Weiss,Hloc_nnn)
+              call ed_chi2_fitgf(Comm,Delta_red,bath_red)
            endif
+           do ilat=1,Nlat
+              Delta(ilat,:,:,:,:,:)=Delta_red
+           enddo
+           !
         endif
-     elseif(cg_scheme=='delta')then
-        !get Delta
-        call dmft_delta(Gmats,Smats,Delta,Hloc_nnn)
-        call dmft_print_gf_matsubara(Delta,"Delta",iprint=6)
-        !mix Delta
-        if(iloop>1)Delta = wmixing*Delta + (1.d0-wmixing)*Delta_old
-        !old Delta
-        Delta_old=Delta
-        !fit Delta
-        if(ed_para) then
-           Delta_red=Delta(1:2,:,:,:,:,:)
-           if (bath_type/="replica") then
-              if(ed_para)then
-                 call ed_chi2_fitgf(Comm,bath_red,Delta_red,Hloc_red_nnn,ispin=1)
-                 call spin_symmetrize_bath(bath_red,.true.)
-              else
-                 call ed_chi2_fitgf(Comm,bath_red,Delta_red,Hloc_red_nnn)
-              endif
-           else
-              call ed_chi2_fitgf(Comm,bath_red,Delta_red,Hloc_red_nnn)
-           endif
-           Delta(1:2,:,:,:,:,:)=Delta_red;Delta(3:4,:,:,:,:,:)=Delta_red
-        else
-           if (bath_type/="replica") then
-              if(ed_para)then
-                 call ed_chi2_fitgf(Comm,bath,Delta,Hloc_nnn,ispin=1)
-                 call spin_symmetrize_bath(bath,.true.)
-              else
-                 call ed_chi2_fitgf(Comm,bath,Delta,Hloc_nnn)
-              endif
-           else
-              call ed_chi2_fitgf(Comm,bath,Delta,Hloc_nnn)
-           endif
+        !
+     else
+        !
+        if(cg_scheme=='weiss')then
+           !
+           !get Weiss
+           call dmft_weiss(Gmats,Smats,Weiss,Hloc_nnn)
+           call dmft_print_gf_matsubara(Weiss,"WeissG0",iprint=6)
+           !mix Weiss
+           if(iloop>1)Weiss = wmixing*Weiss + (1.d0-wmixing)*Weiss_old
+           !old Weiss
+           Weiss_old=Weiss
+           !fit Weiss
+           call ed_chi2_fitgf(Comm,bath,Weiss,Hloc_nnn)
+           !
+        elseif(cg_scheme=='delta')then
+           !
+           !get Delta
+           call dmft_delta(Gmats,Smats,Delta,Hloc_nnn)
+           call dmft_print_gf_matsubara(Delta,"Delta",iprint=6)
+           !mix Delta
+           if(iloop>1)Delta = wmixing*Delta + (1.d0-wmixing)*Delta_old
+           !old Delta
+           Delta_old=Delta
+           !fit Delta
+           call ed_chi2_fitgf(Comm,bath,Delta,Hloc_nnn)
+           !
         endif
+        !
      endif
      !
      !each loop operations
@@ -247,21 +268,24 @@ program ed_LVO_hetero
         !
         !e - chemical potential find
         converged_n=.true.
+        sumdens=0d0
         xmu_old=xmu
         if(ed_para)then
-           Nlat_max=2
+           allocate(orb_dens_red(Norb));orb_dens_red=0.d0
+           call ed_get_dens(orb_dens_red)
+           write(LOGfile,*)"  Nlat:",1,orb_dens_red(:)
+           sumdens=sum(orb_dens_red)
+           deallocate(orb_dens_red)
         else
-           Nlat_max=4
+           allocate(orb_dens(Nlat,Norb));orb_dens=0.d0
+           call ed_get_dens(orb_dens,Nlat)
+           do ilat=1,Nlat
+              sumdens=sumdens+sum(orb_dens(ilat,:))/float(Nlat_max)
+              write(LOGfile,*)"  Nlat:",ilat,orb_dens(ilat,:)
+           enddo
+           deallocate(orb_dens)
         endif
-        allocate(orb_dens(Nlat_max,Norb));orb_dens=0.d0
-        call ed_get_dens(orb_dens,Nlat_max)
-        sumdens=0d0
-        do ilat=1,Nlat_max
-           sumdens=sumdens+sum(orb_dens(ilat,:))/float(Nlat_max)
-           write(LOGfile,*)"  Nlat:",ilat,orb_dens(1,:)
-        enddo
         write(LOGfile,*)"  n avrg:",sumdens
-        deallocate(orb_dens)
         !
         if(nread/=0.d0.and.look4n)then
            converged_n=.false.
@@ -545,6 +569,7 @@ contains
     real(8)        ,allocatable,dimension(:,:)      :: kpath,kgrid,Scorr
     complex(8)     ,allocatable,dimension(:,:,:)    :: Hkpath
     complex(8)     ,allocatable                     :: Gkreal(:,:,:,:,:,:,:)
+    complex(8)     ,allocatable                     :: Gkr(:,:,:,:)
     type(rgb_color),allocatable,dimension(:)        :: colors,colors_orb
     logical                                         :: IOfile
     !
@@ -600,11 +625,22 @@ contains
     do ik=1,Lk
        call dmft_gk_realaxis(Hkpath(:,:,ik),1.d0/Lk,Gkreal(ik,:,:,:,:,:,:),Sreal)
     enddo
-    open(unit=106,file='Akw.dat',status='unknown',action='write',position='rewind')
+    !
+    allocate(Gkr(Lk,Nspin*Nlat*Norb,Nspin*Nlat*Norb,Lreal));Gkr=zero
+    do ik=1,Lk
+       do ifreq=1,Lreal
+          Gkr(ik,:,:,ifreq)=matmul(P,matmul(nnn2lso_reshape(Gkreal(ik,:,:,:,:,:,ifreq),Nlat,Nspin,Norb),transpose(P)))
+       enddo
+    enddo
+    !
+    open(unit=106,file='Akw_s1.dat',status='unknown',action='write',position='rewind')
+    open(unit=107,file='Akw_s2.dat',status='unknown',action='write',position='rewind')
     do ifreq=1,Lreal
-       write(106,'(9000F18.12)')wr(ifreq),(2.*trace(-aimag(nnn2lso_reshape(Gkreal(ik,:,:,:,:,:,ifreq),Nlat,Nspin,Norb))/pi)+10.*ik,ik=1,Lk)
+       write(106,'(9000F18.12)')wr(ifreq),(10.*trace(-aimag(Gkr(ik,1:Nlat*Norb,1:Nlat*Norb,ifreq))/pi)+10.*ik,ik=1,Lk)
+       write(107,'(9000F18.12)')wr(ifreq),(10.*trace(-aimag(Gkr(ik,1+Nlat*Norb:Nlat*Nspin*Norb,1+Nlat*Norb:Nlat*Nspin*Norb,ifreq))/pi)+10.*ik,ik=1,Lk)
     enddo
     close(106)
+    close(107)
     write(LOGfile,*)"Im done on the path"
     !
   end subroutine build_eigenbands
