@@ -16,43 +16,46 @@ program ed_LVO_hetero
   !
   integer                                        :: iloop,i,j
   integer                                        :: Nlat,ilat
-  integer                                        :: io,jo
+  integer                                        :: ilayer,Nlayer
+  integer                                        :: io,jo,ik
   integer                                        :: iorb,jorb,ispin,jspin
   logical                                        :: converged
   real(8)                                        :: wmixing
   character(len=60)                              :: finput
   character(len=32)                              :: hkfile
+  character(len=32)                              :: geometry
   !Mpi:
   integer                                        :: comm,rank,ier
   logical                                        :: master
   !Bath:
   integer                                        :: Nb,unit
   real(8)   ,allocatable,dimension(:,:)          :: Bath
-  real(8)   ,allocatable,dimension(:)            :: Bath_red
+  real(8)   ,allocatable,dimension(:)            :: Bath_single
   !Local lattice functions:
   complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Smats,Sreal
   complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Gmats,Greal
   !Weiss&Hybridization functions
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Weiss,Weiss_old
-  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Delta,Delta_old
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: field
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: field_red,field_red_old
+  complex(8),allocatable,dimension(:,:,:,:,:)    :: field_single,field_single_old
   !reduced functions
-  complex(8),allocatable,dimension(:,:,:,:,:)    :: Smats_red,Sreal_red
-  complex(8),allocatable,dimension(:,:,:,:,:)    :: Weiss_red,Delta_red
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Smats_red,Sreal_red
+  complex(8),allocatable,dimension(:,:,:,:,:)    :: Smats_single,Sreal_single
   !Hmiltonian input:
   integer                                        :: Nk,Nkpath
   real(8)   ,allocatable,dimension(:)            :: Wtk
   complex(8),allocatable,dimension(:,:,:)        :: Hk
   complex(8),allocatable,dimension(:,:)          :: Hloc_nso
   complex(8),allocatable,dimension(:,:,:,:,:)    :: Hloc_nnn
-  complex(8),allocatable,dimension(:,:,:,:)      :: Hloc_red_nnn
+  complex(8),allocatable,dimension(:,:,:,:,:)    :: Hloc_red_nnn
+  complex(8),allocatable,dimension(:,:,:,:)      :: Hloc_single_nn
   !custom variables for convergence test:
   complex(8),allocatable,dimension(:)            :: conv_funct
   !custom variables for chempot search:
   character(len=32)                              :: ed_file_suffix
   logical                                        :: converged_n,upprshft
   integer                                        :: conv_n_loop=0,Nlat_max
-  real(8)   ,allocatable,dimension(:)            :: bottom,top,shift
-  real(8)                                        :: Alvl=0.d0
+  real(8)                                        :: xmu_start
   real(8)                                        :: dw,sumdens,xmu_old
   real(8)   ,allocatable,dimension(:)            :: wr,wm
   real(8)   ,allocatable,dimension(:,:)          :: orb_dens
@@ -60,6 +63,10 @@ program ed_LVO_hetero
   logical                                        :: look4n=.true.
   !custom variables misc:
   logical                                        :: computeG0loc
+  logical                                        :: lattice_flag=.true.
+  logical                                        :: bulk_magsym
+  complex(8),allocatable,dimension(:,:,:)        :: Gloc
+  complex(8),allocatable,dimension(:,:)          :: zeta
   !
   !#########   MPI INITIALIZATION   #########
   !
@@ -77,6 +84,8 @@ program ed_LVO_hetero
   call parse_input_variable(nkpath,         "NKPATH",finput,       default=20)
   call parse_input_variable(wmixing,        "WMIXING",finput,      default=0.5d0)
   call parse_input_variable(computeG0loc,   "COMPUTEG0loc",finput, default=.false.)
+  call parse_input_variable(geometry,       "GEOMETRY",finput,     default="bulk")
+  call parse_input_variable(bulk_magsym,    "BULKMAGSYM",finput,   default=.false.)
   !
   call ed_read_input(trim(finput),comm)
   !
@@ -93,27 +102,38 @@ program ed_LVO_hetero
   call add_ctrl_var(ed_para,"ed_para")
   call add_ctrl_var(ed_file_suffix,"ed_file_suffix")
   !
-  !#########       ALLOCATION       #########
+  geometry=reg(geometry)
+  if (geometry=="bulk".and.ed_para)    lattice_flag=.false.
+  if (geometry=="bulk".and.bulk_magsym)lattice_flag=.false.
+  xmu_start=xmu
+  Nlayer=Nlat/2
   !
+  !##################       ALLOCATION       !##################
+  !
+  !1)Global qualntities
   allocate(Smats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Smats=zero
   allocate(Gmats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Gmats=zero
   allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));            Sreal=zero
   allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));            Greal=zero
-  allocate(Weiss(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Weiss=zero
-  allocate(Delta(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            Delta=zero
-  !
-  allocate(weiss_old(Nlat,Nspin,Nspin,Norb,Norb,Lmats));        weiss_old=zero
-  allocate(delta_old(Nlat,Nspin,Nspin,Norb,Norb,Lmats));        delta_old=zero
+  allocate(field(Nlat,Nspin,Nspin,Norb,Norb,Lmats));            field=zero
   !
   allocate(Hk(Nlat*Nspin*Norb,Nlat*Nspin*Norb,Nk*Nk*Nk));       Hk=zero
   allocate(Hloc_nso(Nlat*Nspin*Norb,Nlat*Nspin*Norb));          Hloc_nso=zero
   allocate(Hloc_nnn(Nlat,Nspin,Nspin,Norb,Norb));               Hloc_nnn=zero
   !
-  allocate(Hloc_red_nnn(Nspin,Nspin,Norb,Norb));                Hloc_red_nnn=zero
-  allocate(Smats_red(Nspin,Nspin,Norb,Norb,Lmats));             Smats_red=zero
-  allocate(Sreal_red(Nspin,Nspin,Norb,Norb,Lreal));             Sreal_red=zero
-  allocate(weiss_red(Nspin,Nspin,Norb,Norb,Lmats));             weiss_red=zero
-  allocate(delta_red(Nspin,Nspin,Norb,Norb,Lmats));             delta_red=zero
+  !2)single site quantities (used for bulk+para)
+  allocate(Hloc_single_nn(Nspin,Nspin,Norb,Norb));              Hloc_single_nn=zero
+  allocate(Smats_single(Nspin,Nspin,Norb,Norb,Lmats));          Smats_single=zero
+  allocate(Sreal_single(Nspin,Nspin,Norb,Norb,Lreal));          Sreal_single=zero
+  allocate(field_single(Nspin,Nspin,Norb,Norb,Lmats));          field_single=zero
+  allocate(field_single_old(Nspin,Nspin,Norb,Norb,Lmats));      field_single_old=zero
+  !
+  !3)Layer quantities (used for bulk+afm,hetero+para,hetero+afm)
+  allocate(Hloc_red_nnn(Nlayer,Nspin,Nspin,Norb,Norb));         Hloc_red_nnn=zero
+  allocate(Smats_red(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));      Smats_red=zero
+  allocate(Sreal_red(Nlayer,Nspin,Nspin,Norb,Norb,Lreal));      Sreal_red=zero
+  allocate(field_red(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));      field_red=zero
+  allocate(field_red_old(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));  field_red_old=zero
   !
   allocate(conv_funct(Lmats));                                  conv_funct=zero
   allocate(wr(Lreal));wr=0.0d0;                                 wr=linspace(wini,wfin,Lreal,mesh=dw)
@@ -123,36 +143,39 @@ program ed_LVO_hetero
   Lfit=min(int((Uloc(1)+3.)*(beta/pi))+100,Lmats)
   if(master)write(LOGfile,'(a12,I6,2(a12,F10.3))')"Lfit:",Lfit,"iwmax:",(pi/beta)*(2*Lfit-1),"U+2D:",Uloc(1)+3.
   !
-  !#########        BUILD Hk        #########
+  !##################        BUILD Hk        ##################
   !
   call read_myhk("LVO_hr.dat","Hk.dat","Hloc.dat","Kpoints.dat")
-  Hloc_red_nnn=Hloc_nnn(1,:,:,:,:)
+  Hloc_single_nn=Hloc_nnn(1,:,:,:,:)
+  do ilayer=1,Nlayer
+     Hloc_red_nnn(ilayer,:,:,:,:)=Hloc_nnn(2*ilayer-1,:,:,:,:)
+  enddo
   !
   !call ed_read_impSigma_lattice(Nlat)
   !call ed_get_Sreal(Sreal,Nlat)
   !if(master)call build_eigenbands("LVO_hr.dat","Bands","Hk_path.dat","Kpoints_path.dat",Sreal)
   !stop
   !
-  !#########          BATH          #########
+  !##################          BATH          ##################
   !
   if (bath_type/="replica") then
      Nb=get_bath_dimension()
   else
      Nb=get_bath_dimension(Hloc_nnn(1,:,:,:,:))
   endif
-  if(master)write(LOGfile,*)"   Bath_size:",Nb
-  allocate(Bath(Nlat,Nb));      Bath=0.0d0
-  allocate(Bath_red(Nb));       Bath_red=0.0d0
+  if(master)write(LOGfile,*)"   Bath_size: ",Nb," layers: ",Nlayer
+  allocate(Bath(Nlayer,Nb));    Bath=0.0d0
+  allocate(Bath_single(Nb));    Bath_single=0.0d0
   !
-  !#########      INIT SOLVER       #########
+  !##################      INIT SOLVER       ##################
   !
-  if (ed_para)then
-     call ed_init_solver(Comm,Bath_red,Hloc_red_nnn)
+  if (lattice_flag)then
+     call ed_init_solver(Comm,Bath,Hloc_red_nnn)
   else
-     call ed_init_solver(Comm,Bath,Hloc_nnn)
+     call ed_init_solver(Comm,Bath_single,Hloc_single_nn)
   endif
   !
-  !#########          DMFT          #########
+  !##################          DMFT          ##################
   !
   iloop=0 ; converged=.false.
   do while(.not.converged.AND.iloop<nloop)
@@ -160,107 +183,107 @@ program ed_LVO_hetero
      if(master)call start_loop(iloop,nloop,"DMFT-loop")
      !
      !------  solve impurity  ------
-     if (ed_para)then
-        call ed_solve(comm,Bath_red,Hloc_red_nnn)
+     if (lattice_flag)then
+        call ed_solve(comm,Bath,Hloc_red_nnn)
      else
-        call ed_solve(comm,Bath,Hloc_nnn)
+        call ed_solve(comm,Bath_single,Hloc_single_nn)
      endif
      !
-     !------    get sigmas    ------ FIN QUI
-     if (ed_para)then
+     !------    get sigmas    ------
+     if (lattice_flag)then
         call ed_get_sigma_matsubara(Smats_red)
         call ed_get_sigma_real(Sreal_red)
-        do ilat=1,Nlat
-           Smats(ilat,:,:,:,:,:)=Smats_red
-           Smats(ilat,:,:,:,:,:)=Smats_red
-        enddo
+        if(ed_para)then
+           !I'm plugging impS in the neighboring site same plane no spin-flip
+           do ilayer=1,Nlayer
+              write(LOGfile,'(2(A,I5))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1,"&",2*ilayer
+              !site 1 in plane - same spin - same layer
+              Smats(2*ilayer-1,:,:,:,:,:)=Smats_red(ilayer,:,:,:,:,:)
+              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_red(ilayer,:,:,:,:,:)
+              !site 2 in plane - same spin - same layer
+              Smats(2*ilayer,:,:,:,:,:)  =Smats_red(ilayer,:,:,:,:,:)
+              Sreal(2*ilayer,:,:,:,:,:)  =Sreal_red(ilayer,:,:,:,:,:)
+           enddo
+        elseif(.not.ed_para)then
+           !I'm plugging impS in the neighboring site same plane flipping the spin
+           do ilayer=1,Nlayer
+              write(LOGfile,'(2(A,I5))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1
+              !site 1 in plane - same spin - same layer
+              Smats(2*ilayer-1,:,:,:,:,:)=Smats_red(ilayer,:,:,:,:,:)
+              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_red(ilayer,:,:,:,:,:)
+              write(LOGfile,'(2(A,I5))') " plugghing spin-flipped impS nr.",ilayer," into ilat nr. ",2*ilayer
+              !site 2 in plane - flip spin - same layer
+              Smats(2*ilayer,1,1,:,:,:)  =Smats_red(ilayer,2,2,:,:,:)
+              Smats(2*ilayer,2,2,:,:,:)  =Smats_red(ilayer,1,1,:,:,:)
+              Sreal(2*ilayer,1,1,:,:,:)  =Sreal_red(ilayer,2,2,:,:,:)
+              Sreal(2*ilayer,2,2,:,:,:)  =Sreal_red(ilayer,1,1,:,:,:)
+           enddo
+        endif
      else
-        call ed_get_sigma_matsubara(Smats)
-        call ed_get_sigma_real(Sreal)
+        call ed_get_sigma_matsubara(Smats_single)
+        call ed_get_sigma_real(Sreal_single)
+        if(ed_para)then
+           !I'm plugging same impS in all the sites no spin-flip
+           do ilayer=1,Nlayer
+              write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",2*ilayer-1
+              !site 1 in plane - same spin - same sinlge sigma
+              Smats(2*ilayer-1,:,:,:,:,:)=Smats_single
+              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_single
+              write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",2*ilayer
+              !site 2 in plane - same spin - same sinlge sigma
+              Smats(2*ilayer,:,:,:,:,:)  =Smats_single
+              Sreal(2*ilayer,:,:,:,:,:)  =Sreal_single
+           enddo
+        elseif(.not.ed_para)then
+           !I'm plugging same impS in all the sites flipping the spin
+           do ilayer=1,Nlayer
+              write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",2*ilayer-1
+              !site 1 in plane - same spin - same sinlge sigma
+              Smats(2*ilayer-1,:,:,:,:,:)=Smats_single
+              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_single
+              write(LOGfile,'(A,I5)') " plugghing spin-flipped impS into ilat nr. ",2*ilayer
+              !site 2 in plane - flip spin - same sinlge sigma
+              Smats(2*ilayer,1,1,:,:,:)  =Smats_single(2,2,:,:,:)
+              Smats(2*ilayer,2,2,:,:,:)  =Smats_single(1,1,:,:,:)
+              Sreal(2*ilayer,1,1,:,:,:)  =Sreal_single(2,2,:,:,:)
+              Sreal(2*ilayer,2,2,:,:,:)  =Sreal_single(1,1,:,:,:)
+           enddo
+        endif
      endif
-
      !
      !------  get local Gf's  ------
      call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats,mpi_split='k')
      call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=6)
      !
-     !-  operations on Weiss/Delta -
-     if(ed_para)then
-        !
-        if(cg_scheme=='weiss')then
-           !
-           !get Weiss
-           call dmft_weiss(Gmats,Smats,Weiss,Hloc_nnn)
-           call dmft_print_gf_matsubara(Weiss,"WeissG0",iprint=6)
-           !mix Weiss
-           if(iloop>1)Weiss = wmixing*Weiss + (1.d0-wmixing)*Weiss_old
-           !old Weiss
-           Weiss_old=Weiss
-           !fit Weiss
-           call set_Hloc(Hloc_red_nnn)
-           Weiss_red=Weiss(1,:,:,:,:,:)
-           if(bath_type/="replica")then
-              call ed_chi2_fitgf(Comm,Weiss_red,bath_red,ispin=1)
-              call spin_symmetrize_bath(bath_red,save=.true.)
-           else
-              call ed_chi2_fitgf(Comm,Weiss_red,bath_red)
-           endif
-           do ilat=1,Nlat
-              Weiss(ilat,:,:,:,:,:)=Weiss_red
-           enddo
-           !
-        elseif(cg_scheme=='delta')then
-           !
-           !get Delta
-           call dmft_delta(Gmats,Smats,Delta,Hloc_nnn)
-           call dmft_print_gf_matsubara(Delta,"Delta",iprint=6)
-           !mix Delta
-           if(iloop>1)Delta = wmixing*Delta + (1.d0-wmixing)*Delta_old
-           !old Delta
-           Delta_old=Delta
-           !fit Delta
-           call set_Hloc(Hloc_red_nnn)
-           Delta_red=Delta(1,:,:,:,:,:)
-           if(bath_type/="replica")then
-              call ed_chi2_fitgf(Comm,Delta_red,bath_red,ispin=1)
-              call spin_symmetrize_bath(bath_red,save=.true.)
-           else
-              call ed_chi2_fitgf(Comm,Delta_red,bath_red)
-           endif
-           do ilat=1,Nlat
-              Delta(ilat,:,:,:,:,:)=Delta_red
-           enddo
-           !
-        endif
-        !
+     !------    get field     ------
+     if(cg_scheme=='weiss')then
+        call dmft_weiss(Gmats,Smats,field,Hloc_nnn)
+        call dmft_print_gf_matsubara(field,"Weiss",iprint=6)
+     elseif(cg_scheme=='delta')then
+        call dmft_delta(Gmats,Smats,field,Hloc_nnn)
+        call dmft_print_gf_matsubara(field,"Delta",iprint=6)
+     endif
+     !
+     !------  reduce field    ------
+     field_single=field(1,:,:,:,:,:)
+     do ilayer=1,Nlayer
+        field_red(ilayer,:,:,:,:,:)=field(2*ilayer-1,:,:,:,:,:)
+     enddo
+     !
+     !------    mix field     ------
+     if(iloop>1)then
+        field_red    = wmixing*field_red    + (1.d0-wmixing)*field_red_old
+        field_single = wmixing*field_single + (1.d0-wmixing)*field_single_old
+     endif
+     field_single_old=field_single
+     field_red_old=field_red
+     !
+     !------    fit field     ------
+     if (lattice_flag)then
+        call ed_chi2_fitgf(Comm,Bath,field_red,Hloc_red_nnn)
      else
-        !
-        if(cg_scheme=='weiss')then
-           !
-           !get Weiss
-           call dmft_weiss(Gmats,Smats,Weiss,Hloc_nnn)
-           call dmft_print_gf_matsubara(Weiss,"WeissG0",iprint=6)
-           !mix Weiss
-           if(iloop>1)Weiss = wmixing*Weiss + (1.d0-wmixing)*Weiss_old
-           !old Weiss
-           Weiss_old=Weiss
-           !fit Weiss
-           call ed_chi2_fitgf(Comm,bath,Weiss,Hloc_nnn)
-           !
-        elseif(cg_scheme=='delta')then
-           !
-           !get Delta
-           call dmft_delta(Gmats,Smats,Delta,Hloc_nnn)
-           call dmft_print_gf_matsubara(Delta,"Delta",iprint=6)
-           !mix Delta
-           if(iloop>1)Delta = wmixing*Delta + (1.d0-wmixing)*Delta_old
-           !old Delta
-           Delta_old=Delta
-           !fit Delta
-           call ed_chi2_fitgf(Comm,bath,Delta,Hloc_nnn)
-           !
-        endif
-        !
+        call set_Hloc(Hloc_single_nn)
+        call ed_chi2_fitgf(Comm,field_single,bath_single)
      endif
      !
      !each loop operations
@@ -277,11 +300,11 @@ program ed_LVO_hetero
            sumdens=sum(orb_dens_red)
            deallocate(orb_dens_red)
         else
-           allocate(orb_dens(Nlat,Norb));orb_dens=0.d0
-           call ed_get_dens(orb_dens,Nlat)
-           do ilat=1,Nlat
-              sumdens=sumdens+sum(orb_dens(ilat,:))/float(Nlat_max)
-              write(LOGfile,*)"  Nlat:",ilat,orb_dens(ilat,:)
+           allocate(orb_dens(Nlayer,Norb));orb_dens=0.d0
+           call ed_get_dens(orb_dens,Nlayer)
+           do ilayer=1,Nlayer
+              sumdens=sumdens+sum(orb_dens(ilayer,:))/float(Nlayer)
+              write(LOGfile,*)"  Nlat:",ilayer,orb_dens(ilayer,:)
            enddo
            deallocate(orb_dens)
         endif
@@ -300,13 +323,13 @@ program ed_LVO_hetero
         !f - convergence
         write(LOGfile,*)
         write(LOGfile,*) "   ------------------- convergence --------------------"
-        if(cg_scheme=='weiss')then
+        if (lattice_flag)then
            do i=1,Lmats
-              conv_funct(i)=sum(nnn2lso_reshape(weiss(:,:,:,:,:,i),Nlat,Nspin,Norb))
+              conv_funct(i)=sum(nnn2lso_reshape(field_red(:,:,:,:,:,i),Nlayer,Nspin,Norb))
            enddo
         else
            do i=1,Lmats
-              conv_funct(i)=sum(nnn2lso_reshape(delta(:,:,:,:,:,i),Nlat,Nspin,Norb))
+              conv_funct(i)=sum(nn2so_reshape(field_single(:,:,:,:,i),Nspin,Norb))
            enddo
         endif
         if(converged_n)converged = check_convergence(conv_funct,dmft_error,nsuccess,nloop)
@@ -330,8 +353,20 @@ program ed_LVO_hetero
   !
   !#########     BUILD Gloc(wr)     #########
   !
-  call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal,mpi_split='k')
-  call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
+  !call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal,mpi_split='k')
+  if(master) then
+     allocate(Gloc(Nlat*Nspin*Norb,Nlat*Nspin*Norb,Lreal));Gloc=zero
+     allocate(zeta(Nlat*Nspin*Norb,Nlat*Nspin*Norb))      ;zeta=zero
+     do i=1,Lreal
+        zeta=zero
+        do ik=1,Nk*Nk*Nk
+           zeta=Hk(:,:,ik)+nnn2lso_reshape(Sreal(:,:,:,:,:,i),Nlat,Nspin,Norb)
+           Gloc(:,:,i)=Gloc(:,:,i) + inverse_g0k(dcmplx(wr(i),eps),zeta,Nlat,xmu)/(Nk*Nk*Nk)
+        enddo
+       Greal(:,:,:,:,:,i)=lso2nnn_reshape(Gloc(:,:,i),Nlat,Nspin,Norb)
+     enddo
+     call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
+  endif
   !
   !#########    BUILD Hk ON PATH    #########
   !
