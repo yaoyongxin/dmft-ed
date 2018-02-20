@@ -14,7 +14,7 @@ program ed_LVO_hetero
   !
   !#########   VARIABLEs DECLARATION   #########
   !
-  integer                                        :: iloop,i,j
+  integer                                        :: iloop,i,j,ndx
   integer                                        :: Nlat,ilat
   integer                                        :: ilayer,Nlayer
   integer                                        :: io,jo,ik
@@ -24,6 +24,7 @@ program ed_LVO_hetero
   character(len=60)                              :: finput
   character(len=32)                              :: hkfile
   character(len=32)                              :: geometry
+  character(len=32)                              :: z_symmetry
   !Mpi:
   integer                                        :: comm,rank,ier
   logical                                        :: master
@@ -37,7 +38,9 @@ program ed_LVO_hetero
   !Weiss&Hybridization functions
   complex(8),allocatable,dimension(:,:,:,:,:,:)  :: field
   complex(8),allocatable,dimension(:,:,:,:,:,:)  :: field_red,field_red_old
+  complex(8),allocatable,dimension(:,:,:,:,:,:,:):: field_red_mem
   complex(8),allocatable,dimension(:,:,:,:,:)    :: field_single,field_single_old
+  complex(8),allocatable,dimension(:,:,:,:,:,:)  :: field_single_mem
   !reduced functions
   complex(8),allocatable,dimension(:,:,:,:,:,:)  :: Smats_red,Sreal_red
   complex(8),allocatable,dimension(:,:,:,:,:)    :: Smats_single,Sreal_single
@@ -51,6 +54,7 @@ program ed_LVO_hetero
   complex(8),allocatable,dimension(:,:,:,:)      :: Hloc_single_nn
   !custom variables for convergence test:
   complex(8),allocatable,dimension(:)            :: conv_funct
+  complex(8),allocatable,dimension(:,:)          :: conv_funct_mem
   !custom variables for chempot search:
   character(len=32)                              :: ed_file_suffix
   logical                                        :: converged_n,upprshft
@@ -85,6 +89,7 @@ program ed_LVO_hetero
   call parse_input_variable(wmixing,        "WMIXING",finput,      default=0.5d0)
   call parse_input_variable(computeG0loc,   "COMPUTEG0loc",finput, default=.false.)
   call parse_input_variable(geometry,       "GEOMETRY",finput,     default="bulk")
+  call parse_input_variable(z_symmetry,     "ZSYMMETRY",finput,    default="FERRO")
   call parse_input_variable(bulk_magsym,    "BULKMAGSYM",finput,   default=.false.)
   !
   call ed_read_input(trim(finput),comm)
@@ -103,8 +108,10 @@ program ed_LVO_hetero
   call add_ctrl_var(ed_file_suffix,"ed_file_suffix")
   !
   geometry=reg(geometry)
+  z_symmetry=reg(z_symmetry)
   if (geometry=="bulk".and.ed_para)    lattice_flag=.false.
   if (geometry=="bulk".and.bulk_magsym)lattice_flag=.false.
+  if (geometry=="bulk".and.Nlat/=4) stop
   xmu_start=xmu
   Nlayer=Nlat/2
   !
@@ -127,6 +134,7 @@ program ed_LVO_hetero
   allocate(Sreal_single(Nspin,Nspin,Norb,Norb,Lreal));          Sreal_single=zero
   allocate(field_single(Nspin,Nspin,Norb,Norb,Lmats));          field_single=zero
   allocate(field_single_old(Nspin,Nspin,Norb,Norb,Lmats));      field_single_old=zero
+  allocate(field_single_mem(Nspin,Nspin,Norb,Norb,Lmats,3));    field_single_mem=zero
   !
   !3)Layer quantities (used for bulk+afm,hetero+para,hetero+afm)
   allocate(Hloc_red_nnn(Nlayer,Nspin,Nspin,Norb,Norb));         Hloc_red_nnn=zero
@@ -134,6 +142,7 @@ program ed_LVO_hetero
   allocate(Sreal_red(Nlayer,Nspin,Nspin,Norb,Norb,Lreal));      Sreal_red=zero
   allocate(field_red(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));      field_red=zero
   allocate(field_red_old(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));  field_red_old=zero
+  allocate(field_red_mem(Nlayer,Nspin,Nspin,Norb,Norb,Lmats,3));field_red_mem=zero
   !
   allocate(conv_funct(Lmats));                                  conv_funct=zero
   allocate(wr(Lreal));wr=0.0d0;                                 wr=linspace(wini,wfin,Lreal,mesh=dw)
@@ -224,30 +233,47 @@ program ed_LVO_hetero
         call ed_get_sigma_real(Sreal_single)
         if(ed_para)then
            !I'm plugging same impS in all the sites no spin-flip
-           do ilayer=1,Nlayer
-              write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",2*ilayer-1
+           do ilat=1,Nlat
+              write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",ilat
               !site 1 in plane - same spin - same sinlge sigma
-              Smats(2*ilayer-1,:,:,:,:,:)=Smats_single
-              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_single
-              write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",2*ilayer
-              !site 2 in plane - same spin - same sinlge sigma
-              Smats(2*ilayer,:,:,:,:,:)  =Smats_single
-              Sreal(2*ilayer,:,:,:,:,:)  =Sreal_single
+              Smats(ilat,:,:,:,:,:)=Smats_single
+              Sreal(ilat,:,:,:,:,:)=Sreal_single
            enddo
         elseif(.not.ed_para)then
-           !I'm plugging same impS in all the sites flipping the spin
-           do ilayer=1,Nlayer
-              write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",2*ilayer-1
-              !site 1 in plane - same spin - same sinlge sigma
-              Smats(2*ilayer-1,:,:,:,:,:)=Smats_single
-              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_single
-              write(LOGfile,'(A,I5)') " plugghing spin-flipped impS into ilat nr. ",2*ilayer
-              !site 2 in plane - flip spin - same sinlge sigma
-              Smats(2*ilayer,1,1,:,:,:)  =Smats_single(2,2,:,:,:)
-              Smats(2*ilayer,2,2,:,:,:)  =Smats_single(1,1,:,:,:)
-              Sreal(2*ilayer,1,1,:,:,:)  =Sreal_single(2,2,:,:,:)
-              Sreal(2*ilayer,2,2,:,:,:)  =Sreal_single(1,1,:,:,:)
-           enddo
+           if(z_symmetry=="ANTIFERRO")then
+              write(LOGfile,'(A,I5)') " AFM in all directions"
+              !site 1 == reference
+              Smats(1,:,:,:,:,:)=Smats_single
+              Sreal(1,:,:,:,:,:)=Sreal_single
+              !site 2 flip-reference
+              Smats(2,1,1,:,:,:)=Smats_single(2,2,:,:,:)
+              Smats(2,2,2,:,:,:)=Smats_single(1,1,:,:,:)
+              Sreal(2,1,1,:,:,:)=Sreal_single(2,2,:,:,:)
+              Sreal(2,2,2,:,:,:)=Sreal_single(1,1,:,:,:)
+              !site 3 flip-reference
+              Smats(3,1,1,:,:,:)=Smats_single(2,2,:,:,:)
+              Smats(3,2,2,:,:,:)=Smats_single(1,1,:,:,:)
+              Sreal(3,1,1,:,:,:)=Sreal_single(2,2,:,:,:)
+              Sreal(3,2,2,:,:,:)=Sreal_single(1,1,:,:,:)
+              !site 4 == reference
+              Smats(4,:,:,:,:,:)=Smats_single
+              Sreal(4,:,:,:,:,:)=Sreal_single
+           elseif(z_symmetry=="FERRO")then
+              write(LOGfile,'(A,I5)') " AFM in plane - ferro between planes"
+              !I'm plugging same impS in all the sites flipping the spin
+              do ilayer=1,Nlayer
+                 write(LOGfile,'(A,I5)') " plugghing impS into ilat nr. ",2*ilayer-1
+                 !site 1 in plane - same spin - same sinlge sigma
+                 Smats(2*ilayer-1,:,:,:,:,:)=Smats_single
+                 Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_single
+                 write(LOGfile,'(A,I5)') " plugghing spin-flipped impS into ilat nr. ",2*ilayer
+                 !site 2 in plane - flip spin - same sinlge sigma
+                 Smats(2*ilayer,1,1,:,:,:)  =Smats_single(2,2,:,:,:)
+                 Smats(2*ilayer,2,2,:,:,:)  =Smats_single(1,1,:,:,:)
+                 Sreal(2*ilayer,1,1,:,:,:)  =Sreal_single(2,2,:,:,:)
+                 Sreal(2*ilayer,2,2,:,:,:)  =Sreal_single(1,1,:,:,:)
+              enddo
+           endif
         endif
      endif
      !
@@ -278,6 +304,19 @@ program ed_LVO_hetero
      field_single_old=field_single
      field_red_old=field_red
      !
+     !------    mem field     ------
+     if(lattice_flag)then
+        do ndx=2,3
+           field_red_mem(:,:,:,:,:,:,ndx-1)=field_red_mem(:,:,:,:,:,:,ndx)
+        enddo
+        field_red_mem(:,:,:,:,:,:,3)=field_red_old
+     else
+        do ndx=2,3
+           field_single_mem(:,:,:,:,:,ndx-1)=field_single_mem(:,:,:,:,:,ndx)
+        enddo
+        field_single_mem(:,:,:,:,:,3)=field_single_old
+     endif
+     !
      !------    fit field     ------
      if (lattice_flag)then
         call ed_chi2_fitgf(Comm,Bath,field_red,Hloc_red_nnn)
@@ -293,13 +332,7 @@ program ed_LVO_hetero
         converged_n=.true.
         sumdens=0d0
         xmu_old=xmu
-        if(ed_para)then
-           allocate(orb_dens_red(Norb));orb_dens_red=0.d0
-           call ed_get_dens(orb_dens_red)
-           write(LOGfile,*)"  Nlat:",1,orb_dens_red(:)
-           sumdens=sum(orb_dens_red)
-           deallocate(orb_dens_red)
-        else
+        if(lattice_flag)then
            allocate(orb_dens(Nlayer,Norb));orb_dens=0.d0
            call ed_get_dens(orb_dens,Nlayer)
            do ilayer=1,Nlayer
@@ -307,6 +340,12 @@ program ed_LVO_hetero
               write(LOGfile,*)"  Nlat:",ilayer,orb_dens(ilayer,:)
            enddo
            deallocate(orb_dens)
+        else
+           allocate(orb_dens_red(Norb));orb_dens_red=0.d0
+           call ed_get_dens(orb_dens_red)
+           write(LOGfile,*)"  Nlat:",1,orb_dens_red(:)
+           sumdens=sum(orb_dens_red)
+           deallocate(orb_dens_red)
         endif
         write(LOGfile,*)"  n avrg:",sumdens
         !
@@ -324,15 +363,39 @@ program ed_LVO_hetero
         write(LOGfile,*)
         write(LOGfile,*) "   ------------------- convergence --------------------"
         if (lattice_flag)then
-           do i=1,Lmats
-              conv_funct(i)=sum(nnn2lso_reshape(field_red(:,:,:,:,:,i),Nlayer,Nspin,Norb))
-           enddo
+           if(ed_para)then
+              do i=1,Lmats
+                 conv_funct(i)=sum(nnn2lso_reshape(field_red(:,:,:,:,:,i),Nlayer,Nspin,Norb))
+              enddo
+           else
+              do ndx=1,3
+                 do i=1,Lmats
+                    conv_funct_mem(i,ndx)=sum(nnn2lso_reshape(field_red_mem(:,:,:,:,:,i,ndx),Nlayer,Nspin,Norb))
+                 enddo
+              enddo
+           endif
         else
-           do i=1,Lmats
-              conv_funct(i)=sum(nn2so_reshape(field_single(:,:,:,:,i),Nspin,Norb))
-           enddo
+           if(ed_para)then
+              do i=1,Lmats
+                 conv_funct(i)=sum(nn2so_reshape(field_single(:,:,:,:,i),Nspin,Norb))
+              enddo
+           else
+              do ndx=1,3
+                 do i=1,Lmats
+                    conv_funct_mem(i,ndx)=sum(nn2so_reshape(field_single_mem(:,:,:,:,i,ndx),Nspin,Norb))
+                 enddo
+              enddo
+           endif
         endif
-        if(converged_n)converged = check_convergence(conv_funct,dmft_error,nsuccess,nloop)
+        if(converged_n)then
+           if(ed_para)then
+              converged = check_convergence(conv_funct,dmft_error,nsuccess,nloop)
+           else
+              do ndx=1,3
+                 converged = check_convergence(conv_funct_mem(:,ndx),dmft_error,nsuccess,nloop,file="error_mem"//str(ndx)//".err",index=ndx)
+              enddo
+           endif
+        endif
         write(LOGfile,'(a35,L3)') "sigma converged",converged
         write(LOGfile,'(a35,L3)') "dens converged",converged_n
         converged = converged .and. converged_n
@@ -351,21 +414,29 @@ program ed_LVO_hetero
      !
   enddo
   !
+  !
+  !#########      compute Ekin      #########
+  !
+  call dmft_kinetic_energy(Comm,Hk,Wtk,Smats)
+  !
   !#########     BUILD Gloc(wr)     #########
   !
-  !call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal,mpi_split='k')
-  if(master) then
-     allocate(Gloc(Nlat*Nspin*Norb,Nlat*Nspin*Norb,Lreal));Gloc=zero
-     allocate(zeta(Nlat*Nspin*Norb,Nlat*Nspin*Norb))      ;zeta=zero
-     do i=1,Lreal
-        zeta=zero
-        do ik=1,Nk*Nk*Nk
-           zeta=Hk(:,:,ik)+nnn2lso_reshape(Sreal(:,:,:,:,:,i),Nlat,Nspin,Norb)
-           Gloc(:,:,i)=Gloc(:,:,i) + inverse_g0k(dcmplx(wr(i),eps),zeta,Nlat,xmu)/(Nk*Nk*Nk)
+  if(nread==0.d0)then
+     call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal,mpi_split='k')
+  else
+     if(master) then
+        allocate(Gloc(Nlat*Nspin*Norb,Nlat*Nspin*Norb,Lreal));Gloc=zero
+        allocate(zeta(Nlat*Nspin*Norb,Nlat*Nspin*Norb))      ;zeta=zero
+        do i=1,Lreal
+           zeta=zero
+           do ik=1,Nk*Nk*Nk
+              zeta=Hk(:,:,ik)+nnn2lso_reshape(Sreal(:,:,:,:,:,i),Nlat,Nspin,Norb)
+              Gloc(:,:,i)=Gloc(:,:,i) + inverse_g0k(dcmplx(wr(i),eps),zeta,Nlat,xmu)/(Nk*Nk*Nk)
+           enddo
+          Greal(:,:,:,:,:,i)=lso2nnn_reshape(Gloc(:,:,i),Nlat,Nspin,Norb)
         enddo
-       Greal(:,:,:,:,:,i)=lso2nnn_reshape(Gloc(:,:,i),Nlat,Nspin,Norb)
-     enddo
-     call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
+        call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
+     endif
   endif
   !
   !#########    BUILD Hk ON PATH    #########
@@ -583,7 +654,8 @@ contains
     enddo
     !
     !--------------------  Global reordering   -------------------------
-    Porder=matmul(P1,matmul(P2,P3))
+    Porder=matmul(P1,P2)
+    !Porder=matmul(P1,matmul(P2,P3))
     !
   end subroutine Hk_order
 
