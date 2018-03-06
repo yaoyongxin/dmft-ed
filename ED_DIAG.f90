@@ -427,20 +427,20 @@ contains
        case default
           nup   = getnup(isector)
           ndw   = getndw(isector)
-          write(unit,"(i3,f18.12,2x,ES19.12,1x,2i3,3x,i3,i10)")&
+          write(unit,"(i6,f18.12,2x,ES19.12,1x,2i3,3x,i3,i10)")&
                istate,Estate,exp(-beta*(Estate-state_list%emin)),nup,ndw,isector,getdim(isector)
        case("superc")
           sz   = getsz(isector)
-          write(unit,"(i3,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)")&
+          write(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)")&
                istate,Estate,exp(-beta*(Estate-state_list%emin)),sz,isector,getdim(isector)
        case("nonsu2")
           n    = getn(isector)
           if(Jz_basis)then
              Jz   = gettwoJz(isector)/2.
-             write(unit,"(i3,f18.12,2x,ES19.12,1x,i3,3x,F4.1,3x,i3,i10)")&
+             write(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,F4.1,3x,i3,i10)")&
                   istate,Estate,exp(-beta*(Estate-state_list%emin)),n,Jz,isector,getdim(isector)
           else
-             write(unit,"(i3,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)")&
+             write(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)")&
                   istate,Estate,exp(-beta*(Estate-state_list%emin)),n,isector,getdim(isector)
           endif
        end select
