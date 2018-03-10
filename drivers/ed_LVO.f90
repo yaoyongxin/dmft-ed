@@ -133,8 +133,8 @@ program ed_LVO_hetero
   allocate(Hloc_lso(NlNsNo,NlNsNo));                                 Hloc_lso=zero
   allocate(Hloc_nnn(Nlat,Nspin,Nspin,Norb,Norb));                    Hloc_nnn=zero
   allocate(Wtk(Nk*Nk*Nk));                                           Wtk=1.d0/(Nk*Nk*Nk)
-  allocate(U(NlNsNo,NlNsNo));                                        U=zero
-  allocate(Udag(NlNsNo,NlNsNo));                                     Udag=zero
+  allocate(U(NlNsNo,NlNsNo));                                        U=eye(NlNsNo)
+  allocate(Udag(NlNsNo,NlNsNo));                                     Udag=eye(NlNsNo)
   !
   allocate(wr(Lreal));wr=0.0d0;                                      wr=linspace(wini,wfin,Lreal,mesh=dw)
   allocate(wm(Lmats));wm=0.0d0;                                      wm = pi/beta*real(2*arange(1,Lmats)-1,8)
@@ -517,6 +517,7 @@ contains
     Hloc=sum(Hk,dim=3)/Lk
     call TB_write_Hloc(Hloc,reg(fileHloc//".w90"))
     if(local_diagonal_basis)then
+       U=zero;Udag=zero
        call build_rotations(Hloc,Hloc_lso,U)
        Udag=transpose(conjg(U))
     else
