@@ -68,7 +68,7 @@ program ed_LVO_hetero
   complex(8),allocatable,dimension(:,:)               :: zeta
   complex(8),allocatable,dimension(:,:,:)             :: Gloc
   !Ek calculation:
-  logical                                             :: computeEk
+  logical                                             :: computeEk,diaglocalpbm
   real(8)                                             :: Ek
   real(8)   ,allocatable,dimension(:)                 :: Ekm
   complex(8),allocatable,dimension(:,:,:,:,:,:,:)     :: Gkmats
@@ -95,6 +95,7 @@ program ed_LVO_hetero
   call parse_input_variable(bulk_magsym,    "BULKMAGSYM",finput,   default=.false.)
   call parse_input_variable(memory,         "MEMORY",finput,       default=3)
   call parse_input_variable(computeEk,      "COMPUTEEK",finput,    default=.false.)
+  call parse_input_variable(diaglocalpbm,   "DIAGLOCAL",finput,    default=.false.)
   !
   call ed_read_input(trim(finput),comm)
   !
@@ -146,8 +147,12 @@ program ed_LVO_hetero
   !##################        BUILD Hk        ##################
   !
   !
-  call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",.true.)
-  !from here Hloc_lso and Hloc_nnn are in the diagonal basis
+  call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+  if(diaglocalpbm)then
+     write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE DIAGONAL BASIS --- "
+  else
+     write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE NON-DIAGONAL BASIS --- "
+  endif
   !
   !##################          BATH          ##################
   !
@@ -190,8 +195,8 @@ program ed_LVO_hetero
      if (lattice_flag)then
         allocate(Smats_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));Smats_hetero=zero
         allocate(Sreal_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lreal));Sreal_hetero=zero
-        call ed_get_sigma_matsubara(Smats_hetero)
-        call ed_get_sigma_real(Sreal_hetero)
+        call ed_get_sigma_matsubara(Smats_hetero,Nlayer)
+        call ed_get_sigma_real(Sreal_hetero,Nlayer)
         call sigma_symmetrization()
         deallocate(Smats_hetero,Sreal_hetero)
      else
@@ -217,8 +222,10 @@ program ed_LVO_hetero
      endif
      !
      !------   rotate field   (diagonal basis)  --------
-     call rotate_local_funct(field,U)
-     !call dmft_print_gf_matsubara(field,"Weiss_rot",iprint=6)
+     if(diaglocalpbm)then
+        call rotate_local_funct(field,U)
+        call dmft_print_gf_matsubara(field,"Weiss_diag",iprint=6)
+     endif
      !
      !------    mix field     ------
      if(iloop>1)then
@@ -368,8 +375,10 @@ program ed_LVO_hetero
      endif
   endif
   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
-  call rotate_local_funct(Greal,U)
-  call dmft_print_gf_realaxis(Greal,"Gloc_rot",iprint=6)
+  if(diaglocalpbm)then
+     call rotate_local_funct(Greal,U)
+     call dmft_print_gf_realaxis(Greal,"Gloc_diag",iprint=6)
+  endif
   !
   !------   compute Bands  ------
   if(master)call build_eigenbands("LVO_hr.dat","Bands.dat","Hk_path.dat","Kpoints_path.dat",Sreal)
@@ -388,13 +397,7 @@ contains
   !+------------------------------------------------------------------------------------------+!
   subroutine sigma_symmetrization()
     implicit none
-    complex(8),allocatable,dimension(:,:)             ::   Sigma_in
-    complex(8),allocatable,dimension(:,:)             ::   Sigma_out
-    !
-    write(LOGfile,*) "Self-energy symmetrization"
-    !
-    allocate(Sigma_in(NlNsNo,NlNsNo));Sigma_in=zero
-    allocate(Sigma_out(NlNsNo,NlNsNo));Sigma_out=zero
+    write(LOGfile,*) "  Self-energy symmetrization"
     !
     if (lattice_flag)then
        if(ed_para)then
@@ -457,9 +460,15 @@ contains
        endif
     endif
     !
-    deallocate(Sigma_in,Sigma_out)
-    call rotate_local_funct(Smats,Udag)
-    call rotate_local_funct(Sreal,Udag)
+    !rotate sigmas from the imp diagonal basis to the non-diagonal t2g basis
+    if(diaglocalpbm)then
+       call dmft_print_gf_matsubara(Smats,"Smats_diag",iprint=6)
+       call dmft_print_gf_realaxis(Sreal,"Sreal_diag",iprint=6)
+       call rotate_local_funct(Smats,Udag)
+       call rotate_local_funct(Sreal,Udag)
+    endif
+    call dmft_print_gf_matsubara(Smats,"Smats",iprint=6)
+    call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=6)
     !
   end subroutine sigma_symmetrization
   !
