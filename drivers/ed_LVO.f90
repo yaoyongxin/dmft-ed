@@ -64,6 +64,7 @@ program ed_LVO_hetero
   logical                                             :: computeG0loc
   logical                                             :: lattice_flag=.true.
   logical                                             :: bulk_magsym
+  integer                                             :: fake_hetero=5
   complex(8),allocatable,dimension(:,:)               :: U,Udag
   complex(8),allocatable,dimension(:,:)               :: zeta
   complex(8),allocatable,dimension(:,:,:)             :: Gloc
@@ -116,6 +117,9 @@ program ed_LVO_hetero
   if (geometry=="bulk".and.ed_para)    lattice_flag=.false.
   if (geometry=="bulk".and.bulk_magsym)lattice_flag=.false.
   if (geometry=="bulk".and.Nlat/=4) stop
+  !
+  if(fake_hetero/=1)Nlat=Nlat*fake_hetero
+  !
   Nlayer=Nlat/2
   NlNsNo=Nlat*Nspin*Norb
   NsNo=Nspin*Norb
@@ -147,7 +151,12 @@ program ed_LVO_hetero
   !##################        BUILD Hk        ##################
   !
   !
-  call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+  if(fake_hetero==1)then
+     call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+  else
+     call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm,Nlat/fake_hetero)
+  endif
+  !
   if(diaglocalpbm)then
      write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE DIAGONAL BASIS --- "
   else
@@ -239,7 +248,8 @@ program ed_LVO_hetero
            call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
            call spin_symmetrize_bath(Bath,save=.true.)
         else
-           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:))
+           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
+           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=2)
         endif
      else
         call set_Hloc(Hloc_nnn(1,:,:,:,:))
@@ -247,7 +257,8 @@ program ed_LVO_hetero
            call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single,ispin=1)
            call spin_symmetrize_bath(Bath_single,save=.true.)
         else
-           call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single)
+           call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single,ispin=1)
+           call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single,ispin=2)
         endif
      endif
      !
@@ -274,6 +285,7 @@ program ed_LVO_hetero
            allocate(orb_dens_single(Norb));orb_dens_single=0.d0
            allocate(orb_mag_single(Norb));orb_mag_single=0.d0
            call ed_get_dens(orb_dens_single)
+           call ed_get_mag(orb_mag_single)
            write(LOGfile,*)
            write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",1,orb_dens_single(:),orb_mag_single(:)
            write(LOGfile,*)
@@ -381,7 +393,7 @@ program ed_LVO_hetero
   endif
   !
   !------   compute Bands  ------
-  if(master)call build_eigenbands("LVO_hr.dat","Bands.dat","Hk_path.dat","Kpoints_path.dat",Sreal)
+  if(master.and.geometry=="bulk")call build_eigenbands("LVO_hr.dat","Bands.dat","Hk_path.dat","Kpoints_path.dat",Sreal)
   !
   call finalize_MPI()
   !
@@ -480,13 +492,15 @@ contains
   !         translator of the W90 output
   !         The re-ordering part can be used or not, depending on what the user of W90 did.
   !+------------------------------------------------------------------------------------------+!
-  subroutine read_myhk(fileHR,fileHk,fileHloc,fileKpoints,local_diagonal_basis)
+  subroutine read_myhk(fileHR,fileHk,fileHloc,fileKpoints,local_diagonal_basis,Nlat_notfake_)
     implicit none
     character(len=*)            ,intent(in)           ::   fileHR
     character(len=*)            ,intent(in)           ::   fileHk
     character(len=*)            ,intent(in)           ::   fileHloc
     character(len=*)            ,intent(in)           ::   fileKpoints
     logical                     ,intent(in)           ::   local_diagonal_basis
+    integer                     ,intent(in),optional  ::   Nlat_notfake_
+    integer                                           ::   Nlat_notfake,dim_notfake,dim_plane
     logical                                           ::   IOfile
     integer                                           ::   P(NlNsNo,NlNsNo)
     real(8)                                           ::   mu,bk_x(3),bk_y(3),bk_z(3)
@@ -494,6 +508,7 @@ contains
     integer         ,allocatable                      ::   Nkvec(:)
     real(8)         ,allocatable                      ::   Kvec(:,:)
     complex(8)      ,allocatable                      ::   Hloc(:,:)
+    complex(8)      ,allocatable                      ::   Hk_tmp(:,:,:)
     complex(8)      ,allocatable                      ::   Gmats(:,:,:),Greal(:,:,:)
     complex(8)      ,allocatable                      ::   Gso(:,:,:,:,:,:)
     !
@@ -507,6 +522,18 @@ contains
     !
     Lk=Nk*Nk*Nk
     if(master)write(LOGfile,*)" Bulk tot k-points:",Lk
+    !
+    !DEBUG>>
+    Nlat_notfake=Nlat
+    if(present(Nlat_notfake_))then
+       Nlat_notfake=Nlat_notfake_
+       dim_plane=2*Nspin*Norb
+       dim_notfake=Nlat_notfake*Nspin*Norb
+       deallocate(Hk)
+       allocate(Hk(dim_notfake,dim_notfake,Nk*Nk*Nk));Hk=zero
+    endif
+    !>>DEBUG
+    !
     allocate(Hloc(NlNsNo,NlNsNo));Hloc=zero
     allocate(Kvec(Lk,3));Kvec=0d0
     allocate(Nkvec(3));Nkvec=0
@@ -516,11 +543,31 @@ contains
     !
     if(IOfile)then
        write(LOGfile,*) " Reading existing Hk from:  ",fileHk
-       call TB_read_hk(Hk,fileHk,Nspin*Norb*Nlat,1,1,Nlat,Nkvec,Kvec)
+       call TB_read_hk(Hk,fileHk,Nspin*Norb*Nlat_notfake,1,1,Nlat,Nkvec,Kvec)
     else
        write(LOGfile,*) " Transforming HR from:  ",fileHR
-       call TB_hr_to_hk(Hk,fileHR,Nspin,Norb,Nlat,Nkvec,P,Kvec,fileHk,fileKpoints)
+       call TB_hr_to_hk(Hk,fileHR,Nspin,Norb,Nlat_notfake,Nkvec,P,Kvec,fileHk,fileKpoints)
     endif
+    !
+    !DEBUG>>
+    if(present(Nlat_notfake_))then
+       allocate(Hk_tmp(Nlat_notfake*Nspin*Norb,Nlat_notfake*Nspin*Norb,Nk*Nk*Nk));Hk_tmp=zero
+       Hk_tmp=Hk
+       deallocate(Hk)
+       allocate(Hk(NlNsNo,NlNsNo,Nk*Nk*Nk));Hk=zero
+       do i=1,fake_hetero !number of bulk repetitions
+          !diag block
+          Hk(1+dim_notfake*(i-1):dim_notfake*i,1+dim_notfake*(i-1):dim_notfake*i,:)=Hk_tmp
+       enddo
+       do i=1,fake_hetero-1
+          !up block
+          Hk(1+dim_plane+dim_notfake*(i-1):dim_notfake*i,1+dim_notfake*i:1+dim_plane+dim_notfake*i,:)=Hk_tmp(1:dim_plane,1+dim_plane:dim_notfake,:)
+          !dw block
+          Hk(1+dim_notfake*i:1+dim_plane+dim_notfake*i,1+dim_plane+dim_notfake*(i-1):dim_notfake*i,:)=Hk_tmp(1+dim_plane:dim_notfake,1:dim_plane,:)
+       enddo
+       deallocate(Hk_tmp)
+    endif
+    !>>DEBUG
     !
     Hloc=zero
     Hloc=sum(Hk,dim=3)/Lk
