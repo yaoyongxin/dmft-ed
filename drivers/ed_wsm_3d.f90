@@ -355,7 +355,7 @@ contains
     call set_sigmaWSM(sigma)
     call TB_solve_model(hk_weyl,Nso,kpath,Nkpath,&
          colors_name=[red1,blue1,red1,blue1],&
-         points_name=[charactClaudio er(len=10) :: "G","X1","G","X","G","Z","G","M","G","A1","G","A","G","R"],&
+         points_name=[character(len=10) :: "M","X","G","X1","A","R","Z","G"],&
          file="Eig_Htop.ed")
     if (usez) then
       write(*,*) "Z11=",Zmats(1,1)
@@ -580,7 +580,7 @@ contains
       enddo !end run on the border
       z2=z2+IMAG(log(phase))!  !sum the phase to the face
     enddo !end run on face
-    if (abs(z2)>0.6d0)then  !if it's a point, append to Chirality file
+    if (abs(z2)>0.6d0)then  !return chirality
       z2=SIGN(1.0d0,z2/(2*pi))
     else
       z2=0.0d0
