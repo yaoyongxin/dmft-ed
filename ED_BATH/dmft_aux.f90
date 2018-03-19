@@ -139,14 +139,14 @@ subroutine init_dmft_bath(dmft_bath_)
      dmft_bath_%h=zero
      do i=1,Nbath
         !
-        dmft_bath_%h(:,:,:,:,i)=impHloc-noise_b(i)*so2nn_reshape(eye(Nspin*Norb),Nspin,Norb)
+        dmft_bath_%h(:,:,:,:,i)=impHloc-(xmu+noise_b(i))*so2nn_reshape(eye(Nspin*Norb),Nspin,Norb)
         !
      enddo
      !HYBR. INITIALIZATION
      dmft_bath_%vr=zero
      do i=1,Nbath
         noise_tot=noise_b(i)
-        dmft_bath_%vr(i)=cmplx(0.1d0+noise_b(i),0.0d0)!*(-1)**(i-1)
+        dmft_bath_%vr(i)=cmplx(0.5d0+noise_b(i),0.0d0)!*(-1)**(i-1)
      enddo
      !
      deallocate(noise_b,noise_s,noise_o)
@@ -475,7 +475,7 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
   real(8),dimension(:)   :: bath_
   type(effective_bath)   :: dmft_bath_
   integer                :: stride,io,jo,i
-  integer                :: iorb,ispin,jorb,jspin,ibath
+  integer                :: iorb,ispin,jorb,jspin,ibath,maxspin
   logical                :: check
   complex(8)             :: hrep_aux(Nspin*Norb,Nspin*Norb)
   complex(8)             :: U(Nspin*Norb,Nspin*Norb)
@@ -646,7 +646,53 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
   case ('replica')
      !
      select case(ed_mode)
-     case("normal","nonsu2")
+     case("normal")
+        !
+        if(ed_para)then
+           Maxspin=1
+        else
+           Maxspin=2
+        endif
+        dmft_bath_%h=zero
+        dmft_bath_%vr=zero
+        i = 0
+        !all non-vanishing terms in imploc - all spin
+        do ispin=1,Maxspin
+           do iorb=1,Norb
+              do jorb=1,Norb
+                 do ibath=1,Nbath
+                    io = iorb + (ispin-1)*Norb
+                    jo = jorb + (ispin-1)*Norb
+                    if(io.gt.jo)cycle!only diagonal and upper triangular are saved for hermiticity
+                    element_R=0.0d0;element_I=0.0d0
+                    if(dmft_bath_%mask(ispin,ispin,iorb,jorb,1)) then
+                       i=i+1
+                       element_R=bath_(i)
+                    endif
+                    if(dmft_bath_%mask(ispin,ispin,iorb,jorb,2)) then
+                       i=i+1
+                       element_I=bath_(i)
+                    endif
+                    dmft_bath_%h(ispin,ispin,iorb,jorb,ibath)=cmplx(element_R,element_I)
+                    !hermiticity
+                    if(iorb/=jorb)dmft_bath_%h(ispin,ispin,jorb,iorb,ibath)=conjg(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
+                    !spin-conservation
+                    if(Maxspin==1)dmft_bath_%h(2,2,iorb,jorb,ibath)=dmft_bath_%h(1,1,iorb,jorb,ibath)
+                    if(Maxspin==1)dmft_bath_%h(2,2,jorb,iorb,ibath)=dmft_bath_%h(1,1,jorb,iorb,ibath)
+                 enddo
+              enddo
+           enddo
+        enddo
+        !
+        !all Re[Hybr]
+        do ibath=1,Nbath
+           element_R=0.0d0;element_I=0.0d0
+           i=i+1
+           element_R=bath_(i)
+           dmft_bath_%vr(ibath)=cmplx(element_R,element_I)
+        enddo
+        !
+     case("nonsu2")
         !
         dmft_bath_%h=zero
         dmft_bath_%vr=zero
@@ -742,7 +788,7 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
   complex(8)             :: U(Nspin*Norb,Nspin*Norb)
   complex(8)             :: Udag(Nspin*Norb,Nspin*Norb)
   integer                :: stride,io,jo,i
-  integer                :: iorb,ispin,jorb,jspin,ibath
+  integer                :: iorb,ispin,jorb,jspin,ibath,maxspin
   logical                :: check
   if(.not.dmft_bath_%status)stop "get_dmft_bath error: bath not allocated"
   check=check_bath_dimension(bath_)
@@ -908,7 +954,43 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
   case ('replica')
      !
      select case(ed_mode)
-     case("normal","nonsu2")
+     case("normal")
+        !
+        if(ed_para)then
+           Maxspin=1
+        else
+           Maxspin=2
+        endif
+        i = 0
+        !all non-vanishing terms in imploc - all spin
+        do ispin=1,Maxspin
+           do iorb=1,Norb
+              do jorb=1,Norb
+                 do ibath=1,Nbath
+                    io = iorb + (ispin-1)*Norb
+                    jo = jorb + (ispin-1)*Norb
+                    if(io.gt.jo)cycle!only diagonal and upper triangular are saved for hermiticity
+                    if(dmft_bath_%mask(ispin,ispin,iorb,jorb,1)) then
+                       i=i+1
+                       bath_(i)=real(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
+                    endif
+                    if(dmft_bath_%mask(ispin,ispin,iorb,jorb,2)) then
+                       i=i+1
+                       bath_(i)=aimag(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
+                    endif
+                 enddo
+              enddo
+           enddo
+        enddo
+        !
+        !all Re[Hybr]
+        do ibath=1,Nbath
+           i=i+1
+           bath_(i)=real(dmft_bath_%vr(ibath))
+        enddo
+        !
+     case("nonsu2")
+        !
         i = 0
         if(ed_para)then
            do ibath=1,Nbath

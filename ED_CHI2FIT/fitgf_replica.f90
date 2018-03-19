@@ -24,7 +24,7 @@ subroutine chi2_fitgf_replica(fg,bath_)
   real(8)                            :: chi
   logical                            :: check
   type(effective_bath)               :: dmft_bath
-  character(len=20)                  :: suffix
+  character(len=256)                 :: suffix
   integer                            :: unit
   !
   if(size(fg,1)/=Nspin)stop "chi2_fitgf_replica error: size[fg,1]!=Nspin"

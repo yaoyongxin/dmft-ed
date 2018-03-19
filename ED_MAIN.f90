@@ -8,6 +8,7 @@ module ED_MAIN
   USE ED_BATH
   USE ED_HAMILTONIAN_MATVEC
   USE ED_GREENS_FUNCTIONS
+  USE ED_CHI_FUNCTIONS
   USE ED_OBSERVABLES
   USE ED_DIAG
   USE SF_IOTOOLS, only: str,reg
@@ -81,7 +82,7 @@ contains
     !Init bath:
     call set_Hloc(Hloc)
     !
-    check = check_bath_dimension(bath)
+    check = check_bath_dimension(bath,Hloc)
     if(.not.check)stop "init_ed_solver_single error: wrong bath dimensions"
     !
     bath = 0d0
@@ -129,7 +130,7 @@ contains
     !Init bath:
     call set_hloc(Hloc)
     !
-    check = check_bath_dimension(bath)
+    check = check_bath_dimension(bath,Hloc)
     if(.not.check)stop "init_ed_solver_single error: wrong bath dimensions"
     !
     bath = 0d0
@@ -137,6 +138,7 @@ contains
     call allocate_dmft_bath(dmft_bath)
     if(bath_type=="replica")call init_dmft_bath_mask(dmft_bath)
     call init_dmft_bath(dmft_bath)
+    !call write_dmft_bath(dmft_bath,LOGfile)
     call get_dmft_bath(dmft_bath,bath)
     !
     if(isetup)then
@@ -177,15 +179,19 @@ contains
     !
     !
     Nineq = size(bath,1)
-    Nsect = get_Nsectors() !< get # sectors to allocate the following array
-    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
-    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
     do ilat=1,Nineq             !all nodes check the bath, u never know...
        !
        ed_file_suffix=reg(ineq_site_suffix)//str(ilat,site_indx_padding)
        !
        call ed_init_solver_single(bath(ilat,:),Hloc(ilat,:,:,:,:))
        !
+    end do
+    !
+    Nsect = Nsectors !get_Nsectors() !< get # sectors to allocate the following array
+    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
+    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
+    !
+    do ilat=1,Nineq             !all nodes check the bath, u never know...
        neigen_sectorii(ilat,:) = neigen_sector(:)
        neigen_totalii(ilat)    = lanc_nstates_total
     end do
@@ -206,15 +212,18 @@ contains
     !
     !
     Nineq = size(bath,1)
-    Nsect = get_Nsectors() !< get # sectors to allocate the following array
-    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
-    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
     do ilat=1,Nineq             !all nodes check the bath, u never know...
        !
        ed_file_suffix=reg(ineq_site_suffix)//str(ilat,site_indx_padding)
        !
        call ed_init_solver_single_mpi(MpiComm,bath(ilat,:),Hloc(ilat,:,:,:,:))
        !
+    end do
+    Nsect = Nsectors !get_Nsectors() !< get # sectors to allocate the following array
+    if(allocated(neigen_sectorii))deallocate(neigen_sectorii) ; allocate(neigen_sectorii(Nineq,Nsect))
+    if(allocated(neigen_totalii))deallocate(neigen_totalii) ; allocate(neigen_totalii(Nineq))
+    !
+    do ilat=1,Nineq             !all nodes check the bath, u never know...
        neigen_sectorii(ilat,:) = neigen_sector(:)
        neigen_totalii(ilat)    = lanc_nstates_total
     end do
@@ -275,6 +284,12 @@ contains
        stop "ed_solve_single ERROR: ed_sparse_H undefined"
     end select
     !
+!    write(LOGfile,*)
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,'(50F10.3)')bath
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,*)
+    !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call observables_impurity()         !obtain impurity observables as thermal averages.  
@@ -326,6 +341,13 @@ contains
     call ed_diag_set_MPI(MpiComm)
     call ed_observables_set_MPI(MpiComm)
     call ed_greens_functions_set_MPI(MpiComm)
+    call ed_chi_functions_set_MPI(MpiComm)
+    !
+!    write(LOGfile,*)
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,'(50F10.3)')bath
+!    write(LOGfile,*)"----------"
+!    write(LOGfile,*)
     !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
@@ -341,7 +363,8 @@ contains
     call ed_hamiltonian_matvec_del_MPI()
     call ed_diag_del_MPI()
     call ed_observables_del_MPI()
-    call ed_greens_functions_del_MPI()    
+    call ed_greens_functions_del_MPI()
+    call ed_chi_functions_del_MPI()    
     nullify(spHtimesV_cc)
   end subroutine ed_solve_single_mpi
 #endif

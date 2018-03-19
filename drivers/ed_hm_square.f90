@@ -1,115 +1,143 @@
-!###################################################################
-!PURPOSE  : LANCZOS ED solution of DMFT problem for Hubbard model.
-!AUTHORS  : A. Amaricci
-!###################################################################
-program lancED
+program ed_hm_square
   USE DMFT_ED
+  !
   USE SCIFOR
   USE DMFT_TOOLS
-  USE MPI
   implicit none
-  integer                :: iloop,Nb,Ne,ie
-  logical                :: converged
-  real(8),allocatable    :: wm(:),wr(:)
-  real(8)                :: wband,ts,de
+  integer                                       :: iloop,Nb,Lk,Nx,Nso,ik
+  logical                                       :: converged
+  real(8)                                       :: wband,ts,wmixing
   !Bath:
-  real(8),allocatable    :: Bath(:)
+  real(8),allocatable                           :: Bath(:),BathOld(:)
   !The local hybridization function:
-  complex(8),allocatable :: Delta(:,:,:)
-  real(8),allocatable    :: epsik(:),wt(:)
+  complex(8),allocatable                        :: Hloc(:,:,:,:)
+  complex(8),allocatable,dimension(:,:,:,:,:)   :: Gmats
+  complex(8),allocatable,dimension(:,:,:,:,:)   :: Greal
+  complex(8),allocatable,dimension(:,:,:,:,:)   :: Smats
+  complex(8),allocatable,dimension(:,:,:,:,:)   :: Sreal
+  complex(8),allocatable,dimension(:,:,:,:,:)   :: Weiss
+  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Gkmats
+  !
+  character(len=16)                             :: finput
+  complex(8),allocatable                        :: Hk(:,:,:)
+  real(8),allocatable                           :: Wt(:)
 
-  call MPI_INIT(ED_MPI_ERR)
-  call MPI_COMM_RANK(MPI_COMM_WORLD,ED_MPI_ID,ED_MPI_ERR)
-  call MPI_COMM_SIZE(MPI_COMM_WORLD,ED_MPI_SIZE,ED_MPI_ERR)
-  write(*,"(A,I4,A,I4,A)")'Processor ',ED_MPI_ID,' of ',ED_MPI_SIZE,' is alive'
-  call MPI_BARRIER(MPI_COMM_WORLD,ED_MPI_ERR)
+  call parse_cmd_variable(finput,"FINPUT",default='inputED.conf')
+  call parse_input_variable(wmixing,"wmixing",finput,default=0.5d0,comment="Mixing bath parameter")
+  call parse_input_variable(ts,"TS",finput,default=0.25d0,comment="hopping parameter")
+  call parse_input_variable(Nx,"Nx",finput,default=10,comment="Number of kx point for 2d BZ integration")
+  !
+  call ed_read_input(trim(finput))
+  !
+  call add_ctrl_var(beta,"BETA")
+  call add_ctrl_var(Norb,"NORB")
+  call add_ctrl_var(Nspin,"Nspin")
+  call add_ctrl_var(xmu,"xmu")
+  call add_ctrl_var(wini,"wini")
+  call add_ctrl_var(wfin,"wfin")
+  call add_ctrl_var(eps,"eps")
 
-  call parse_input_variable(ts,"TS","inputED.in",default=1.d0)
-  call parse_input_variable(Ne,"NE","inputED.in",default=2000)
-  call ed_read_input("inputED.in")
-
-  allocate(wm(Lmats),wr(Lreal))
-  wm = pi/beta*real(2*arange(1,Lmats)-1,8)
-  wr = linspace(wini,wfin,Lreal)
+  Nso=1
 
   !Allocate Weiss Field:
-  allocate(delta(Norb,Norb,Lmats))
+  allocate(Weiss(Nspin,Nspin,Norb,Norb,Lmats))
+  allocate(Gmats(Nspin,Nspin,Norb,Norb,Lmats),Greal(Nspin,Nspin,Norb,Norb,Lreal))
+  allocate(Smats(Nspin,Nspin,Norb,Norb,Lmats),Sreal(Nspin,Nspin,Norb,Norb,Lreal))
 
-  allocate(wt(Ne),epsik(Ne))
-  wband=4.d0*ts
-  epsik = linspace(-wband,wband,Ne,mesh=de)
-  do ie=1,Ne
-     wt(ie)=dens_2dsquare(epsik(ie),ts)
-  enddo
-  if(ED_MPI_ID==0)call splot("DOS2d.ed",epsik,wt)
-  wt = wt*de
+
+
+  !Build Hk
+  call TB_set_bk(bkx=[pi2,0d0],bky=[0d0,pi2])
+  Lk = Nx*Nx
+  allocate(Hk(Nso,Nso,Lk),Wt(Lk),Hloc(Nspin,Nspin,Norb,Norb))
+  call TB_build_model(Hk(:,:,:),hk_model,Nso,[Nx,Nx])
+  Wt = 1d0/Lk
+  Hloc   = zero
+  call TB_write_hk(Hk(:,:,:),"Hk2d.dat",1,&
+       Nd=1,Np=0,Nineq=1,&
+       Nkvec=[Nx,Nx])
 
   !setup solver
-  Nb=get_bath_size()
+  Nb=get_bath_dimension()
   allocate(bath(Nb))
-  call ed_init_solver(bath)
+  allocate(bathold(Nb))
+  call ed_init_solver(bath,Hloc)
+
+
 
   !DMFT loop
   iloop=0;converged=.false.
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
-     if(ED_MPI_ID==0)call start_loop(iloop,nloop,"DMFT-loop")
+     call start_loop(iloop,nloop,"DMFT-loop")
 
      !Solve the EFFECTIVE IMPURITY PROBLEM (first w/ a guess for the bath)
-     call ed_solve(bath) 
+     call ed_solve(bath,Hloc) 
+     call ed_get_sigma_matsubara(Smats)
+     call ed_get_sigma_real(Sreal)
 
-     !Get the Weiss field/Delta function to be fitted (user defined)
-     call get_delta
+     !Compute the local gfs:
+     call dmft_gloc_matsubara(Hk,Wt,Gmats,Smats)
+     call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=1)
+
+     if(cg_scheme=='weiss')then
+        call dmft_weiss(Gmats,Smats,Weiss,Hloc)
+     else
+        call dmft_delta(Gmats,Smats,Weiss,Hloc)
+     endif
 
      !Perform the SELF-CONSISTENCY by fitting the new bath
-     call ed_chi2_fitgf(delta,bath,ispin=1)
+     call ed_chi2_fitgf(Weiss,bath)
+
+     !MIXING:
+     if(iloop>1)Bath = wmixing*Bath + (1.d0-wmixing)*BathOld
+     BathOld=Bath
 
      !Check convergence (if required change chemical potential)
-     if(ED_MPI_ID==0)converged = check_convergence(delta(1,1,:),dmft_error,nsuccess,nloop,reset=.false.)
+     converged = check_convergence(Weiss(1,1,1,1,:),dmft_error,nsuccess,nloop,reset=.false.)
 
-     !if(nread/=0.d0)call search_mu(nimp(1),converged)
-     call MPI_BCAST(converged,1,MPI_LOGICAL,0,MPI_COMM_WORLD,ED_MPI_ERR)
-     if(ED_MPI_ID==0)call end_loop
+     call end_loop
   enddo
+
+  !Compute the local gfs:
+  call dmft_gloc_realaxis(Hk,Wt,Greal,Sreal)
+  call dmft_print_gf_realaxis(Greal,"Gloc",iprint=1)
+
+
+  !Get kinetic energy:
+  call dmft_kinetic_energy(Hk,Wt,Smats)
+
+
+  allocate(Gkmats(Lk,Nspin,Nspin,Norb,Norb,Lmats))
+  do ik=1,Lk
+     call dmft_gk_matsubara(Hk(:,:,ik),Wt(ik),Gkmats(ik,:,:,:,:,:),Smats)
+  enddo
+
 
 
 contains
 
-  !+----------------------------------------+
-  subroutine get_delta
-    integer                   :: i,j,ie
-    complex(8)                :: iw,zita,g0and,g0loc,gg
-    complex(8),dimension(Lmats)  :: self,gloc
-    complex(8),dimension(Lreal)  :: selfr,grloc
 
-    do i=1,Lmats
-       iw = xi*wm(i)
-       zita    = iw + xmu - impSmats(1,1,1,1,i)
-       gloc(i) = zero
-       do ie=1,Ne
-          gloc(i)=gloc(i)+wt(ie)/(zita-epsik(ie))
-       enddo
-       delta(1,1,i)= iw + xmu - impSmats(1,1,1,1,i) - one/gloc(i)
-    enddo
 
-    do i=1,Lreal
-       iw=cmplx(wr(i),eps)
-       zita     = iw + xmu - impSreal(1,1,1,1,i)
-       grloc(i) = zero
-       do ie=1,Ne
-          grloc(i)=grloc(i)+wt(ie)/(zita-epsik(ie))
-       enddo
-    enddo
-    if(ED_MPI_ID==0)then
-       call splot("Gloc_iw.ed",wm,gloc)
-       call splot("Gloc_realw.ed",wr,grloc)
-       call splot("DOS.ed",wr,-dimag(grloc)/pi)
-       call splot("Delta_iw.ed",wm,delta(1,1,:))
-    endif
-  end subroutine get_delta
-  !+----------------------------------------+
 
-end program lancED
+  !-------------------------------------------------------------------------------------------
+  !PURPOSE:  Hk model for the 2d square lattice
+  !-------------------------------------------------------------------------------------------
+  function hk_model(kpoint,N) result(hk)
+    real(8),dimension(:) :: kpoint
+    integer              :: N
+    real(8)              :: kx,ky
+    complex(8)           :: hk(N,N)
+    kx=kpoint(1)
+    ky=kpoint(2)
+    Hk = -one*2d0*ts*(cos(kx)+cos(ky))
+  end function hk_model
+
+
+
+
+
+end program ed_hm_square
 
 
 

@@ -52,7 +52,9 @@ MODULE DMFT_ED
        ed_get_doubles                         ,&
        ed_get_density_matrix                  ,&
        ed_get_quantum_SOC_operators_single    ,&
-       ed_get_quantum_SOC_operators_lattice
+       ed_get_quantum_SOC_operators_lattice   ,&
+       ed_read_impSigma_single                ,&
+       ed_read_impSigma_lattice
 
 
   USE ED_BATH, only:                           &

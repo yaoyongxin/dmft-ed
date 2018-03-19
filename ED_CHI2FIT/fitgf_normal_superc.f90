@@ -24,7 +24,7 @@ subroutine chi2_fitgf_normal_superc(fg,bath_,ispin)
   real(8)                              :: chi
   logical                              :: check
   type(effective_bath)                 :: dmft_bath
-  character(len=20)                    :: suffix
+  character(len=256)                   :: suffix
   integer                              :: unit
   !
   if(size(fg,1)/=2)stop "chi2_fitgf_normal_superc error: size[fg,1]!=2"
