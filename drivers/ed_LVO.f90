@@ -64,7 +64,7 @@ program ed_LVO_hetero
   logical                                             :: computeG0loc
   logical                                             :: lattice_flag=.true.
   logical                                             :: bulk_magsym
-  integer                                             :: fake_hetero=5
+  integer                                             :: fake_hetero=1
   complex(8),allocatable,dimension(:,:)               :: U,Udag
   complex(8),allocatable,dimension(:,:)               :: zeta
   complex(8),allocatable,dimension(:,:,:)             :: Gloc
@@ -152,9 +152,11 @@ program ed_LVO_hetero
   !
   !
   if(fake_hetero==1)then
-     call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+     if(geometry=="bulk")  call read_myhk("LVO_hr_bulk.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+     if(geometry=="hetero")call read_myhk("LVO_hr_hete.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
   else
      call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm,Nlat/fake_hetero)
+     if(geometry/="bulk")stop 'not implemented fake hetero with Hk not for bulk'
   endif
   !
   if(diaglocalpbm)then
