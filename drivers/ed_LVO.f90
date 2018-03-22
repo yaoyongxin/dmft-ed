@@ -64,15 +64,19 @@ program ed_LVO_hetero
   logical                                             :: computeG0loc
   logical                                             :: lattice_flag=.true.
   logical                                             :: bulk_magsym
-  integer                                             :: fake_hetero=5
   complex(8),allocatable,dimension(:,:)               :: U,Udag
   complex(8),allocatable,dimension(:,:)               :: zeta
+  complex(8),allocatable,dimension(:,:)               :: Nmatrix_so
+  complex(8),allocatable,dimension(:,:,:,:,:)         :: Nmatrix_nn
   complex(8),allocatable,dimension(:,:,:)             :: Gloc
   !Ek calculation:
   logical                                             :: computeEk,diaglocalpbm
   real(8)                                             :: Ek
   real(8)   ,allocatable,dimension(:)                 :: Ekm
   complex(8),allocatable,dimension(:,:,:,:,:,:,:)     :: Gkmats
+  !fake flags
+  integer                                             :: fake_hetero=1
+  logical                                             :: fake_potential=.false.
 
   !#########   MPI INITIALIZATION   #########
   !
@@ -152,9 +156,11 @@ program ed_LVO_hetero
   !
   !
   if(fake_hetero==1)then
-     call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+     if(geometry=="bulk")  call read_myhk("LVO_hr_bulk.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+     if(geometry=="hetero")call read_myhk("LVO_hr_hete.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
   else
      call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm,Nlat/fake_hetero)
+     if(geometry/="bulk")stop 'not implemented fake hetero with Hk not for bulk'
   endif
   !
   if(diaglocalpbm)then
@@ -162,6 +168,23 @@ program ed_LVO_hetero
   else
      write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE NON-DIAGONAL BASIS --- "
   endif
+  !
+  !##################  READ EXISITING impS   ##################
+  !
+  !
+  if(nloop==0)call ed_read_impSigma_lattice(Nlayer)
+  !
+  !
+  !##################   POTENTIAL GRADIENT   ##################
+  !
+  !
+  if(fake_potential.and.geometry=="hetero")then
+     do ilayer=1,Nlayer
+        Hloc_nnn(2*ilayer-1,:,:,:,:)=-1.38*(ilayer-1)/3.d0+1.d0
+        Hloc_nnn(2*ilayer,:,:,:,:)=Hloc_nnn(2*ilayer-1,:,:,:,:)
+     enddo
+  endif
+  !
   !
   !##################          BATH          ##################
   !
@@ -270,6 +293,8 @@ program ed_LVO_hetero
         sumdens=0d0
         xmu_old=xmu
         if(lattice_flag)then
+           allocate(Nmatrix_so(NlNsNo,NlNsNo));Nmatrix_so=zero
+           allocate(Nmatrix_nn(Nlat,Nspin,Nspin,Norb,Norb));Nmatrix_nn=zero
            allocate(orb_dens_lat(Nlayer,Norb));orb_dens_lat=0.d0
            allocate(orb_mag_lat(Nlayer,Norb));orb_mag_lat=0.d0
            call ed_get_dens(orb_dens_lat,Nlayer)
@@ -279,8 +304,40 @@ program ed_LVO_hetero
               write(LOGfile,*)
               write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",ilayer,orb_dens_lat(ilayer,:),orb_mag_lat(ilayer,:)
               write(LOGfile,*)
+              do iorb=1,Norb
+                 !site A on ith-layer
+                 Nmatrix_nn(2*ilayer-1,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+                 Nmatrix_nn(2*ilayer-1,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+                 !site B on ith-layer
+                 if(ed_para)then
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+                 else
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+                 endif
+              enddo
            enddo
-           deallocate(orb_dens_lat,orb_mag_lat)
+           !printing out  densities
+           open(unit=106,file="N_CF_basis.dat",status="unknown",action="write",position="rewind")
+           open(unit=107,file="S_CF_basis.dat",status="unknown",action="write",position="rewind")
+           do iorb=1,Norb
+              write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+              write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+           enddo
+           close(106)
+           close(107)
+           Nmatrix_so=matmul(U,matmul(nnn2lso_reshape(Nmatrix_nn,Nlat,Nspin,Norb),Udag));Nmatrix_nn=zero
+           Nmatrix_nn=lso2nnn_reshape(Nmatrix_so,Nlat,Nspin,Norb)
+           open(unit=106,file="N_t2g_basis.dat",status="unknown",action="write",position="rewind")
+           open(unit=107,file="S_t2g_basis.dat",status="unknown",action="write",position="rewind")
+           do iorb=1,Norb
+              write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+              write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+           enddo
+           close(106)
+           close(107)
+           deallocate(orb_dens_lat,orb_mag_lat,Nmatrix_so,Nmatrix_nn)
         else
            allocate(orb_dens_single(Norb));orb_dens_single=0.d0
            allocate(orb_mag_single(Norb));orb_mag_single=0.d0
