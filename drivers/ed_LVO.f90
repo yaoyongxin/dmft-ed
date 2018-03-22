@@ -64,6 +64,7 @@ program ed_LVO_hetero
   logical                                             :: computeG0loc
   logical                                             :: lattice_flag=.true.
   logical                                             :: bulk_magsym
+  integer                                             :: fake_hetero=1
   complex(8),allocatable,dimension(:,:)               :: U,Udag
   complex(8),allocatable,dimension(:,:)               :: zeta
   complex(8),allocatable,dimension(:,:)               :: Nmatrix_so
