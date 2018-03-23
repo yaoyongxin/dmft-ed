@@ -64,7 +64,6 @@ program ed_LVO_hetero
   logical                                             :: computeG0loc
   logical                                             :: lattice_flag=.true.
   logical                                             :: bulk_magsym
-  integer                                             :: fake_hetero=1
   complex(8),allocatable,dimension(:,:)               :: U,Udag
   complex(8),allocatable,dimension(:,:)               :: zeta
   complex(8),allocatable,dimension(:,:)               :: Nmatrix_so
@@ -173,17 +172,20 @@ program ed_LVO_hetero
   !##################  READ EXISITING impS   ##################
   !
   !
-  if(nloop==0)call ed_read_impSigma_lattice(Nlayer)
-  !
-  !
-  !##################   POTENTIAL GRADIENT   ##################
-  !
-  !
-  if(fake_potential.and.geometry=="hetero")then
-     do ilayer=1,Nlayer
-        Hloc_nnn(2*ilayer-1,:,:,:,:)=-1.38*(ilayer-1)/3.d0+1.d0
-        Hloc_nnn(2*ilayer,:,:,:,:)=Hloc_nnn(2*ilayer-1,:,:,:,:)
-     enddo
+  if(nloop==0)then
+     if (lattice_flag)then
+        allocate(Smats_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));Smats_hetero=zero
+        allocate(Sreal_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lreal));Sreal_hetero=zero
+        call ed_read_impSigma_lattice(Nlayer)
+        call sigma_symmetrization()
+        deallocate(Smats_hetero,Sreal_hetero)
+     else
+        allocate(Smats_single(Nspin,Nspin,Norb,Norb,Lmats));Smats_single=zero
+        allocate(Sreal_single(Nspin,Nspin,Norb,Norb,Lreal));Sreal_single=zero
+        call ed_read_impSigma_single()
+        call sigma_symmetrization()
+        deallocate(Smats_single,Sreal_single)
+     endif
   endif
   !
   !
@@ -203,10 +205,12 @@ program ed_LVO_hetero
   !##################      INIT SOLVER       ##################
   !
   !
-  if (lattice_flag)then
-     call ed_init_solver(Comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
-  else
-     call ed_init_solver(Comm,Bath_single,Hloc_nnn(1,:,:,:,:))
+  if(nloop.gt.0)then
+     if (lattice_flag)then
+        call ed_init_solver(Comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
+     else
+        call ed_init_solver(Comm,Bath_single,Hloc_nnn(1,:,:,:,:))
+     endif
   endif
   !
   !
@@ -293,9 +297,9 @@ program ed_LVO_hetero
         converged_n=.true.
         sumdens=0d0
         xmu_old=xmu
+        allocate(Nmatrix_so(NlNsNo,NlNsNo));Nmatrix_so=zero
+        allocate(Nmatrix_nn(Nlat,Nspin,Nspin,Norb,Norb));Nmatrix_nn=zero
         if(lattice_flag)then
-           allocate(Nmatrix_so(NlNsNo,NlNsNo));Nmatrix_so=zero
-           allocate(Nmatrix_nn(Nlat,Nspin,Nspin,Norb,Norb));Nmatrix_nn=zero
            allocate(orb_dens_lat(Nlayer,Norb));orb_dens_lat=0.d0
            allocate(orb_mag_lat(Nlayer,Norb));orb_mag_lat=0.d0
            call ed_get_dens(orb_dens_lat,Nlayer)
@@ -319,26 +323,7 @@ program ed_LVO_hetero
                  endif
               enddo
            enddo
-           !printing out  densities
-           open(unit=106,file="N_CF_basis.dat",status="unknown",action="write",position="rewind")
-           open(unit=107,file="S_CF_basis.dat",status="unknown",action="write",position="rewind")
-           do iorb=1,Norb
-              write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
-              write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
-           enddo
-           close(106)
-           close(107)
-           Nmatrix_so=matmul(U,matmul(nnn2lso_reshape(Nmatrix_nn,Nlat,Nspin,Norb),Udag));Nmatrix_nn=zero
-           Nmatrix_nn=lso2nnn_reshape(Nmatrix_so,Nlat,Nspin,Norb)
-           open(unit=106,file="N_t2g_basis.dat",status="unknown",action="write",position="rewind")
-           open(unit=107,file="S_t2g_basis.dat",status="unknown",action="write",position="rewind")
-           do iorb=1,Norb
-              write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
-              write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
-           enddo
-           close(106)
-           close(107)
-           deallocate(orb_dens_lat,orb_mag_lat,Nmatrix_so,Nmatrix_nn)
+           deallocate(orb_dens_lat,orb_mag_lat)
         else
            allocate(orb_dens_single(Norb));orb_dens_single=0.d0
            allocate(orb_mag_single(Norb));orb_mag_single=0.d0
@@ -348,9 +333,44 @@ program ed_LVO_hetero
            write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",1,orb_dens_single(:),orb_mag_single(:)
            write(LOGfile,*)
            sumdens=sum(orb_dens_single)
+           do ilayer=1,Nlayer
+              do iorb=1,Norb
+                 !site A on ith-layer
+                 Nmatrix_nn(2*ilayer-1,1,1,iorb,iorb) =cmplx(0.5*(orb_dens_single(iorb)+orb_mag_single(iorb)),0.d0)
+                 Nmatrix_nn(2*ilayer-1,2,2,iorb,iorb) =cmplx(0.5*(orb_dens_single(iorb)-orb_mag_single(iorb)),0.d0)
+                 !site B on ith-layer
+                 if(ed_para)then
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)+orb_mag_single(iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)-orb_mag_single(iorb)),0.d0)
+                 else
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)-orb_mag_single(iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)+orb_mag_single(iorb)),0.d0)
+                 endif
+              enddo
+           enddo
            deallocate(orb_dens_single,orb_mag_single)
         endif
         write(LOGfile,*)"  n avrg:",sumdens
+        !printing out  densities
+        open(unit=106,file="N_CF_basis.dat",status="unknown",action="write",position="rewind")
+        open(unit=107,file="S_CF_basis.dat",status="unknown",action="write",position="rewind")
+        do iorb=1,Norb
+           write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+           write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+        enddo
+        close(106)
+        close(107)
+        Nmatrix_so=matmul(U,matmul(nnn2lso_reshape(Nmatrix_nn,Nlat,Nspin,Norb),Udag));Nmatrix_nn=zero
+        Nmatrix_nn=lso2nnn_reshape(Nmatrix_so,Nlat,Nspin,Norb)
+        open(unit=106,file="N_t2g_basis.dat",status="unknown",action="write",position="rewind")
+        open(unit=107,file="S_t2g_basis.dat",status="unknown",action="write",position="rewind")
+        do iorb=1,Norb
+           write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+           write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+        enddo
+        close(106)
+        close(107)
+        deallocate(Nmatrix_so,Nmatrix_nn)
         !
         if(nread/=0.d0.and.look4n)then
            converged_n=.false.
@@ -567,6 +587,8 @@ contains
     real(8)         ,allocatable                      ::   Kvec(:,:)
     complex(8)      ,allocatable                      ::   Hloc(:,:)
     complex(8)      ,allocatable                      ::   Hk_tmp(:,:,:)
+    complex(8)      ,allocatable                      ::   Potential_so(:,:)
+    complex(8)      ,allocatable                      ::   Potential_nn(:,:,:,:,:)
     complex(8)      ,allocatable                      ::   Gmats(:,:,:),Greal(:,:,:)
     complex(8)      ,allocatable                      ::   Gso(:,:,:,:,:,:)
     !
@@ -627,6 +649,24 @@ contains
     endif
     !>>DEBUG
     !
+    if(fake_potential.and.geometry=="hetero")then
+       allocate(Potential_so(NlNsNo,NlNsNo));Potential_so=zero
+       allocate(Potential_nn(Nlat,Nspin,Nspin,Norb,Norb));Potential_nn=zero
+       do ilayer=1,Nlayer
+          do iorb=1,Norb
+             do ispin=1,Nspin
+                Potential_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=-1.38*(ilayer-1)/3.d0+1.d0
+                Potential_nn(2*ilayer,ispin,ispin,iorb,iorb)  =-1.38*(ilayer-1)/3.d0+1.d0
+             enddo
+          enddo
+       enddo
+       Potential_so=nnn2lso_reshape(Potential_nn,Nlat,Nspin,Norb)
+       do ik=1,Lk
+          Hk(:,:,ik)=Hk(:,:,ik)+Potential_so
+       enddo
+       deallocate(Potential_nn,Potential_so)
+    endif
+    !
     Hloc=zero
     Hloc=sum(Hk,dim=3)/Lk
     call TB_write_Hloc(Hloc,reg(fileHloc//".w90"))
@@ -640,7 +680,6 @@ contains
     Hloc_nnn=lso2nnn_reshape(Hloc_lso,Nlat,Nspin,Norb)
     call TB_write_Hloc(Hloc_lso,reg(fileHloc//".used"))
     write(LOGfile,*) " H(k) and Hloc linked"
-    !
     !
     !-----  Build the local GF in the spin-orbital Basis   -----
     if(computeG0loc)then
