@@ -76,7 +76,7 @@ program ed_LVO_hetero
   complex(8),allocatable,dimension(:,:,:,:,:,:,:)     :: Gkmats
   !fake flags
   integer                                             :: fake_hetero=1
-  logical                                             :: fake_potential=.false.
+  logical                                             :: fake_potential=.true.
 
   !#########   MPI INITIALIZATION   #########
   !
@@ -655,8 +655,8 @@ contains
        do ilayer=1,Nlayer
           do iorb=1,Norb
              do ispin=1,Nspin
-                Potential_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=-1.38*(ilayer-1)/3.d0+1.d0
-                Potential_nn(2*ilayer,ispin,ispin,iorb,iorb)  =-1.38*(ilayer-1)/3.d0+1.d0
+                Potential_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
+                Potential_nn(2*ilayer,ispin,ispin,iorb,iorb)  =1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
              enddo
           enddo
        enddo
