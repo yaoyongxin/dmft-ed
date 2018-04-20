@@ -66,12 +66,17 @@ program ed_LVO_hetero
   logical                                             :: bulk_magsym
   complex(8),allocatable,dimension(:,:)               :: U,Udag
   complex(8),allocatable,dimension(:,:)               :: zeta
+  complex(8),allocatable,dimension(:,:)               :: Nmatrix_so
+  complex(8),allocatable,dimension(:,:,:,:,:)         :: Nmatrix_nn
   complex(8),allocatable,dimension(:,:,:)             :: Gloc
   !Ek calculation:
-  logical                                             :: computeEk
+  logical                                             :: computeEk,diaglocalpbm
   real(8)                                             :: Ek
   real(8)   ,allocatable,dimension(:)                 :: Ekm
   complex(8),allocatable,dimension(:,:,:,:,:,:,:)     :: Gkmats
+  !fake flags
+  integer                                             :: fake_hetero=1
+  logical                                             :: fake_potential=.true.
 
   !#########   MPI INITIALIZATION   #########
   !
@@ -95,6 +100,7 @@ program ed_LVO_hetero
   call parse_input_variable(bulk_magsym,    "BULKMAGSYM",finput,   default=.false.)
   call parse_input_variable(memory,         "MEMORY",finput,       default=3)
   call parse_input_variable(computeEk,      "COMPUTEEK",finput,    default=.false.)
+  call parse_input_variable(diaglocalpbm,   "DIAGLOCAL",finput,    default=.false.)
   !
   call ed_read_input(trim(finput),comm)
   !
@@ -115,6 +121,9 @@ program ed_LVO_hetero
   if (geometry=="bulk".and.ed_para)    lattice_flag=.false.
   if (geometry=="bulk".and.bulk_magsym)lattice_flag=.false.
   if (geometry=="bulk".and.Nlat/=4) stop
+  !
+  if(fake_hetero/=1)Nlat=Nlat*fake_hetero
+  !
   Nlayer=Nlat/2
   NlNsNo=Nlat*Nspin*Norb
   NsNo=Nspin*Norb
@@ -133,8 +142,8 @@ program ed_LVO_hetero
   allocate(Hloc_lso(NlNsNo,NlNsNo));                                 Hloc_lso=zero
   allocate(Hloc_nnn(Nlat,Nspin,Nspin,Norb,Norb));                    Hloc_nnn=zero
   allocate(Wtk(Nk*Nk*Nk));                                           Wtk=1.d0/(Nk*Nk*Nk)
-  allocate(U(NlNsNo,NlNsNo));                                        U=zero
-  allocate(Udag(NlNsNo,NlNsNo));                                     Udag=zero
+  allocate(U(NlNsNo,NlNsNo));                                        U=eye(NlNsNo)
+  allocate(Udag(NlNsNo,NlNsNo));                                     Udag=eye(NlNsNo)
   !
   allocate(wr(Lreal));wr=0.0d0;                                      wr=linspace(wini,wfin,Lreal,mesh=dw)
   allocate(wm(Lmats));wm=0.0d0;                                      wm = pi/beta*real(2*arange(1,Lmats)-1,8)
@@ -146,8 +155,39 @@ program ed_LVO_hetero
   !##################        BUILD Hk        ##################
   !
   !
-  call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",.true.)
-  !from here Hloc_lso and Hloc_nnn are in the diagonal basis
+  if(fake_hetero==1)then
+     if(geometry=="bulk")  call read_myhk("LVO_hr_bulk.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+     if(geometry=="hetero")call read_myhk("LVO_hr_hete.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+  else
+     call read_myhk("LVO_hr.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm,Nlat/fake_hetero)
+     if(geometry/="bulk")stop 'not implemented fake hetero with Hk not for bulk'
+  endif
+  !
+  if(diaglocalpbm)then
+     write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE DIAGONAL BASIS --- "
+  else
+     write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE NON-DIAGONAL BASIS --- "
+  endif
+  !
+  !##################  READ EXISITING impS   ##################
+  !
+  !
+  if(nloop==0)then
+     if (lattice_flag)then
+        allocate(Smats_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));Smats_hetero=zero
+        allocate(Sreal_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lreal));Sreal_hetero=zero
+        call ed_read_impSigma_lattice(Nlayer)
+        call sigma_symmetrization()
+        deallocate(Smats_hetero,Sreal_hetero)
+     else
+        allocate(Smats_single(Nspin,Nspin,Norb,Norb,Lmats));Smats_single=zero
+        allocate(Sreal_single(Nspin,Nspin,Norb,Norb,Lreal));Sreal_single=zero
+        call ed_read_impSigma_single()
+        call sigma_symmetrization()
+        deallocate(Smats_single,Sreal_single)
+     endif
+  endif
+  !
   !
   !##################          BATH          ##################
   !
@@ -165,10 +205,12 @@ program ed_LVO_hetero
   !##################      INIT SOLVER       ##################
   !
   !
-  if (lattice_flag)then
-     call ed_init_solver(Comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
-  else
-     call ed_init_solver(Comm,Bath_single,Hloc_nnn(1,:,:,:,:))
+  if(nloop.gt.0)then
+     if (lattice_flag)then
+        call ed_init_solver(Comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
+     else
+        call ed_init_solver(Comm,Bath_single,Hloc_nnn(1,:,:,:,:))
+     endif
   endif
   !
   !
@@ -190,8 +232,8 @@ program ed_LVO_hetero
      if (lattice_flag)then
         allocate(Smats_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lmats));Smats_hetero=zero
         allocate(Sreal_hetero(Nlayer,Nspin,Nspin,Norb,Norb,Lreal));Sreal_hetero=zero
-        call ed_get_sigma_matsubara(Smats_hetero)
-        call ed_get_sigma_real(Sreal_hetero)
+        call ed_get_sigma_matsubara(Smats_hetero,Nlayer)
+        call ed_get_sigma_real(Sreal_hetero,Nlayer)
         call sigma_symmetrization()
         deallocate(Smats_hetero,Sreal_hetero)
      else
@@ -217,8 +259,10 @@ program ed_LVO_hetero
      endif
      !
      !------   rotate field   (diagonal basis)  --------
-     call rotate_local_funct(field,U)
-     !call dmft_print_gf_matsubara(field,"Weiss_rot",iprint=6)
+     if(diaglocalpbm)then
+        call rotate_local_funct(field,U)
+        call dmft_print_gf_matsubara(field,"Weiss_diag",iprint=6)
+     endif
      !
      !------    mix field     ------
      if(iloop>1)then
@@ -232,7 +276,8 @@ program ed_LVO_hetero
            call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
            call spin_symmetrize_bath(Bath,save=.true.)
         else
-           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:))
+           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
+           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=2)
         endif
      else
         call set_Hloc(Hloc_nnn(1,:,:,:,:))
@@ -240,7 +285,8 @@ program ed_LVO_hetero
            call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single,ispin=1)
            call spin_symmetrize_bath(Bath_single,save=.true.)
         else
-           call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single)
+           call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single,ispin=1)
+           call ed_chi2_fitgf(Comm,field(1,:,:,:,:,:),Bath_single,ispin=2)
         endif
      endif
      !
@@ -251,6 +297,8 @@ program ed_LVO_hetero
         converged_n=.true.
         sumdens=0d0
         xmu_old=xmu
+        allocate(Nmatrix_so(NlNsNo,NlNsNo));Nmatrix_so=zero
+        allocate(Nmatrix_nn(Nlat,Nspin,Nspin,Norb,Norb));Nmatrix_nn=zero
         if(lattice_flag)then
            allocate(orb_dens_lat(Nlayer,Norb));orb_dens_lat=0.d0
            allocate(orb_mag_lat(Nlayer,Norb));orb_mag_lat=0.d0
@@ -261,19 +309,68 @@ program ed_LVO_hetero
               write(LOGfile,*)
               write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",ilayer,orb_dens_lat(ilayer,:),orb_mag_lat(ilayer,:)
               write(LOGfile,*)
+              do iorb=1,Norb
+                 !site A on ith-layer
+                 Nmatrix_nn(2*ilayer-1,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+                 Nmatrix_nn(2*ilayer-1,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+                 !site B on ith-layer
+                 if(ed_para)then
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+                 else
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+                 endif
+              enddo
            enddo
            deallocate(orb_dens_lat,orb_mag_lat)
         else
            allocate(orb_dens_single(Norb));orb_dens_single=0.d0
            allocate(orb_mag_single(Norb));orb_mag_single=0.d0
            call ed_get_dens(orb_dens_single)
+           call ed_get_mag(orb_mag_single)
            write(LOGfile,*)
            write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",1,orb_dens_single(:),orb_mag_single(:)
            write(LOGfile,*)
            sumdens=sum(orb_dens_single)
+           do ilayer=1,Nlayer
+              do iorb=1,Norb
+                 !site A on ith-layer
+                 Nmatrix_nn(2*ilayer-1,1,1,iorb,iorb) =cmplx(0.5*(orb_dens_single(iorb)+orb_mag_single(iorb)),0.d0)
+                 Nmatrix_nn(2*ilayer-1,2,2,iorb,iorb) =cmplx(0.5*(orb_dens_single(iorb)-orb_mag_single(iorb)),0.d0)
+                 !site B on ith-layer
+                 if(ed_para)then
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)+orb_mag_single(iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)-orb_mag_single(iorb)),0.d0)
+                 else
+                    Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)-orb_mag_single(iorb)),0.d0)
+                    Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_single(iorb)+orb_mag_single(iorb)),0.d0)
+                 endif
+              enddo
+           enddo
            deallocate(orb_dens_single,orb_mag_single)
         endif
         write(LOGfile,*)"  n avrg:",sumdens
+        !printing out  densities
+        open(unit=106,file="N_CF_basis.dat",status="unknown",action="write",position="rewind")
+        open(unit=107,file="S_CF_basis.dat",status="unknown",action="write",position="rewind")
+        do iorb=1,Norb
+           write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+           write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+        enddo
+        close(106)
+        close(107)
+        Nmatrix_so=matmul(U,matmul(nnn2lso_reshape(Nmatrix_nn,Nlat,Nspin,Norb),Udag));Nmatrix_nn=zero
+        Nmatrix_nn=lso2nnn_reshape(Nmatrix_so,Nlat,Nspin,Norb)
+        open(unit=106,file="N_t2g_basis.dat",status="unknown",action="write",position="rewind")
+        open(unit=107,file="S_t2g_basis.dat",status="unknown",action="write",position="rewind")
+        do iorb=1,Norb
+           write(106,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)+Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+           write(107,'(1000F15.7)')(real(Nmatrix_nn(ilat,1,1,iorb,iorb)-Nmatrix_nn(ilat,2,2,iorb,iorb)),ilat=1,Nlat)
+        enddo
+        close(106)
+        close(107)
+        deallocate(Nmatrix_so,Nmatrix_nn)
         !
         if(nread/=0.d0.and.look4n)then
            converged_n=.false.
@@ -368,11 +465,13 @@ program ed_LVO_hetero
      endif
   endif
   call dmft_print_gf_realaxis(Greal,"Gloc",iprint=6)
-  call rotate_local_funct(Greal,U)
-  call dmft_print_gf_realaxis(Greal,"Gloc_rot",iprint=6)
+  if(diaglocalpbm)then
+     call rotate_local_funct(Greal,U)
+     call dmft_print_gf_realaxis(Greal,"Gloc_diag",iprint=6)
+  endif
   !
   !------   compute Bands  ------
-  if(master)call build_eigenbands("LVO_hr.dat","Bands.dat","Hk_path.dat","Kpoints_path.dat",Sreal)
+  if(master.and.geometry=="bulk")call build_eigenbands("LVO_hr.dat","Bands.dat","Hk_path.dat","Kpoints_path.dat",Sreal)
   !
   call finalize_MPI()
   !
@@ -388,13 +487,7 @@ contains
   !+------------------------------------------------------------------------------------------+!
   subroutine sigma_symmetrization()
     implicit none
-    complex(8),allocatable,dimension(:,:)             ::   Sigma_in
-    complex(8),allocatable,dimension(:,:)             ::   Sigma_out
-    !
-    write(LOGfile,*) "Self-energy symmetrization"
-    !
-    allocate(Sigma_in(NlNsNo,NlNsNo));Sigma_in=zero
-    allocate(Sigma_out(NlNsNo,NlNsNo));Sigma_out=zero
+    write(LOGfile,*) "  Self-energy symmetrization"
     !
     if (lattice_flag)then
        if(ed_para)then
@@ -457,9 +550,15 @@ contains
        endif
     endif
     !
-    deallocate(Sigma_in,Sigma_out)
-    call rotate_local_funct(Smats,Udag)
-    call rotate_local_funct(Sreal,Udag)
+    !rotate sigmas from the imp diagonal basis to the non-diagonal t2g basis
+    if(diaglocalpbm)then
+       call dmft_print_gf_matsubara(Smats,"Smats_diag",iprint=6)
+       call dmft_print_gf_realaxis(Sreal,"Sreal_diag",iprint=6)
+       call rotate_local_funct(Smats,Udag)
+       call rotate_local_funct(Sreal,Udag)
+    endif
+    call dmft_print_gf_matsubara(Smats,"Smats",iprint=6)
+    call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=6)
     !
   end subroutine sigma_symmetrization
   !
@@ -471,13 +570,15 @@ contains
   !         translator of the W90 output
   !         The re-ordering part can be used or not, depending on what the user of W90 did.
   !+------------------------------------------------------------------------------------------+!
-  subroutine read_myhk(fileHR,fileHk,fileHloc,fileKpoints,local_diagonal_basis)
+  subroutine read_myhk(fileHR,fileHk,fileHloc,fileKpoints,local_diagonal_basis,Nlat_notfake_)
     implicit none
     character(len=*)            ,intent(in)           ::   fileHR
     character(len=*)            ,intent(in)           ::   fileHk
     character(len=*)            ,intent(in)           ::   fileHloc
     character(len=*)            ,intent(in)           ::   fileKpoints
     logical                     ,intent(in)           ::   local_diagonal_basis
+    integer                     ,intent(in),optional  ::   Nlat_notfake_
+    integer                                           ::   Nlat_notfake,dim_notfake,dim_plane
     logical                                           ::   IOfile
     integer                                           ::   P(NlNsNo,NlNsNo)
     real(8)                                           ::   mu,bk_x(3),bk_y(3),bk_z(3)
@@ -485,6 +586,9 @@ contains
     integer         ,allocatable                      ::   Nkvec(:)
     real(8)         ,allocatable                      ::   Kvec(:,:)
     complex(8)      ,allocatable                      ::   Hloc(:,:)
+    complex(8)      ,allocatable                      ::   Hk_tmp(:,:,:)
+    complex(8)      ,allocatable                      ::   Potential_so(:,:)
+    complex(8)      ,allocatable                      ::   Potential_nn(:,:,:,:,:)
     complex(8)      ,allocatable                      ::   Gmats(:,:,:),Greal(:,:,:)
     complex(8)      ,allocatable                      ::   Gso(:,:,:,:,:,:)
     !
@@ -498,6 +602,18 @@ contains
     !
     Lk=Nk*Nk*Nk
     if(master)write(LOGfile,*)" Bulk tot k-points:",Lk
+    !
+    !DEBUG>>
+    Nlat_notfake=Nlat
+    if(present(Nlat_notfake_))then
+       Nlat_notfake=Nlat_notfake_
+       dim_plane=2*Nspin*Norb
+       dim_notfake=Nlat_notfake*Nspin*Norb
+       deallocate(Hk)
+       allocate(Hk(dim_notfake,dim_notfake,Nk*Nk*Nk));Hk=zero
+    endif
+    !>>DEBUG
+    !
     allocate(Hloc(NlNsNo,NlNsNo));Hloc=zero
     allocate(Kvec(Lk,3));Kvec=0d0
     allocate(Nkvec(3));Nkvec=0
@@ -507,16 +623,55 @@ contains
     !
     if(IOfile)then
        write(LOGfile,*) " Reading existing Hk from:  ",fileHk
-       call TB_read_hk(Hk,fileHk,Nspin*Norb*Nlat,1,1,Nlat,Nkvec,Kvec)
+       call TB_read_hk(Hk,fileHk,Nspin*Norb*Nlat_notfake,1,1,Nlat,Nkvec,Kvec)
     else
        write(LOGfile,*) " Transforming HR from:  ",fileHR
-       call TB_hr_to_hk(Hk,fileHR,Nspin,Norb,Nlat,Nkvec,P,Kvec,fileHk,fileKpoints)
+       call TB_hr_to_hk(Hk,fileHR,Nspin,Norb,Nlat_notfake,Nkvec,P,Kvec,fileHk,fileKpoints)
+    endif
+    !
+    !DEBUG>>
+    if(present(Nlat_notfake_))then
+       allocate(Hk_tmp(Nlat_notfake*Nspin*Norb,Nlat_notfake*Nspin*Norb,Nk*Nk*Nk));Hk_tmp=zero
+       Hk_tmp=Hk
+       deallocate(Hk)
+       allocate(Hk(NlNsNo,NlNsNo,Nk*Nk*Nk));Hk=zero
+       do i=1,fake_hetero !number of bulk repetitions
+          !diag block
+          Hk(1+dim_notfake*(i-1):dim_notfake*i,1+dim_notfake*(i-1):dim_notfake*i,:)=Hk_tmp
+       enddo
+       do i=1,fake_hetero-1
+          !up block
+          Hk(1+dim_plane+dim_notfake*(i-1):dim_notfake*i,1+dim_notfake*i:1+dim_plane+dim_notfake*i,:)=Hk_tmp(1:dim_plane,1+dim_plane:dim_notfake,:)
+          !dw block
+          Hk(1+dim_notfake*i:1+dim_plane+dim_notfake*i,1+dim_plane+dim_notfake*(i-1):dim_notfake*i,:)=Hk_tmp(1+dim_plane:dim_notfake,1:dim_plane,:)
+       enddo
+       deallocate(Hk_tmp)
+    endif
+    !>>DEBUG
+    !
+    if(fake_potential.and.geometry=="hetero")then
+       allocate(Potential_so(NlNsNo,NlNsNo));Potential_so=zero
+       allocate(Potential_nn(Nlat,Nspin,Nspin,Norb,Norb));Potential_nn=zero
+       do ilayer=1,Nlayer
+          do iorb=1,Norb
+             do ispin=1,Nspin
+                Potential_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
+                Potential_nn(2*ilayer,ispin,ispin,iorb,iorb)  =1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
+             enddo
+          enddo
+       enddo
+       Potential_so=nnn2lso_reshape(Potential_nn,Nlat,Nspin,Norb)
+       do ik=1,Lk
+          Hk(:,:,ik)=Hk(:,:,ik)+Potential_so
+       enddo
+       deallocate(Potential_nn,Potential_so)
     endif
     !
     Hloc=zero
     Hloc=sum(Hk,dim=3)/Lk
     call TB_write_Hloc(Hloc,reg(fileHloc//".w90"))
     if(local_diagonal_basis)then
+       U=zero;Udag=zero
        call build_rotations(Hloc,Hloc_lso,U)
        Udag=transpose(conjg(U))
     else
@@ -525,7 +680,6 @@ contains
     Hloc_nnn=lso2nnn_reshape(Hloc_lso,Nlat,Nspin,Norb)
     call TB_write_Hloc(Hloc_lso,reg(fileHloc//".used"))
     write(LOGfile,*) " H(k) and Hloc linked"
-    !
     !
     !-----  Build the local GF in the spin-orbital Basis   -----
     if(computeG0loc)then

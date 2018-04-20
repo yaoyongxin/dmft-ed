@@ -163,7 +163,7 @@ contains
     call parse_input_variable(cg_eps,"CG_EPS",INPUTunit,default=0.000001d0,comment="Conjugate-Gradient eps tolerance.")
     call parse_input_variable(cg_weight,"CG_WEIGHT",INPUTunit,default=0,comment="Conjugate-Gradient weight form: 0=1.0 ,1=1/n , 2=1/w.")
     call parse_input_variable(ed_mode,"ED_MODE",INPUTunit,default='normal',comment="Flag to set ED type: normal=normal, superc=superconductive, nonsu2=broken SU(2)")
-    call parse_input_variable(ed_para,"ED_PARA",INPUTunit,default=.true.,comment="Flag to force paramagnetic solution (only used in ed_mode=nonsu2 now).")
+    call parse_input_variable(ed_para,"ED_PARA",INPUTunit,default=.false.,comment="Flag to force paramagnetic solution (only used in ed_mode=nonsu2 now).")
     call parse_input_variable(ed_vsf_ratio,"ED_VSF_RATIO",INPUTunit,default=0.1d0,comment="Ration of the spin-flip hopping to spin-hold ones in the nonSU2 channel.")
     call parse_input_variable(ed_bath_noise_thr,"ED_BATH_NOISE_THR",INPUTunit,default=0.d0,comment="Noise added to the impurity hybridization")
     call parse_input_variable(bath_type,"BATH_TYPE",INPUTunit,default='normal',comment="flag to set bath type: normal (1bath/imp), hybrid(1bath), replica(1replica/imp)")

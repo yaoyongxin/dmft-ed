@@ -130,7 +130,7 @@ contains
        Dim      = getdim(isector)
        Neigen   = min(dim,neigen_sector(isector))
        Nitermax = min(dim,lanc_niter)
-       Nblock   = min(dim,lanc_ncv_factor*Neigen + lanc_ncv_add)!min(dim,5*Neigen+10)
+       Nblock   = min(dim,lanc_ncv_factor*max(Neigen,lanc_nstates_sector) + lanc_ncv_add)!min(dim,5*Neigen+10)
        !
        lanc_solve  = .true.
        if(Neigen==dim)lanc_solve=.false.

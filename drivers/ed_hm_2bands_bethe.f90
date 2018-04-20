@@ -64,6 +64,7 @@ program hm_2bands_dos
   allocate(H0(Nso))
   H0=[-Delta/2,Delta/2]
   Hloc(1,1,:,:)=diag(H0)
+!  call TB_write_Hloc(Hloc)
   call TB_write_Hloc(Hloc(1,1,:,:))
 
   !Build Matsubara frequencies
