@@ -630,7 +630,7 @@ contains
     ddii_tmp   = 0d0
     imp_density_matrix_tmp = zero
     !
-    call start_timer
+    if(MPI_MASTER)call start_timer
     !
     do ilat = 1 + MPI_ID, Nsites, MPI_SIZE
        write(LOGfile,*)str(MPI_ID)//" SOLVES INEQ SITE: "//str(ilat,Npad=4)
@@ -672,7 +672,7 @@ contains
     !
     call MPI_Barrier(MpiComm,MPI_ERR)
     !
-    call stop_timer(LOGfile)
+    if(MPI_MASTER)call stop_timer(LOGfile)
     !
     ed_file_suffix=""
     !

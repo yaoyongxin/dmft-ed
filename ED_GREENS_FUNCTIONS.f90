@@ -192,11 +192,14 @@ contains
     integer :: iorb,jorb,ispin,i
     logical :: MaskBool
     !
+
     !NORMAL: (default)
     do ispin=1,Nspin
        do iorb=1,Norb
           write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_s"//str(ispin)
+          if(MPI_MASTER)call start_timer
           call lanc_build_gf_normal_c(iorb,ispin)
+          if(MPI_MASTER)call stop_timer(LOGfile)
        enddo
     enddo
     !
@@ -211,7 +214,9 @@ contains
                 if(bath_type=="replica")MaskBool=&
                      (dmft_bath%mask(ispin,ispin,iorb,jorb,1)).OR.(dmft_bath%mask(ispin,ispin,iorb,jorb,2))
                 if(.not.MaskBool)cycle
+                if(MPI_MASTER)call start_timer
                 call lanc_build_gf_normal_mix_c(iorb,jorb,ispin)
+                if(MPI_MASTER)call stop_timer(LOGfile)
              enddo
           enddo
        enddo
@@ -263,7 +268,7 @@ contains
     !
     isite=impIndex(iorb,ispin)
     !
-    call start_timer
+    
     !
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
@@ -364,7 +369,7 @@ contains
        deallocate(HI%map)
        !
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_build_gf_normal_c
 
   subroutine lanc_build_gf_normal_mix_c(iorb,jorb,ispin)
@@ -384,7 +389,7 @@ contains
     isite=impIndex(iorb,ispin)  !orbital 1
     jsite=impIndex(jorb,ispin)  !orbital 2
     !
-    call start_timer
+    
     !
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
@@ -609,7 +614,7 @@ contains
        !
     enddo
     !
-    call stop_timer(LOGfile)
+    
     !
   end subroutine lanc_build_gf_normal_mix_c
 
@@ -698,7 +703,9 @@ contains
        auxGmats=zero
        auxGreal=zero
        write(LOGfile,"(A)")"Get G&F_l"//str(iorb)//"_s"//str(ispin)
+       if(MPI_MASTER)call start_timer()
        call lanc_build_gf_superc_c(iorb)
+       if(MPI_MASTER)call stop_timer(LOGfile)
        !
        impGmats(ispin,ispin,iorb,iorb,:) = auxGmats(1,:) !this is G_{iorb,iorb} = G_{up,up;iorb,iorb}
        impGreal(ispin,ispin,iorb,iorb,:) = auxGreal(1,:)
@@ -720,7 +727,9 @@ contains
        do iorb=1,Norb
           do jorb=iorb+1,Norb
              write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_m"//str(jorb)//"_s"//str(ispin)
+             if(MPI_MASTER)call start_timer()
              call lanc_build_gf_superc_mix_c(iorb,jorb)
+             if(MPI_MASTER)call stop_timer()
              impGmats(ispin,ispin,iorb,jorb,:) = auxGmats(3,:)
              impGreal(ispin,ispin,iorb,jorb,:) = auxGreal(3,:)
           enddo
@@ -752,7 +761,7 @@ contains
     integer                :: Nitermax,Nlanc
     type(sector_map)       :: HI,HJ
     !
-    call start_timer
+    
     !
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
@@ -1050,7 +1059,7 @@ contains
        deallocate(HI%map)
        !
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_build_gf_superc_c
 
   subroutine lanc_build_gf_superc_mix_c(iorb,jorb)
@@ -1072,7 +1081,7 @@ contains
     !
     numstates=state_list%size
     !   
-    call start_timer
+    
     !
     do istate=1,numstates
        isector    =  es_return_sector(state_list,istate)
@@ -1306,7 +1315,7 @@ contains
        !
     enddo
     !
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_build_gf_superc_mix_c
 
   subroutine add_to_lanczos_gf_superc(vnorm2,Ei,alanc,blanc,isign,ichan)
@@ -1403,7 +1412,9 @@ contains
        do ispin=1,Nspin
           do iorb=1,Norb
              write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(iorb)//"_s"//str(ispin)//str(ispin)
+             if(MPI_MASTER)call start_timer()
              call lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
+             if(MPI_MASTER)call stop_timer(LOGfile)
           enddo
        enddo
        !same orbital, different spin GF: G_{aa}^{ss'}(z)
@@ -1413,7 +1424,9 @@ contains
                 do jorb=1,Norb
                    if((ispin.ne.jspin).and.(iorb.eq.jorb)) then
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
+                      if(MPI_MASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
+                      if(MPI_MASTER)call stop_timer(LOGfile)
                    endif
                 enddo
              enddo
@@ -1446,7 +1459,9 @@ contains
        do ispin=1,Nspin
           do iorb=1,Norb
              write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(iorb)//"_s"//str(ispin)//str(ispin)
+             if(MPI_MASTER)call start_timer()
              call lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
+             if(MPI_MASTER)call stop_timer(LOGfile)
           enddo
        enddo
        !
@@ -1457,7 +1472,9 @@ contains
                 do jorb=1,Norb
                    if((ispin.ne.jspin).and.(iorb.eq.jorb)) then
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
+                      if(MPI_MASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
+                      if(MPI_MASTER)call stop_timer(LOGfile)
                    endif
                 enddo
              enddo
@@ -1491,7 +1508,9 @@ contains
                 do jorb=1,Norb
                    if((ispin.eq.jspin).and.(iorb.ne.jorb)) then
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
+                      if(MPI_MASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
+                      if(MPI_MASTER)call stop_timer(LOGfile)
                    endif
                 enddo
              enddo
@@ -1525,7 +1544,9 @@ contains
                 do jorb=1,Norb
                    if((ispin.ne.jspin).and.(iorb.ne.jorb)) then
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
+                      if(MPI_MASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
+                      if(MPI_MASTER)call stop_timer(LOGfile)
                    endif
                 enddo
              enddo
@@ -1558,7 +1579,9 @@ contains
        do ispin=1,Nspin
           do iorb=1,Norb
              write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(iorb)//"_s"//str(ispin)//str(ispin)
+             if(MPI_MASTER)call start_timer()
              call lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
+             if(MPI_MASTER)call stop_timer(LOGfile)
           enddo
        enddo
        !
@@ -1571,7 +1594,9 @@ contains
                       if((dmft_bath%mask(ispin,jspin,iorb,jorb,1).eqv. .false.)&
                            .and.(dmft_bath%mask(ispin,jspin,iorb,jorb,2).eqv. .false.))cycle
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
+                      if(MPI_MASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
+                      if(MPI_MASTER)call stop_timer(LOGfile)
                    endif
                 enddo
              enddo
@@ -1609,7 +1634,9 @@ contains
                       if((dmft_bath%mask(ispin,jspin,iorb,jorb,1).eqv. .false.)&
                            .and.(dmft_bath%mask(ispin,jspin,iorb,jorb,2).eqv. .false.))cycle
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
+                      if(MPI_MASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
+                      if(MPI_MASTER)call stop_timer(LOGfile)
                    endif
                 enddo
              enddo
@@ -1647,7 +1674,9 @@ contains
                       if((dmft_bath%mask(ispin,jspin,iorb,jorb,1).eqv. .false.)&
                            .and.(dmft_bath%mask(ispin,jspin,iorb,jorb,2).eqv. .false.))cycle
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
+                      if(MPI_MASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
+                      if(MPI_MASTER)call stop_timer(LOGfile)
                    endif
                 enddo
              enddo
@@ -1700,7 +1729,7 @@ contains
     !
     isite=impIndex(iorb,ispin)
     !
-    call start_timer
+    
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
        state_e    =  es_return_energy(state_list,istate)
@@ -1834,7 +1863,7 @@ contains
        deallocate(HI%map)
        !
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_build_gf_nonsu2_diagOrb_diagSpin_c
 
   !PURPOSE: Evaluate the same different orbital IORB,JORB, different spin ISPIN,JSPIN impurity GF.
@@ -1854,7 +1883,6 @@ contains
     isite=impIndex(iorb,ispin)
     jsite=impIndex(jorb,jspin)
     !
-    call start_timer
     !
     do istate=1,state_list%size
        isector     =  es_return_sector(state_list,istate)
@@ -2209,7 +2237,7 @@ contains
        deallocate(HI%map)
        !
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c
 
   subroutine add_to_lanczos_gf_nonsu2(vnorm2,Ei,alanc,blanc,isign,iorb,jorb,ispin,jspin)

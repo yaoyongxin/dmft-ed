@@ -165,11 +165,15 @@ contains
     write(LOGfile,"(A)")"Get impurity spin Chi:"
     do iorb=1,Norb
        write(LOGfile,"(A)")"Get Chi_spin_l"//reg(txtfy(iorb))
+       if(MPI_MASTER)call start_timer()
        call lanc_ed_build_spinChi_c(iorb)
+       if(MPI_MASTER)call stop_timer(LOGfile)
     enddo
     if(Norb>1)then
        write(LOGfile,"(A)")"Get Chi_spin_tot"
+       if(MPI_MASTER)call start_timer()
        call lanc_ed_build_spinChi_tot_c()
+       if(MPI_MASTER)call stop_timer(LOGfile)
     endif
     spinChi_tau = SpinChi_tau/zeta_function
     spinChi_w   = spinChi_w/zeta_function
@@ -190,7 +194,7 @@ contains
     type(sector_map) :: HI    !map of the Sector S to Hilbert space H
     !
     !
-    call start_timer
+    
     !
     do izero=1,state_list%size
        isector     =  es_return_sector(state_list,izero)
@@ -240,7 +244,7 @@ contains
        if(spH0%status)call sp_delete_matrix(spH0)
        nullify(state_cvec)
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_ed_build_spinChi_c
 
   subroutine lanc_ed_build_spinChi_tot_c()
@@ -257,7 +261,7 @@ contains
     type(sector_map) :: HI    !map of the Sector S to Hilbert space H
     !
     !
-    call start_timer
+    
     !
     do izero=1,state_list%size
        isector     =  es_return_sector(state_list,izero)
@@ -307,7 +311,7 @@ contains
        if(spH0%status)call sp_delete_matrix(spH0)
        nullify(state_cvec)
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_ed_build_spinChi_tot_c
 
   subroutine add_to_lanczos_spinChi(vnorm,Ei,alanc,blanc,isign,iorb)
@@ -407,7 +411,9 @@ contains
     write(LOGfile,"(A)")"Get impurity dens Chi:"
     do iorb=1,Norb
        write(LOGfile,"(A)")"Get Chi_dens_diag_l"//reg(txtfy(iorb))
+       if(MPI_MASTER)call start_timer()
        call lanc_ed_build_densChi_diag_c(iorb)
+       if(MPI_MASTER)call stop_timer(LOGfile)
     enddo
     !
     !
@@ -415,7 +421,9 @@ contains
        do iorb=1,Norb
           do jorb=iorb+1,Norb
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
+             if(MPI_MASTER)call start_timer()
              call lanc_ed_build_densChi_offdiag_c(iorb,jorb)
+             if(MPI_MASTER)call stop_timer(LOGfile)
           end do
        end do
        do iorb=1,Norb
@@ -427,12 +435,16 @@ contains
        do iorb=1,Norb
           do jorb=1,Norb
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
+             if(MPI_MASTER)call start_timer()
              call lanc_ed_build_densChi_mix_c(iorb,jorb)
+             if(MPI_MASTER)call stop_timer(LOGfile)
           end do
        end do
        !
        write(LOGfile,"(A)")"Get Chi_dens_tot"
-       call lanc_ed_build_densChi_tot_c()     
+       if(MPI_MASTER)call start_timer()
+       call lanc_ed_build_densChi_tot_c()
+       if(MPI_MASTER)call stop_timer(LOGfile)
     endif
     !
     denschi_tau = Denschi_tau/zeta_function
@@ -460,7 +472,7 @@ contains
     type(sector_map)       :: HI    !map of the Sector S to Hilbert space H
     !
     !
-    call start_timer
+    
     !
     do izero=1,state_list%size
        isector    =  es_return_sector(state_list,izero)
@@ -509,7 +521,7 @@ contains
        if(spH0%status)call sp_delete_matrix(spH0)
        nullify(state_cvec)
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_ed_build_densChi_diag_c
 
   !+------------------------------------------------------------------+
@@ -530,7 +542,7 @@ contains
     integer                :: Nitermax
     type(sector_map)       :: HI    !map of the Sector S to Hilbert space H
     !
-    call start_timer
+    
     !
     do izero=1,state_list%size
        isector    =  es_return_sector(state_list,izero)
@@ -579,7 +591,7 @@ contains
        if(spH0%status)call sp_delete_matrix(spH0)
        nullify(state_cvec)
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_ed_build_densChi_tot_c
 
   !+------------------------------------------------------------------+
@@ -601,7 +613,7 @@ contains
     integer                :: Nitermax
     type(sector_map)       :: HI    !map of the Sector S to Hilbert space H
     !
-    call start_timer
+    
     !
     do izero=1,state_list%size
        ! properties of the ground states
@@ -732,7 +744,7 @@ contains
        if(spH0%status)call sp_delete_matrix(spH0)
        nullify(state_cvec)
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_ed_build_densChi_offdiag_c
 
   !+------------------------------------------------------------------+
@@ -754,7 +766,7 @@ contains
     integer             :: Nitermax,Nlanc
     !
     !   
-    call start_timer
+    
     !
     do istate=1,state_list%size
        isector     =  es_return_sector(state_list,istate)
@@ -897,7 +909,7 @@ contains
        deallocate(HI%map)
        !
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_ed_build_densChi_mix_c
 
   subroutine add_to_lanczos_densChi(vnorm2,Ei,alanc,blanc,isign,iorb,jorb)
@@ -1152,7 +1164,9 @@ contains
     write(LOGfile,"(A)")"Get impurity pair Chi:"
     do iorb=1,Norb
        write(LOGfile,"(A)")"Get Chi_pair_l"//reg(txtfy(iorb))
+       if(MPI_MASTER)call start_timer()
        call lanc_ed_build_pairChi_c(iorb)
+       if(MPI_MASTER)call stop_timer(LOGfile)
     enddo
     pairChi_tau = PairChi_tau/zeta_function
     pairChi_w   = pairChi_w/zeta_function
@@ -1176,7 +1190,7 @@ contains
     integer                          :: Nitermax
     type(sector_map) :: HI    !map of the Sector S to Hilbert space H
     !
-    call start_timer
+    
     !
     do izero=1,state_list%size
        isector    =  es_return_sector(state_list,izero)
@@ -1265,7 +1279,7 @@ contains
        deallocate(HI%map)
        nullify(state_cvec)
     enddo
-    call stop_timer(LOGfile)
+    
   end subroutine lanc_ed_build_pairChi_c
 
   subroutine add_to_lanczos_pairChi(vnorm,Ei,alanc,blanc,isign,iorb)
