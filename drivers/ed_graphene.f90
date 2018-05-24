@@ -94,15 +94,20 @@ program ed_graphene
   a3 = d1-d2                    !a*sqrt(3)[0, 1]
   !
   !
+  pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
+  pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]
+  !
   !RECIPROCAL LATTICE VECTORS:
   bklen=4d0*pi/sqrt(3d0)
   bk1=bklen*[ sqrt(3d0)/2d0 ,  1d0/2d0 ]
   bk2=bklen*[ sqrt(3d0)/2d0 , -1d0/2d0 ]
+  call TB_set_bk(bk1,bk2)
 
 
-
-  pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
-  pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]
+  !Buil the Hamiltonian on a grid or on  path
+  call build_hk(trim(hkfile))
+  allocate(Hloc(Nlat,Nspin,Nspin,Norb,Norb));Hloc=zero
+  Hloc = lso2nnn_reshape(graphHloc,Nlat,Nspin,Norb)
 
 
   !Allocate Weiss Field:
@@ -111,20 +116,16 @@ program ed_graphene
   allocate(Gmats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Gmats=zero
   allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Sreal=zero
   allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Greal=zero
-  allocate(Hloc(Nlat,Nspin,Nspin,Norb,Norb));Hloc=zero
   allocate(S0(Nlat,Nspin,Nspin,Norb,Norb));S0=zero
   allocate(Zmats(Nlso,Nlso));Zmats=eye(Nlso)
   allocate(Zfoo(Nlat,Nso,Nso));Zfoo=0d0
 
-  !Buil the Hamiltonian on a grid or on  path
-  call build_hk(trim(hkfile))
-  Hloc = lso2nnn_reshape(graphHloc,Nlat,Nspin,Norb)
 
   !Setup solver
   Nb=get_bath_dimension()
   allocate(Bath(Nlat,Nb))
   allocate(Bath_prev(Nlat,Nb))
-  call ed_init_solver(Bath)
+  call ed_init_solver(Bath,Hloc)
 
 
   !DMFT loop
@@ -134,18 +135,18 @@ program ed_graphene
      call start_loop(iloop,nloop,"DMFT-loop")
 
      !Solve the EFFECTIVE IMPURITY PROBLEM (first w/ a guess for the bath)
-     call ed_solve(Bath,Hloc,iprint=1)
+     call ed_solve(Bath,Hloc)
 
      call ed_get_sigma_matsubara(Smats,Nlat)
 
      ! compute the local gf:
-     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats,iprint=4)
+     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats)
 
      ! compute the Weiss field (only the Nineq ones)
      if(cg_scheme=='weiss')then
-        call dmft_weiss(Gmats,Smats,Weiss,Hloc,iprint=4)
+        call dmft_weiss(Gmats,Smats,Weiss,Hloc)
      else
-        call dmft_delta(Gmats,Smats,Weiss,Hloc,iprint=4)
+        call dmft_delta(Gmats,Smats,Weiss,Hloc)
      endif
 
      !Fit the new bath, starting from the old bath + the supplied Weiss
@@ -160,8 +161,13 @@ program ed_graphene
      call end_loop
   enddo
 
+  call dmft_print_gf_matsubara(Smats,"Smats",iprint=1)
+
+  ! extract and print retarded self-energy and Green's function 
   call ed_get_sigma_real(Sreal,Nlat)
-  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal,iprint=4)
+  call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=1)
+  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal)
+  call dmft_print_gf_realaxis(Greal,"Greal",iprint=1)
 
 
 contains
@@ -211,8 +217,8 @@ contains
     integer                               :: isporb,jsporb
     integer                               :: ispin,jspin
     integer                               :: unit
-    complex(8),dimension(Nlso,Nlso,Lmats) :: Gmats,fooSmats
-    complex(8),dimension(Nlso,Nlso,Lreal) :: Greal,fooSreal
+    complex(8),dimension(Nlat,Nspin,Nspin,Norb,Norb,Lmats) :: Gmats,fooSmats
+    complex(8),dimension(Nlat,Nspin,Nspin,Norb,Norb,Lmats) :: Greal,fooSreal
     real(8),dimension(2)                  :: kvec
     real(8)                               :: blen,area_hex,area_rect,points_in,points_tot
     real(8),allocatable,dimension(:)      :: kxgrid,kygrid
@@ -225,39 +231,40 @@ contains
 
     if(allocated(Hk))deallocate(Hk)
     if(allocated(wtk))deallocate(wtk)
+
     allocate(Hk(Nlso,Nlso,Lk));Hk=zero
     allocate(wtk(Lk));Wtk=0d0
-    allocate(kxgrid(Nk),kygrid(Nk))
-    ik=0
-    do iy=1,Nk
-       ky = dble(iy-1)/Nk
-       do ix=1,Nk
-          ik=ik+1
-          kx=dble(ix-1)/Nk
-          kvec = kx*bk1 + ky*bk2
-          kxgrid(ix) = kvec(1)
-          kygrid(iy) = kvec(2)
-          Hk(:,:,ik) = hk_graphene_model(kvec,Nlso)
-       enddo
-    enddo
+    ! allocate(kxgrid(Nk),kygrid(Nk))
+    ! ik=0
+    ! do iy=1,Nk
+    !    ky = dble(iy-1)/Nk
+    !    do ix=1,Nk
+    !       ik=ik+1
+    !       kx=dble(ix-1)/Nk
+    !       kvec = kx*bk1 + ky*bk2
+    !       kxgrid(ix) = kvec(1)
+    !       kygrid(iy) = kvec(2)
+    !       Hk(:,:,ik) = hk_graphene_model(kvec,Nlso)
+    !    enddo
+    ! enddo
+    call TB_build_model(Hk,hk_graphene_model,Nso,[Nk,Nk])
     Wtk = 1d0/Lk
 
 
     if(present(file))then
-       call write_hk_w90("Hkrfile_graphene.data",&
+       call TB_write_hk(Hk,"Hkrfile_graphene.data",&
             No=Nlso,&
             Nd=Norb,&
             Np=0,&
             Nineq=1,&
-            Hk=Hk,&
-            kxgrid=kxgrid,kygrid=kygrid,kzgrid=[0d0])
+            Nkvec=[Nk,Nk])
     endif
     !
     allocate(graphHloc(Nlso,Nlso))
     graphHloc = sum(Hk(:,:,:),dim=3)/Lk
     where(abs(dreal(graphHloc))<1.d-4)graphHloc=0d0
-    call write_Hloc(graphHloc)
-    call write_Hloc(graphHloc,'Hloc.txt')
+    call TB_write_Hloc(graphHloc)
+    call TB_write_Hloc(graphHloc,'Hloc.txt')
     !
     !
 
@@ -267,7 +274,7 @@ contains
     KPath(2,:)=pointK
     Kpath(3,:)=pointKp
     KPath(4,:)=[0d0,0d0]
-    call TB_Solve_path(hk_graphene_model,Nlso,KPath,Nkpath,&
+    call TB_Solve_model(hk_graphene_model,Nlso,KPath,Nkpath,&
          colors_name=[red1,blue1],&
          points_name=[character(len=10) :: "G","K","K`","G"],&
          file="Eigenbands.nint")
@@ -284,8 +291,10 @@ contains
     call add_ctrl_var(wini,"wini")
     call add_ctrl_var(wfin,"wfin")
     call add_ctrl_var(eps,"eps")
-    call dmft_gloc_matsubara(Hk,Wtk,Gmats,fooSmats,iprint=1)
-    call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal,iprint=1)
+    call dmft_gloc_matsubara(Hk,Wtk,Gmats,fooSmats)
+    call dmft_print_gf_matsubara(Gmats,"LG0",iprint=1)
+    call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal)
+    call dmft_print_gf_realaxis(Greal,"LG0",iprint=1)
     !
   end subroutine build_hk
 
