@@ -68,7 +68,8 @@
         enddo
      enddo
   endif
-  !
+
+  
   ! PAIR-HOPPING (P-H) TERMS
   !    P-H: J c^+_iorb_up c^+_iorb_dw   c_jorb_dw   c_jorb_up  (i.ne.j) 
   !    P-H: J c^+_{iorb}  c^+_{iorb+Ns} c_{jorb+Ns} c_{jorb}

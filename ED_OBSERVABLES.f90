@@ -261,7 +261,7 @@ contains
                 do jorb=1,Norb
                    if((ed_mode=="normal").and.(ispin/=jspin))cycle
                    if((bath_type=="normal").and.(iorb/=jorb))cycle
-                   if(Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
+                   if(bath_type=="replica".and.Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
                    isite=impIndex(iorb,ispin)
                    jsite=impIndex(jorb,jspin)
                    do m=1,idim
@@ -285,63 +285,63 @@ contains
     !
     !BATH DENSITY MATRIX (only if bath_type=="replica")
     if(bath_type=="replica")then
-    if(allocated(bth_density_matrix)) deallocate(bth_density_matrix);allocate(bth_density_matrix(Nspin,Nspin,Norb,Norb,Nbath))
-    bth_density_matrix=zero
-    do izero=1,state_list%size
-       !
-       isector = es_return_sector(state_list,izero)
-       Ei      = es_return_energy(state_list,izero)
-       idim    = getdim(isector)
-       gscvec  => es_return_cvector(state_list,izero)
-       norm=sqrt(dot_product(gscvec,gscvec))
-       if(abs(norm-1.d0)>1.d-9)stop "GS is not normalized"
-       !
-       peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
-       peso = peso/zeta_function
-       !
-       call build_sector(isector,H)
-       !Diagonal densities
-       do ibath=1,Nbath
-          do ispin=1,Nspin
-             do iorb=1,Norb
-                isite = iorb + ibath*Norb + (ispin-1)*Ns
-                do m=1,idim
-                   i=H%map(m)
-                   ib = bdecomp(i,2*Ns)
-                   bth_density_matrix(ispin,ispin,iorb,iorb,ibath) = bth_density_matrix(ispin,ispin,iorb,iorb,ibath) + &
-                        peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
+       if(allocated(bth_density_matrix)) deallocate(bth_density_matrix);allocate(bth_density_matrix(Nspin,Nspin,Norb,Norb,Nbath))
+       bth_density_matrix=zero
+       do izero=1,state_list%size
+          !
+          isector = es_return_sector(state_list,izero)
+          Ei      = es_return_energy(state_list,izero)
+          idim    = getdim(isector)
+          gscvec  => es_return_cvector(state_list,izero)
+          norm=sqrt(dot_product(gscvec,gscvec))
+          if(abs(norm-1.d0)>1.d-9)stop "GS is not normalized"
+          !
+          peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
+          peso = peso/zeta_function
+          !
+          call build_sector(isector,H)
+          !Diagonal densities
+          do ibath=1,Nbath
+             do ispin=1,Nspin
+                do iorb=1,Norb
+                   isite = iorb + ibath*Norb + (ispin-1)*Ns
+                   do m=1,idim
+                      i=H%map(m)
+                      ib = bdecomp(i,2*Ns)
+                      bth_density_matrix(ispin,ispin,iorb,iorb,ibath) = bth_density_matrix(ispin,ispin,iorb,iorb,ibath) + &
+                           peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
+                   enddo
                 enddo
              enddo
-          enddo
-          !off-diagonal
-          do ispin=1,Nspin
-             do jspin=1,Nspin
-                do iorb=1,Norb
-                   do jorb=1,Norb
-                      if((ed_mode=="normal").and.(ispin/=jspin))cycle
-                      if((bath_type=="normal").and.(iorb/=jorb))cycle
-                      if(Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
-                      isite = iorb + ibath*Norb + (ispin-1)*Ns
-                      jsite = jorb + ibath*Norb + (jspin-1)*Ns
-                      do m=1,idim
-                         i=H%map(m)
-                         ib = bdecomp(i,2*Ns)
-                         if((ib(jsite)==1).and.(ib(isite)==0))then
-                            call c(jsite,i,r,sgn1)
-                            call cdg(isite,r,k,sgn2)
-                            j=binary_search(H%map,k)
-                            bth_density_matrix(ispin,jspin,iorb,jorb,ibath) = bth_density_matrix(ispin,jspin,iorb,jorb,ibath) + &
-                                 peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
-                         endif
+             !off-diagonal
+             do ispin=1,Nspin
+                do jspin=1,Nspin
+                   do iorb=1,Norb
+                      do jorb=1,Norb
+                         if((ed_mode=="normal").and.(ispin/=jspin))cycle
+                         if((bath_type=="normal").and.(iorb/=jorb))cycle
+                         if(Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
+                         isite = iorb + ibath*Norb + (ispin-1)*Ns
+                         jsite = jorb + ibath*Norb + (jspin-1)*Ns
+                         do m=1,idim
+                            i=H%map(m)
+                            ib = bdecomp(i,2*Ns)
+                            if((ib(jsite)==1).and.(ib(isite)==0))then
+                               call c(jsite,i,r,sgn1)
+                               call cdg(isite,r,k,sgn2)
+                               j=binary_search(H%map,k)
+                               bth_density_matrix(ispin,jspin,iorb,jorb,ibath) = bth_density_matrix(ispin,jspin,iorb,jorb,ibath) + &
+                                    peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
+                            endif
+                         enddo
                       enddo
                    enddo
                 enddo
              enddo
           enddo
+          !
+          deallocate(H%map)
        enddo
-       !
-       deallocate(H%map)
-    enddo
     endif
     !
     if(MPI_MASTER)then

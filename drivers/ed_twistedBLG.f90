@@ -127,6 +127,11 @@
   Hloc = lso2nnn_reshape(graphHloc,Nlat,Nspin,Norb)
 
 
+  stop
+
+
+
+
 
 
   !!Setup solver
@@ -491,7 +496,6 @@ contains
     !call dmft_print_gf_matsubara(Gmats,"LG0",iprint=1)
     call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal)
     call dmft_print_gf_realaxis(Greal,"LG0",iprint=1)
-    !
   end subroutine build_hk
 
 

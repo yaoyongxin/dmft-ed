@@ -1,4 +1,4 @@
-  program ed_BLG
+program ed_BLG
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
@@ -71,10 +71,10 @@
   call parse_input_variable(stacking,"STACKING",finput,default='AB')
   !
   select case(trim(stacking))
-     case ('AA')
-        hk_graphene_model => hk_BLG_AA_model
-     case ('AB')
-        hk_graphene_model => hk_BLG_AB_model
+  case ('AA')
+     hk_graphene_model => hk_BLG_AA_model
+  case ('AB')
+     hk_graphene_model => hk_BLG_AB_model
   end select
 
   call ed_read_input(trim(finput))
@@ -105,7 +105,7 @@
 
   call TB_set_bk([1d0,0d0]*bklen,[0d0,1d0]*bklen)
 
-   
+
 
   pointM = [2*pi/3, 0d0             ]
   pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
@@ -122,10 +122,6 @@
   allocate(S0(Nlat,Nspin,Nspin,Norb,Norb));S0=zero
   allocate(Zmats(Nlso,Nlso));Zmats=eye(Nlso)
   allocate(Zfoo(Nlat,Nso,Nso));Zfoo=0d0
-
-  !Buil the Hamiltonian on a grid or on  path
-  call build_hk(trim(hkfile))
-  Hloc = lso2nnn_reshape(graphHloc,Nlat,Nspin,Norb)
 
   !Setup solver
   Nb=get_bath_dimension()
@@ -168,7 +164,7 @@
   enddo
 
   call dmft_print_gf_matsubara(Smats,"Smats",iprint=1)
- 
+
   ! extract and print retarded self-energy and Green's function 
   call ed_get_sigma_real(Sreal,Nlat)
   call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=1)
@@ -274,8 +270,13 @@ contains
     hk(3,2)=t0
     hk(2,3)=t0
     !
-    hk(1,4)=t3*hk0(2,1)
-    hk(4,1)=t3*hk0(1,2)
+    ! <<<<<<< HEAD
+    ! hk(1,4)=t3*hk0(2,1)
+    ! hk(4,1)=t3*hk0(1,2)
+    ! =======
+    hk(1,4)=t3*hk0(1,2)
+    hk(4,1)=t3*hk0(2,1)
+    ! >>>>>>> 17a0ecd2fcea8e738ea0d35d160286970e3ee752
     !
   end function hk_BLG_AB_model
 
@@ -309,19 +310,7 @@ contains
     if(allocated(wtk))deallocate(wtk)
     allocate(Hk(Nlso,Nlso,Lk));Hk=zero
     allocate(wtk(Lk));Wtk=0d0
-    allocate(kxgrid(Nk),kygrid(Nk))
-    ik=0
-    do iy=1,Nk
-       ky = dble(iy-1)/Nk
-       do ix=1,Nk
-          ik=ik+1
-          kx=dble(ix-1)/Nk
-          kvec = kx*bk1 + ky*bk2
-          kxgrid(ix) = kvec(1)
-          kygrid(iy) = kvec(2)
-          Hk(:,:,ik) = hk_graphene_model(kvec,Nlso)
-       enddo
-    enddo
+    call TB_build_model(Hk,hk_graphene_model,Nlso,[Nk,Nk])
     Wtk = 1d0/Lk
 
 
