@@ -137,6 +137,7 @@ contains
     integer                                :: alfa,beta
     real(8)                                :: sg1,sg2,sg3,sg4
     real(8),dimension(Norb)                :: nup,ndw
+    real(8)                                :: U0,U1
     complex(8)                             :: htmp,htmpup,htmpdw
     complex(8),dimension(Nspin,Norb,Nbath) :: diag_hybr
     logical                                :: Jcondition
@@ -179,22 +180,6 @@ contains
        enddo
     endif
     !
-
-    !>DEBUG
-    Nflavors=2*Norb
-    allocate(nvec(Nflavors))      !1:Norb = n_up, Norb+1:2Norb=n_dw
-    allocate(Umatrix(Nflavors,Nflavors))
-    Umatrix(1,:)=[0d0,U0,U1,U1,U0,U0,U1,U1]
-    Umatrix(2,:)=[U0,0d0,U1,U1,U0,U0,U1,U1]
-    Umatrix(3,:)=[U1,U1,0d0,U0,U1,U1,U0,U0]
-    Umatrix(4,:)=[U1,U1,U0,0d0,U1,U1,U0,U0]
-    Umatrix(5,:)=[U0,U0,U1,U1,0d0,U0,U1,U1]   
-    Umatrix(6,:)=[U0,U0,U1,U1,U0,0d0,U1,U1]
-    Umatrix(7,:)=[U1,U1,U0,U0,U1,U1,0d0,U0]
-    Umatrix(7,:)=[U1,U1,U0,U0,U1,U1,U0,0d0]
-    !<DEBUG
-
-
     !-----------------------------------------------!
     include "ED_HAMILTONIAN_MATVEC/build_h.f90"
     !-----------------------------------------------!

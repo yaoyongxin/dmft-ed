@@ -1,3 +1,20 @@
+  !>DEBUG
+  U0=Uloc(1)
+  U1=Ust
+  Nflavors=2*Norb
+  allocate(nvec(Nflavors))      !1:Norb = n_up, Norb+1:2Norb=n_dw
+  allocate(Umatrix(Nflavors,Nflavors))
+  Umatrix(1,:)=[0d0,U1,U0,U1,U0,U1,U0,U1]
+  Umatrix(2,:)=[U1,0d0,U1,U0,U1,U0,U1,U0]
+  Umatrix(3,:)=[U0,U1,0d0,U1,U0,U1,U0,U1]
+  Umatrix(4,:)=[U1,U0,U1,0d0,U1,U0,U1,U0]
+  Umatrix(5,:)=[U0,U1,U0,U1,0d0,U1,U0,U1]
+  Umatrix(6,:)=[U1,U0,U1,U0,U1,0d0,U1,U0]
+  Umatrix(7,:)=[U0,U1,U0,U1,U0,U1,0d0,U1]
+  Umatrix(8,:)=[U1,U0,U1,U0,U1,U0,U1,0d0]
+  !<DEBUG
+
+
   states: do i=first_state,last_state
      m = H%map(i)
      impi = i-ishift
@@ -30,3 +47,6 @@
      !
   enddo states
 
+
+  
+  deallocate(nvec,Umatrix)
