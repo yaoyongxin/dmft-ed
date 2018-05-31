@@ -1,10 +1,16 @@
-program ed_graphene
+program ed_effective_tBLG
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
+
+!!!!!!!!:::::::: The twisted bilayer graphene flat bands effective model can be found in arXiv:1805.06819:::::!!!!!!!!
+  ! this driver needs the file 'eff_hopping.dat' to work
+
+
   implicit none
 
-  integer                                       :: iloop,Lk,Nso,Nlso,Nlat
+  real(8),parameter                             :: eV_to_meV=1000d0
+  integer                                       :: i,iloop,Lk,Nso,Nlso,Nlat
   logical                                       :: converged
   integer                                       :: ispin,ilat!,i,j
 
@@ -24,13 +30,13 @@ program ed_graphene
   real(8),allocatable,dimension(:)              :: Wtk
 
   integer,allocatable,dimension(:)              :: ik2ix,ik2iy
-  real(8),dimension(2)                          :: d1,d2,d3
-  real(8),dimension(2)                          :: a1,a2,a3
-  real(8),dimension(2)                          :: bk1,bk2,pointK,pointKp,bklen
+  real(8),dimension(2)                          :: L1,L2,G1,G2
+  real(8),dimension(2)                          :: bk1,bk2,bklen
+  real(8),dimension(2)                          :: pointM,pointK1,pointK2
 
   !variables for the model:
-  integer                                       :: Nk,Nkpath
-  real(8)                                       :: ts,tsp,phi,delta,Mh,wmixing
+  integer                                       :: Nk,Nkpath,m,n,p,q
+  real(8)                                       :: Lm,Mh,wmixing,re,im
   character(len=32)                             :: finput
   character(len=32)                             :: hkfile
   logical                                       :: spinsym
@@ -41,6 +47,8 @@ program ed_graphene
   real(8),dimension(:,:),allocatable            :: Zmats
   complex(8),dimension(:,:,:),allocatable       :: Zfoo
   complex(8),allocatable,dimension(:,:,:,:,:)   :: S0
+  complex(8),dimension(1162)                    :: hopping   !1162 is the number of hopping constants
+  integer,dimension(1162,4)                     :: integer_input
 
 
   !Parse additional variables && read Input && read H(k)^2x2
@@ -48,64 +56,49 @@ program ed_graphene
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call parse_input_variable(nk,"NK",finput,default=100)
   call parse_input_variable(nkpath,"NKPATH",finput,default=500)
-  call parse_input_variable(ts,"TS","inputGRAPHENE.conf",default=1d0)
   call parse_input_variable(mh,"MH","inputGRAPHENE.conf",default=0d0)
   call parse_input_variable(wmixing,"WMIXING",finput,default=0.75d0)
   call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
   !
   call ed_read_input(trim(finput))
 
+  call add_ctrl_var(Nspin,"Nspin")
+  call add_ctrl_var(Norb,"Norb")
+  call add_ctrl_var(beta,"BETA")
+  call add_ctrl_var(xmu,"xmu")
+  call add_ctrl_var(wini,"wini")
+  call add_ctrl_var(wfin,"wfin")
+  call add_ctrl_var(eps,"eps")
+
+
   if(Norb/=1)stop "Wrong setup from input file: Norb=1"
-  Nlat=2
+  Nlat=4
   Nso=Nspin*Norb
   Nlso=Nlat*Nso
+  !
+  Lm=13.422225299852479
+  L1=[sqrt(3.d0)/2.d0,1.d0/2.d0]*Lm
+  L2=[0.d0,1.d0]*Lm
+  G1=((2.d0*pi)/(L2(2)*L1(1)-L1(2)*L2(1)))*[L2(2),-L2(1)]
+  G2=((2.d0*pi)/(L2(2)*L1(1)-L1(2)*L2(1)))*[-L1(2),L1(1)]
 
-  ! BACKUP OF THE OLD LATTICE STRUCTURE (WRONG!!)
-  ! !FOLLOWING REV.MOD.PHYS.81.109(2009)
-  ! !Lattice basis (a=1; a0=sqrt3*a) is:
-  ! !\a_1 = a0 [ sqrt3/2 , 1/2 ]
-  ! !\a_2 = a0 [ sqrt3/2 ,-1/2 ]
-  ! !nearest neighbor: A-->B, B-->A
-  ! d1= [  1d0/2d0 , sqrt(3d0)/2d0 ]
-  ! d2= [  1d0/2d0 ,-sqrt(3d0)/2d0 ]
-  ! d3= [ -1d0     , 0d0           ]
-  ! !
-  ! !next nearest-neighbor displacements: A-->A, B-->B \== \nu_1,\nu_2, \nu_3=\nu_1-\nu_2
-  ! a1=[ sqrt(3d0)/2d0, 1d0/2d0]
-  ! a2=[ sqrt(3d0)/2d0,-1d0/2d0]
-  ! a3=a2-a1
-  ! !
-  ! !RECIPROCAL LATTICE VECTORS:
-  ! bklen=4d0*pi/3d0
-  ! bk1=bklen*[ 1d0/2d0 ,  sqrt(3d0)/2d0 ]
-  ! bk2=bklen*[ 1d0/2d0 , -sqrt(3d0)/2d0 ]
-
-
-  !LATTICE BASIS:
-  ! nearest neighbor: A-->B, B-->A
-  d1= [  1d0/2d0 , sqrt(3d0)/2d0 ]
-  d2= [  1d0/2d0 ,-sqrt(3d0)/2d0 ]
-  d3= [ -1d0     , 0d0           ]
-  !
-  !
-  !next nearest-neighbor displacements: A-->A, B-->B, cell basis
-  a1 = d2-d3                    !a*sqrt(3)[sqrt(3)/2,-1/2]
-  a2 = d3-d1                    !a*sqrt(3)[-sqrt(3)/2,-1/2]
-  a3 = d1-d2                    !a*sqrt(3)[0, 1]
-  !
-  !
   !RECIPROCAL LATTICE VECTORS:
-  bklen=4d0*pi/sqrt(3d0)
-  bk1=bklen*[ sqrt(3d0)/2d0 ,  1d0/2d0 ]
-  bk2=bklen*[ sqrt(3d0)/2d0 , -1d0/2d0 ]
+  bk1=G1
+  bk2=G2
 
-  call TB_set_bk([1d0,0d0]*bklen,[0d0,1d0]*bklen)
+  call TB_set_bk(G1,G2)
+  pointM =(G1+G2)/2.d0 
+  pointK1=(G1+2.d0*G2)/3.d0 
+  pointK2=(2.d0*G1+G2)/3.d0
 
-   
+!!!! all the hopping constants are contained in the file 'eff_hopping.dat'!!!!!
 
-  pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
-  pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]
-
+  open(10,file='eff_hopping.dat')
+  do i=1,1162
+     read(10,*) integer_input(i,1),integer_input(i,2),integer_input(i,3),integer_input(i,4),re,im
+     hopping(i)=eV_to_meV*(re+xi*im) !transforms to meV
+  end do
+  close(10)
 
   !Allocate Weiss Field:
   allocate(Weiss(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Weiss=zero
@@ -118,7 +111,7 @@ program ed_graphene
   allocate(Zmats(Nlso,Nlso));Zmats=eye(Nlso)
   allocate(Zfoo(Nlat,Nso,Nso));Zfoo=0d0
 
-  !Buil the Hamiltonian on a grid or on  path
+  !Build the Hamiltonian on a grid or on  path
   call build_hk(trim(hkfile))
   Hloc = lso2nnn_reshape(graphHloc,Nlat,Nspin,Norb)
 
@@ -162,8 +155,9 @@ program ed_graphene
      call end_loop
   enddo
 
+  call dmft_print_gf_matsubara(Gmats,"Gmats",iprint=1)
   call dmft_print_gf_matsubara(Smats,"Smats",iprint=1)
- 
+
   ! extract and print retarded self-energy and Green's function 
   call ed_get_sigma_real(Sreal,Nlat)
   call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=1)
@@ -175,31 +169,68 @@ contains
 
 
 
+  !--------------------------------------------------------------------!
+  ! Twisted Bilayer Graphene (theta=1.05) effective  HAMILTONIAN:
+  !--------------------------------------------------------------------!
+  function hk_TBGeffective_model(kpoint,Nlso) result(hk)
+    real(8),dimension(:)                :: kpoint
+    integer                             :: Nlso,i,j,ii,jj,m,n,p,q
+    complex(8)                          :: uni
+    real(8)                             :: re,im
+    complex(8),dimension(Nlso,Nlso)     :: hk       
+    complex(8),dimension(Nlso/2,Nlso/2) :: hk_plus,hk_minus
+    real(8),dimension(2)                :: pos_1,pos_2,r_12  
+    real(8),dimension(2)                :: r_AB,r_BA,RR
 
-  !--------------------------------------------------------------------!
-  !Graphene HAMILTONIAN:
-  !--------------------------------------------------------------------!
-  function hk_graphene_model(kpoint,Nlso) result(hk)
-    real(8),dimension(:)          :: kpoint
-    integer                       :: Nlso
-    complex(8),dimension(Nlso,Nlso) :: hk
-    real(8)                       :: h0,hx,hy,hz
-    real(8)                       :: kdotd(3),kdota(3)
-    !(k.d_j)
-    kdotd(1) = dot_product(kpoint,d1)
-    kdotd(2) = dot_product(kpoint,d2)
-    kdotd(3) = dot_product(kpoint,d3)
-    !(k.a_j)
-    kdota(1) = dot_product(kpoint,a1)
-    kdota(2) = dot_product(kpoint,a2)
-    kdota(3) = dot_product(kpoint,a3)
-    !
-    h0 = 2*tsp*cos(phi)*sum( cos(kdota(:)) )
-    hx =-ts*sum( cos(kdotd(:)) )
-    hy =-ts*sum( sin(kdotd(:)) )
-    hz = 2*tsp*sin(phi)*sum( sin(kdota(:)) ) + Mh 
-    hk = h0*pauli_0 + hx*pauli_x + hy*pauli_y + hz*pauli_z
-  end function hk_graphene_model
+!    r_BA=[1.d0/2.d0,sqrt(3.d0)/2.d0]*(Lm/sqrt(3.d0))
+!    r_AB=[-1.d0/2.d0,sqrt(3.d0)/2.d0]*(Lm/sqrt(3.d0))
+
+    hk_plus=zero
+    hk_minus=zero
+
+    do i=1,1162
+
+       m=integer_input(i,1)
+       n=integer_input(i,2)    
+       p=integer_input(i,3)
+       q=integer_input(i,4)
+
+       RR=dfloat(m)*L1+dfloat(n)*L2 
+
+!       if (p.eq.1) then  
+!          pos_1=RR+r_BA
+!       else
+!          pos_1=RR+r_AB
+!       end if
+
+!       if (q.eq.1) then  
+!          pos_2=r_BA
+!       else
+!          pos_2=r_AB
+!       end if
+
+!       r_12=pos_1-pos_2
+
+       hk_plus(p,q)=hk_plus(p,q)+(exp(xi*dot_product(kpoint,RR)))*hopping(i)
+       hk_minus(p,q)=hk_minus(p,q)+(exp(-xi*dot_product(kpoint,RR)))*hopping(i)
+
+    end do
+
+    hk=zero
+
+    do i=1,2
+       do j=1,2
+          hk(i,j)=hk_plus(i,j)
+       end do
+    end do
+
+    do i=3,4
+       do j=3,4
+          hk(i,j)=hk_minus(i-2,j-2)
+       end do
+    end do
+
+  end function hk_TBGeffective_model
 
 
 
@@ -207,7 +238,7 @@ contains
 
 
   !---------------------------------------------------------------------
-  !PURPOSE: Get Graphene Model Hamiltonian
+  !PURPOSE: Get BL Graphene Model Hamiltonian
   !---------------------------------------------------------------------
   subroutine build_hk(file)
     character(len=*),optional                              :: file
@@ -218,8 +249,7 @@ contains
     integer                                                :: isporb,jsporb
     integer                                                :: ispin,jspin
     integer                                                :: unit
-    complex(8),dimension(Nlat,Nspin,Nspin,Norb,Norb,Lmats) :: Gmats,fooSmats
-    complex(8),dimension(Nlat,Nspin,Nspin,Norb,Norb,Lmats) :: Greal,fooSreal
+    complex(8),dimension(Nlat,Nspin,Nspin,Norb,Norb,Lmats) :: Gmats
     real(8),dimension(2)                                   :: kvec
     real(8)                                                :: blen,area_hex,area_rect,points_in,points_tot
     real(8),allocatable,dimension(:)                       :: kxgrid,kygrid
@@ -227,31 +257,32 @@ contains
 
     Lk= Nk*Nk
 
-    write(LOGfile,*)"Build H(k) Graphene:",Lk
+    write(LOGfile,*)"Build effective H(k) of twisted Bilayer Graphene (theta=1.05):",Lk
     write(LOGfile,*)"# of SO-bands     :",Nlso
 
     if(allocated(Hk))deallocate(Hk)
     if(allocated(wtk))deallocate(wtk)
     allocate(Hk(Nlso,Nlso,Lk));Hk=zero
     allocate(wtk(Lk));Wtk=0d0
-    allocate(kxgrid(Nk),kygrid(Nk))
-    ik=0
-    do iy=1,Nk
-       ky = dble(iy-1)/Nk
-       do ix=1,Nk
-          ik=ik+1
-          kx=dble(ix-1)/Nk
-          kvec = kx*bk1 + ky*bk2
-          kxgrid(ix) = kvec(1)
-          kygrid(iy) = kvec(2)
-          Hk(:,:,ik) = hk_graphene_model(kvec,Nlso)
-       enddo
-    enddo
+    ! allocate(kxgrid(Nk),kygrid(Nk))
+    ! ik=0
+    ! do iy=1,Nk
+    !    ky = dble(iy-1)/Nk
+    !    do ix=1,Nk
+    !       ik=ik+1
+    !       kx=dble(ix-1)/Nk
+    !       kvec = kx*bk1 + ky*bk2
+    !       kxgrid(ix) = kvec(1)
+    !       kygrid(iy) = kvec(2)
+    !       Hk(:,:,ik) = hk_TBGeffective_model(kvec,Nlso)
+    !    enddo
+    ! enddo
+    call TB_build_model(Hk,hk_TBGeffective_model,Nlso,[Nk,Nk])
     Wtk = 1d0/Lk
 
 
     if(present(file))then
-       call TB_write_hk(Hk,"Hkrfile_graphene.data",&
+       call TB_write_hk(Hk,"Hkrfile_BLG_AA.data",&
             No=Nlso,&
             Nd=Norb,&
             Np=0,&
@@ -267,33 +298,19 @@ contains
     !
     !
 
-
     allocate(Kpath(4,2))
-    KPath(1,:)=[0,0]
-    KPath(2,:)=pointK
-    Kpath(3,:)=pointKp
-    KPath(4,:)=[0d0,0d0]
-    call TB_Solve_model(hk_graphene_model,Nlso,KPath,Nkpath,&
-         colors_name=[red1,blue1],&
-         points_name=[character(len=10) :: "G","K","K`","G"],&
+    KPath(1,:)=pointK1
+    KPath(2,:)=[0,0]
+    KPath(3,:)=pointM
+    KPath(4,:)=pointK2
+    call TB_Solve_model(hk_TBGeffective_model,Nlso,KPath,Nkpath,&
+         colors_name=[red1,blue1,green1,purple1],&
+         points_name=[character(len=10) :: "K1","G","M","K2"],&
          file="Eigenbands.nint")
 
-
-
     !Build the local GF:
-    Gmats=zero
-    Greal=zero
-    fooSmats =zero
-    fooSreal =zero
-    call add_ctrl_var(beta,"BETA")
-    call add_ctrl_var(xmu,"xmu")
-    call add_ctrl_var(wini,"wini")
-    call add_ctrl_var(wfin,"wfin")
-    call add_ctrl_var(eps,"eps")
-    call dmft_gloc_matsubara(Hk,Wtk,Gmats,fooSmats)
+    call dmft_gloc_matsubara(Hk,Wtk,Gmats,zeros(Nlat,Nspin,Nspin,Norb,Norb,Lmats))
     call dmft_print_gf_matsubara(Gmats,"LG0",iprint=1)
-    call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal)
-    call dmft_print_gf_realaxis(Greal,"LG0",iprint=1)
     !
   end subroutine build_hk
 
@@ -304,7 +321,7 @@ contains
 
 
 
-end program ed_graphene
+end program ed_effective_tBLG
 
 
 
