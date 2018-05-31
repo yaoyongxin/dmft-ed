@@ -59,8 +59,8 @@ MODULE ED_HAMILTONIAN_MATVEC
   type(sector_map)             :: H,Hup,Hdw
 
 
-
-
+  real(8),dimension(:),allocatable   :: nvec
+  real(8),dimension(:,:),allocatable :: Umatrix
 
 
 contains
@@ -131,6 +131,7 @@ contains
     integer                                :: m,mup,mdw
     integer                                :: ishift,ishift_up,ishift_dw
     integer                                :: j,ms,impi
+    integer                                :: iflav,jflav,Nflavors 
     integer                                :: iorb,jorb,ispin,jspin,ibath
     integer                                :: kp,k1,k2,k3,k4
     integer                                :: alfa,beta
@@ -178,6 +179,22 @@ contains
        enddo
     endif
     !
+
+    !>DEBUG
+    Nflavors=2*Norb
+    allocate(nvec(Nflavors))      !1:Norb = n_up, Norb+1:2Norb=n_dw
+    allocate(Umatrix(Nflavors,Nflavors))
+    Umatrix(1,:)=[0d0,U0,U1,U1,U0,U0,U1,U1]
+    Umatrix(2,:)=[U0,0d0,U1,U1,U0,U0,U1,U1]
+    Umatrix(3,:)=[U1,U1,0d0,U0,U1,U1,U0,U0]
+    Umatrix(4,:)=[U1,U1,U0,0d0,U1,U1,U0,U0]
+    Umatrix(5,:)=[U0,U0,U1,U1,0d0,U0,U1,U1]   
+    Umatrix(6,:)=[U0,U0,U1,U1,U0,0d0,U1,U1]
+    Umatrix(7,:)=[U1,U1,U0,U0,U1,U1,0d0,U0]
+    Umatrix(7,:)=[U1,U1,U0,U0,U1,U1,U0,0d0]
+    !<DEBUG
+
+
     !-----------------------------------------------!
     include "ED_HAMILTONIAN_MATVEC/build_h.f90"
     !-----------------------------------------------!

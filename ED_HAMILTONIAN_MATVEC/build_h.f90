@@ -13,7 +13,13 @@
      include "ED_HAMILTONIAN_MATVEC/Himp.f90"
      !
      !LOCAL INTERACTION
-     include "ED_HAMILTONIAN_MATVEC/Hint.f90"
+     select case(kanamori)
+     case default
+        include "ED_HAMILTONIAN_MATVEC/Hint.f90"
+     case (.false.)
+        nvec = [nup,ndw]
+        include "ED_HAMILTONIAN_MATVEC/Hint_Umatrix.f90"
+     end select
      !
      !BATH HAMILTONIAN
      include "ED_HAMILTONIAN_MATVEC/Hbath.f90"

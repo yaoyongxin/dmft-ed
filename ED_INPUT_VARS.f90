@@ -68,6 +68,8 @@ MODULE ED_INPUT_VARS
   logical              :: Jz_basis
   logical              :: Jz_max
   real(8)              :: Jz_max_value
+  !
+  logical              :: kanamori
 
 
   !Some parameters for function dimension:
@@ -174,7 +176,8 @@ contains
     call parse_input_variable(Jz_basis,"JZ_BASIS",INPUTunit,default=.false.,comment="")
     call parse_input_variable(Jz_max,"JZ_MAX",INPUTunit,default=.false.,comment="")
     call parse_input_variable(Jz_max_value,"JZ_MAX_VALUE",INPUTunit,default=1000.d0,comment="")
-
+    !
+    call parse_input_variable(kanamori,"KANAMORI",INPUTunit,default=.true.,comment="Flag to use or not Kanamori form of the interaction. If F should read a generic U_{ijkl} matrix.")
 #ifdef _MPI
     if(present(comm))then
        if(.not.master)then
