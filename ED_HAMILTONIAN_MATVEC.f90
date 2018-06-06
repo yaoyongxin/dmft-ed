@@ -59,8 +59,8 @@ MODULE ED_HAMILTONIAN_MATVEC
   type(sector_map)             :: H,Hup,Hdw
 
 
-
-
+  real(8),dimension(:),allocatable   :: nvec
+  real(8),dimension(:,:),allocatable :: Umatrix
 
 
 contains
@@ -131,11 +131,13 @@ contains
     integer                                :: m,mup,mdw
     integer                                :: ishift,ishift_up,ishift_dw
     integer                                :: j,ms,impi
+    integer                                :: iflav,jflav,Nflavors 
     integer                                :: iorb,jorb,ispin,jspin,ibath
     integer                                :: kp,k1,k2,k3,k4
     integer                                :: alfa,beta
     real(8)                                :: sg1,sg2,sg3,sg4
     real(8),dimension(Norb)                :: nup,ndw
+    real(8)                                :: U0,U1
     complex(8)                             :: htmp,htmpup,htmpdw
     complex(8),dimension(Nspin,Norb,Nbath) :: diag_hybr
     logical                                :: Jcondition

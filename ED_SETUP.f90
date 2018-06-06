@@ -273,7 +273,7 @@ contains
     !CHECKS:
     if(Lfit>Lmats)Lfit=Lmats
     if(Nspin>2)stop "ED ERROR: Nspin > 2 is currently not supported"
-    if(Norb>3)stop "ED ERROR: Norb > 3 is currently not supported" 
+    if(Norb>4)stop "ED ERROR: Norb > 4 is currently not supported" 
     ! if(nerr < dmft_error) nerr=dmft_error
     if(ed_mode=="superc")then
        if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ." 

@@ -14,7 +14,7 @@ MODULE ED_INPUT_VARS
   integer              :: Norb                !Norb =# of impurity orbitals
   integer              :: Nspin               !Nspin=# spin degeneracy (max 2)
   integer              :: nloop               !max dmft loop variables
-  real(8),dimension(3) :: Uloc                !local interactions
+  real(8),dimension(4) :: Uloc                !local interactions
   real(8)              :: Ust                 !intra-orbitals interactions
   real(8)              :: Jh                  !J_Hund: Hunds' coupling constant 
   real(8)              :: Jx                  !J_X: coupling constant for the spin-eXchange interaction term
@@ -68,6 +68,8 @@ MODULE ED_INPUT_VARS
   logical              :: Jz_basis
   logical              :: Jz_max
   real(8)              :: Jz_max_value
+  !
+  logical              :: kanamori
 
 
   !Some parameters for function dimension:
@@ -111,7 +113,7 @@ contains
     call parse_input_variable(Norb,"NORB",INPUTunit,default=1,comment="Number of impurity orbitals.")
     call parse_input_variable(Nbath,"NBATH",INPUTunit,default=6,comment="Number of bath sites:(normal=>Nbath per orb)(hybrid=>Nbath total)(replica=>Nbath=Nreplica)")
     call parse_input_variable(Nspin,"NSPIN",INPUTunit,default=1,comment="Number of spin degeneracy (max 2)")
-    call parse_input_variable(uloc,"ULOC",INPUTunit,default=[2.d0,0.d0,0.d0],comment="Values of the local interaction per orbital (max 3)")
+    call parse_input_variable(uloc,"ULOC",INPUTunit,default=[2.d0,0.d0,0.d0,0.d0],comment="Values of the local interaction per orbital (max 3)")
     call parse_input_variable(ust,"UST",INPUTunit,default=0.d0,comment="Value of the inter-orbital interaction term")
     call parse_input_variable(Jh,"JH",INPUTunit,default=0.d0,comment="Hunds coupling")
     call parse_input_variable(Jx,"JX",INPUTunit,default=0.d0,comment="S-E coupling")
@@ -174,7 +176,8 @@ contains
     call parse_input_variable(Jz_basis,"JZ_BASIS",INPUTunit,default=.false.,comment="")
     call parse_input_variable(Jz_max,"JZ_MAX",INPUTunit,default=.false.,comment="")
     call parse_input_variable(Jz_max_value,"JZ_MAX_VALUE",INPUTunit,default=1000.d0,comment="")
-
+    !
+    call parse_input_variable(kanamori,"KANAMORI",INPUTunit,default=.true.,comment="Flag to use or not Kanamori form of the interaction. If F should read a generic U_{ijkl} matrix.")
 #ifdef _MPI
     if(present(comm))then
        if(.not.master)then
