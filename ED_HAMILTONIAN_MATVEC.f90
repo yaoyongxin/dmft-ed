@@ -283,8 +283,6 @@ contains
 
 
 
-
-
   !####################################################################
   !            SPARSE MAT-VEC DIRECT ON-THE-FLY PRODUCT 
   !####################################################################
@@ -332,6 +330,7 @@ contains
           do ispin=1,Nspin
              do iorb=1,Norb
                 diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
+                print*,diag_hybr(ispin,iorb,ibath)
              enddo
           enddo
        enddo

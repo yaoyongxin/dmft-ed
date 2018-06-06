@@ -2,6 +2,8 @@
      m = H%map(i)
      impi = i-ishift
      ib = bdecomp(m,2*Ns)
+     ! write(*,"(32I1,1x)")(ib(j),j=1,2*Ns)
+     write(*,"(B32.32)")m
      !
      do iorb=1,Norb
         nup(iorb)=dble(ib(iorb))

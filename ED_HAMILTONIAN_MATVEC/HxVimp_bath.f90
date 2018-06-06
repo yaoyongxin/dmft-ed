@@ -2,6 +2,7 @@
   do iorb=1,Norb
      do kp=1,Nbath
         ms=getBathStride(iorb,kp)
+        print*,iorb,kp,ms
         !
         ! IMP UP <--> BATH UP
         if( (diag_hybr(1,iorb,kp)/=0d0) .AND. (ib(iorb)==1) .AND. (ib(ms)==0) )then
@@ -24,6 +25,7 @@
            call c(iorb+Ns,m,k1,sg1)
            call cdg(ms+Ns,k1,k2,sg2)
            j=binary_search(H%map,k2)
+           write(*,"((5I32,1x))")i,m,k2,j,huge(1)
            htmp=diag_hybr(Nspin,iorb,kp)*sg1*sg2
            hv(impi) = hv(impi) + htmp*vin(j)
         endif
