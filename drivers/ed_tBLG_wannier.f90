@@ -20,7 +20,7 @@ program ed_effective_tBLG
   !hamiltonian input:
   complex(8),allocatable,dimension(:,:,:)       :: Hk
   complex(8),allocatable,dimension(:,:)         :: graphHloc
-  complex(8),allocatable,dimension(:,:,:,:)   :: Hloc
+  complex(8),allocatable,dimension(:,:,:,:)     :: Hloc
   real(8),allocatable,dimension(:)              :: Wtk
   integer,allocatable,dimension(:)              :: ik2ix,ik2iy
   real(8),dimension(2)                          :: L1,L2,G1,G2
@@ -38,10 +38,12 @@ program ed_effective_tBLG
   integer,dimension(:,:),allocatable            :: wannier_orbital_index ![Nhopping_wannier,Norb]
   real(8),dimension(:,:),allocatable            :: wannier_Rgrid ![Nhopping_wannier,2=dim]
   !
+  logical                                       :: file_exist
+  !
   !Parse additional variables && read Input && read H(k)^2x2
   call parse_cmd_variable(finput,"FINPUT",default='input_tBLG_wannier.conf')
   call parse_input_variable(fwannier,"FWANNIER",finput,default='eff_hopping.data')
-  call parse_input_variable(nk,"NK",finput,default=100)
+  call parse_input_variable(nk,"NK",finput,default=30)
   call parse_input_variable(nkpath,"NKPATH",finput,default=500)
   call parse_input_variable(wmixing,"WMIXING",finput,default=0.75d0)
   !
@@ -75,7 +77,10 @@ program ed_effective_tBLG
   pointK1=(G1+2.d0*G2)/3.d0 
   pointK2=(2.d0*G1+G2)/3.d0
 
-  !read the hopping constants from file'eff_hopping.dat'!!!!!
+  !check if input file 'eff_hopping.data' exists
+  inquire(file="eff_hopping.data",exist=file_exist)
+  if(.not.file_exist)stop "error: input file eff_hopping.data does not exist!"
+  !read input file
   Nhopping_wannier= file_length(str(fwannier))
   open(free_unit(unit),file=str(fwannier))
   allocate(wannier_Rgrid(Nhopping_wannier,2))
@@ -179,7 +184,7 @@ contains
        k_dot_R = dot_product(kpoint,wannier_Rgrid(i,:))!RR)        ! RR = m*L1 + n*L2
        !
        hk(p,q)    = hk(p,q)     + exp( xi*k_dot_R)*wannier_hopping(i)
-       hk(p+2,q+2)= hk(p+2,q+2) + exp(-xi*k_dot_R)*wannier_hopping(i)
+       hk(p+2,q+2)= hk(p+2,q+2) + exp( xi*k_dot_R)*conjg(wannier_hopping(i))
        !
     end do
     !
