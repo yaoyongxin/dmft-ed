@@ -392,10 +392,9 @@ contains
           getSector(nup,ndw)=isector
           getNup(isector)=nup
           getNdw(isector)=ndw
-          dim = get_normal_sector_dimension(nup,ndw)
-          getDim(isector)=dim
-          getDimUp(isector)=get_normal_sector_dimension(nup)
-          getDimDw(isector)=get_normal_sector_dimension(ndw)
+          getDim(isector)   = get_normal_sector_dimension(nup,ndw)
+          getDimUp(isector) = get_normal_sector_dimension(nup)
+          getDimDw(isector) = get_normal_sector_dimension(ndw)
        enddo
     enddo
     !
@@ -564,7 +563,7 @@ contains
     case ('replica')
        do i=1,Nbath
           do iorb=1,Norb
-             getBathStride(iorb,i) = Norb + (i-1)*Norb + iorb
+             getBathStride(iorb,i) = iorb + i*Norb !Norb + (i-1)*Norb + iorb
           enddo
        enddo
     end select
@@ -790,9 +789,9 @@ contains
   !+------------------------------------------------------------------+
   !NORMAL
   function get_normal_sector_dimension(nup,ndw) result(dim)
-    integer :: nup
+    integer          :: nup
     integer,optional :: ndw
-    integer :: dim,dimup,dimdw
+    integer          :: dim,dimup,dimdw
     if(present(ndw))then
        dimup = binomial(Ns,nup)    !this ensures better evaluation of the dimension
        dimdw = binomial(Ns,ndw)    !as it avoids large numbers
@@ -837,7 +836,7 @@ contains
           do ibath=0,Nbath
              do iorb=1,Norb
                 twoLz = twoLz + 2 * Lzdiag(iorb) * ivec(iorb+Norb*ibath)  &
-                              + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
+                     + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
              enddo
           enddo
           twoSz = (sum(ivec) - sum(jvec))
@@ -857,43 +856,66 @@ contains
   !states i\in Hilbert_space from the states count in H_sector.
   !|ImpUP,BathUP>|ImpDW,BathDW >
   !+------------------------------------------------------------------+
-  subroutine build_sector(isector,Hup)
-    integer                                      :: isector
-    type(sector_map)                             :: Hup
-    integer                                      :: nup,ndw,sz,nt,twoJz
-    integer                                      :: nup_,ndw_,sz_,nt_
-    integer                                      :: twoSz_,twoLz_
-    integer                                      :: i,ibath,iorb
-    integer                                      :: iup,idw
-    integer                                      :: dim
-    integer                                      :: ivec(Ns),jvec(Ns)
+  subroutine build_sector(isector,Hup,Hdw)
+    integer                   :: isector
+    type(sector_map)          :: Hup
+    type(sector_map),optional :: Hdw
+    integer                   :: nup,ndw,sz,nt,twoJz
+    integer                   :: nup_,ndw_,sz_,nt_
+    integer                   :: twoSz_,twoLz_
+    integer                   :: i,ibath,iorb
+    integer                   :: iup,idw
+    integer                   :: dim
+    integer                   :: ivec(Ns),jvec(Ns)
     select case(ed_mode)
        !
        !
     case default
        nup = getNup(isector)
        ndw = getNdw(isector)
-       dim = getDim(isector)
-       call map_allocate(Hup,dim)
-       dim=0
-       do idw=0,2**Ns-1
-          jvec  = bdecomp(idw,Ns)
-          ndw_  = sum(jvec)
-          if(ndw_ /= ndw)cycle
-          do iup=0,2**Ns-1
-             ivec  = bdecomp(iup,Ns)
-             nup_  = sum(ivec)
+
+       if(present(Hdw))then
+          !UP
+          call map_allocate(Hup,getDimUp(isector))
+          dim=0
+          do i=0,2**Ns-1
+             ivec  = bdecomp(i,Ns)
+             nup_  = sum(ivec) 
              if(nup_ /= nup)cycle
-             dim      = dim+1
-             Hup%map(dim) = iup + idw*2**Ns
+             dim       = dim+1
+             Hup%map(dim) = i
           enddo
-       enddo
+          !DW
+          call map_allocate(Hdw,getDimDw(isector))
+          dim=0
+          do i=0,2**Ns-1
+             ivec  = bdecomp(i,Ns)
+             ndw_  = sum(ivec) 
+             if(ndw_ /= ndw)cycle
+             dim       = dim+1
+             Hdw%map(dim) = i
+          enddo
+       else
+          call map_allocate(Hup,getDim(isector))
+          dim=0
+          do idw=0,2**Ns-1
+             jvec  = bdecomp(idw,Ns)
+             ndw_  = sum(jvec)
+             if(ndw_ /= ndw)cycle
+             do iup=0,2**Ns-1
+                ivec  = bdecomp(iup,Ns)
+                nup_  = sum(ivec)
+                if(nup_ /= nup)cycle
+                dim      = dim+1
+                Hup%map(dim) = iup + idw*2**Ns
+             enddo
+          enddo
+       endif
        !
        !
     case ("superc")
        sz  = getSz(isector)
-       dim = getDim(isector)
-       call map_allocate(Hup,dim)
+       call map_allocate(Hup,getDim(isector))
        dim=0
        do idw=0,2**Ns-1
           jvec = bdecomp(idw,Ns)
@@ -926,7 +948,7 @@ contains
                 do ibath=0,Nbath
                    do iorb=1,Norb
                       twoLz_ = twoLz_ + 2 * Lzdiag(iorb) * ivec(iorb+Norb*ibath)  &
-                                      + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
+                           + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
                    enddo
                 enddo
                 twoSz_ = (sum(ivec) - sum(jvec))
@@ -972,70 +994,64 @@ contains
     real(8)                   :: Sz_tot,Lz_tot,shift,stride,jzv
     real(8),allocatable       :: Jz(:)
     integer                   :: ivec(Ns),jvec(Ns)
-
-
-       stride=0.d0
-       nt  = getN(isector)
-       dim = getDim(isector)
-
-       write(123,*)
-       write(123,'(A20,I5)') "sector N",nt
-       write(123,'(A20,I5)') "sector dim(N)",dim
-       write(123,*)
-
-       write(124,*)
-       write(124,'(A20,I5)') "sector N",nt
-       write(124,'(A20,I5)') "sector dim(N)",dim
-
-       if(allocated(Jz))deallocate(Jz);allocate(Jz(dim));Jz=0.d0
-
-       dim=0
-       !mi guardo tutti i possibili valori di nup,ndw 
-       !anche quelli con la densità diversa da quella del settore
-       do idw=0,2**Ns-1
-          jvec = bdecomp(idw,Ns)
-          do iup=0,2**Ns-1
-             ivec = bdecomp(iup,Ns)
-             !ivec e jvec sono la decomposizione in vettore
-             !qui controllo la densità che ho ottenuto con lo specifico vettore
-             nt_  = sum(ivec) + sum(jvec)
-             Lz_tot=0.d0;Sz_tot=0.d0
-             do ibath=0,Nbath
-                Lz_tot = Lz_tot + 1.d0 * ivec(1+Norb*ibath) + 1.d0 * jvec(1+Norb*ibath)
-                Lz_tot = Lz_tot - 1.d0 * ivec(2+Norb*ibath) - 1.d0 * jvec(2+Norb*ibath)
-             enddo
-             Sz_tot = 0.5*(sum(ivec) - sum(jvec))
-
-             !se la densità è quella del settore metto lo stato in rappresentazione decimale dentro la mappa
-             if(nt_ == nt)then
-                dim=dim+1
-                Jz(dim)=(Lz_tot+Sz_tot)
-                !write(123,'(3I3,4X,3I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
-                !write(123,'(6I3,4X,6I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
-                write(123,'(9I3,4X,9I3,4X,3(1F5.2,4X),9I5)')ivec,jvec,Lz_tot,Sz_tot,Jz(dim),dim
-             endif
+    stride=0.d0
+    nt  = getN(isector)
+    dim = getDim(isector)
+    write(123,*)
+    write(123,'(A20,I5)') "sector N",nt
+    write(123,'(A20,I5)') "sector dim(N)",dim
+    write(123,*)
+    write(124,*)
+    write(124,'(A20,I5)') "sector N",nt
+    write(124,'(A20,I5)') "sector dim(N)",dim
+    if(allocated(Jz))deallocate(Jz);allocate(Jz(dim));Jz=0.d0
+    dim=0
+    !mi guardo tutti i possibili valori di nup,ndw 
+    !anche quelli con la densità diversa da quella del settore
+    do idw=0,2**Ns-1
+       jvec = bdecomp(idw,Ns)
+       do iup=0,2**Ns-1
+          ivec = bdecomp(iup,Ns)
+          !ivec e jvec sono la decomposizione in vettore
+          !qui controllo la densità che ho ottenuto con lo specifico vettore
+          nt_  = sum(ivec) + sum(jvec)
+          Lz_tot=0.d0;Sz_tot=0.d0
+          do ibath=0,Nbath
+             Lz_tot = Lz_tot + 1.d0 * ivec(1+Norb*ibath) + 1.d0 * jvec(1+Norb*ibath)
+             Lz_tot = Lz_tot - 1.d0 * ivec(2+Norb*ibath) - 1.d0 * jvec(2+Norb*ibath)
           enddo
+          Sz_tot = 0.5*(sum(ivec) - sum(jvec))
+
+          !se la densità è quella del settore metto lo stato in rappresentazione decimale dentro la mappa
+          if(nt_ == nt)then
+             dim=dim+1
+             Jz(dim)=(Lz_tot+Sz_tot)
+             !write(123,'(3I3,4X,3I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
+             !write(123,'(6I3,4X,6I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
+             write(123,'(9I3,4X,9I3,4X,3(1F5.2,4X),9I5)')ivec,jvec,Lz_tot,Sz_tot,Jz(dim),dim
+          endif
        enddo
-       !
-       ! algorithm
-       if(nt==0.or.nt==2*Ns)then
-          jzv=0
-       else
-          shift=0.
-          if(nt<=Nbath+1)shift=Nbath-nt+1
-          if(nt>=2*Ns-Nbath)shift=Nbath-2*Ns+nt+1
-          jzv = 5/2. +(5/2.*Nbath) -(1/2.)*abs(nt-Ns)-shift
-       endif
-       !
-       write(124,*)
-       write(124,*)"-----------------------------"
-       write(124,'(2(A20,3X,1F5.2),30F5.2)')"maxval(Jz)",maxval(Jz),"algorithm",Jzv
-       write(124,*)
-       write(124,'(2(A20,3X,1F5.2))')"minval(Jz)",minval(Jz)
-       write(124,*)
-       write(124,'(2(A20,3X,1I5))')"degeneracy",int(2.d0*maxval(Jz))+1
-       write(124,*)"-----------------------------"
-       write(124,*)
+    enddo
+    !
+    ! algorithm
+    if(nt==0.or.nt==2*Ns)then
+       jzv=0
+    else
+       shift=0.
+       if(nt<=Nbath+1)shift=Nbath-nt+1
+       if(nt>=2*Ns-Nbath)shift=Nbath-2*Ns+nt+1
+       jzv = 5/2. +(5/2.*Nbath) -(1/2.)*abs(nt-Ns)-shift
+    endif
+    !
+    write(124,*)
+    write(124,*)"-----------------------------"
+    write(124,'(2(A20,3X,1F5.2),30F5.2)')"maxval(Jz)",maxval(Jz),"algorithm",Jzv
+    write(124,*)
+    write(124,'(2(A20,3X,1F5.2))')"minval(Jz)",minval(Jz)
+    write(124,*)
+    write(124,'(2(A20,3X,1I5))')"degeneracy",int(2.d0*maxval(Jz))+1
+    write(124,*)"-----------------------------"
+    write(124,*)
   end subroutine build_sector_2
 
   subroutine delete_sector(isector,Hup)!,Hdw)
