@@ -261,7 +261,9 @@ contains
                 do jorb=1,Norb
                    if((ed_mode=="normal").and.(ispin/=jspin))cycle
                    if((bath_type=="normal").and.(iorb/=jorb))cycle
-                   if(bath_type=="replica".and.Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
+                   if(bath_type=="replica")then
+                      if(Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
+                   endif
                    isite=impIndex(iorb,ispin)
                    jsite=impIndex(jorb,jspin)
                    do m=1,idim
