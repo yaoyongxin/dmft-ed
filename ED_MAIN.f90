@@ -279,8 +279,7 @@ contains
     case (.true.)
        spHtimesV_cc => spMatVec_cc
     case (.false.)
-       spHtimesV_cc => directMatVec_cc
-    case default
+       ! spHtimesV_cc => directMatVec_cc
        stop "ed_solve_single ERROR: ed_sparse_H undefined"
     end select
     !
@@ -325,8 +324,7 @@ contains
     case (.true.)
        spHtimesV_cc => spMatVec_MPI_cc
     case (.false.)
-       spHtimesV_cc => directMatVec_MPI_cc
-    case default
+       ! spHtimesV_cc => directMatVec_MPI_cc
        stop "ed_solve_single_mpi ERROR: ed_sparse_H undefined"
     end select
     !

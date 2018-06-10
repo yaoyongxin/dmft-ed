@@ -1,5 +1,5 @@
-  states: do i=first_state,last_state
-     m = H%map(i)
+  do i=first_state,last_state
+     m = H%up(i)
      impi = i-ishift
      ib = bdecomp(m,2*Ns)
      !
@@ -22,5 +22,5 @@
      include "ED_HAMILTONIAN_MATVEC/Himp_bath.f90"
      !
      !
-  enddo states
+  enddo
 

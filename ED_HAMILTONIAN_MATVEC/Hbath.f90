@@ -1,4 +1,4 @@
-  Breplica: if(bath_type/="replica") then
+  if(bath_type/="replica") then
      !
      !diagonal bath hamiltonian: +energy of the bath=\sum_a=1,Norb\sum_{l=1,Nbath}\e^a_l n^a_l
      htmp=zero
@@ -10,7 +10,11 @@
         enddo
      enddo
      !
-     call sp_insert_element(spH0,htmp,impi,i)
+     if(present(Hmat))then
+        Hredux(impi,i) = htmp
+     else
+        call sp_insert_element(spH0,htmp,impi,i)
+     endif
      !
   else
      !
@@ -25,7 +29,11 @@
         enddo
      enddo
      !
-     call sp_insert_element(spH0,htmp,impi,i)
+     if(present(Hmat))then
+        Hredux(impi,i) = htmp
+     else
+        call sp_insert_element(spH0,htmp,impi,i)
+     endif
      !
      !off-diagonal elements
      !
@@ -46,10 +54,14 @@
               if (Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 j = binary_search(H%up,k2)
                  htmp = dmft_bath%h(1,1,iorb,jorb,kp)*sg1*sg2
                  !
-                 call sp_insert_element(spH0,htmp,impi,j)
+                 if(present(Hmat))then
+                    Hredux(impi,j) = htmp
+                 else
+                    call sp_insert_element(spH0,htmp,impi,j)
+                 endif
                  !
               endif
               !DW
@@ -62,10 +74,14 @@
               if (Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 j = binary_search(H%up,k2)
                  htmp = dmft_bath%h(Nspin,Nspin,iorb,jorb,kp)*sg1*sg2
                  !
-                 call sp_insert_element(spH0,htmp,impi,j)
+                 if(present(Hmat))then
+                    Hredux(impi,j) = htmp
+                 else
+                    call sp_insert_element(spH0,htmp,impi,j)
+                 endif
                  !
               endif
            enddo
@@ -88,10 +104,14 @@
                     if(Jcondition)then
                        call c(beta,m,k1,sg1)
                        call cdg(alfa,k1,k2,sg2)
-                       j = binary_search(H%map,k2)
+                       j = binary_search(H%up,k2)
                        htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*sg1*sg2
                        !
-                       call sp_insert_element(spH0,htmp,impi,j)
+                       if(present(Hmat))then
+                          Hredux(impi,j) = htmp
+                       else
+                          call sp_insert_element(spH0,htmp,impi,j)
+                       endif
                        !
                     endif
                  enddo
@@ -99,7 +119,7 @@
            enddo
         enddo
      endif
-  endif Breplica
+  endif
 
 
 
@@ -112,20 +132,28 @@
            if( (dmft_bath%d(1,iorb,kp)/=0d0) .AND. (ib(ms)==1) .AND. (ib(ms+Ns)==1) )then
               call c(ms,m,k1,sg1)
               call c(ms+Ns,k1,k2,sg2)
-              j=binary_search(H%map,k2)
+              j=binary_search(H%up,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2
               !
-              call sp_insert_element(spH0,htmp,impi,j)
+              if(present(Hmat))then
+                 Hredux(impi,j) = htmp
+              else
+                 call sp_insert_element(spH0,htmp,impi,j)
+              endif
               !
            endif
            !\Delta_l cdg_{\up,ms} cdg_{\dw,ms}
            if( (dmft_bath%d(1,iorb,kp)/=0d0) .AND. (ib(ms)==0) .AND. (ib(ms+Ns)==0) )then
               call cdg(ms+Ns,m,k1,sg1)
               call cdg(ms,k1,k2,sg2)
-              j=binary_search(H%map,k2)
+              j=binary_search(H%up,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2 !
               !
-              call sp_insert_element(spH0,htmp,impi,j)
+              if(present(Hmat))then
+                 Hredux(impi,j) = htmp
+              else
+                 call sp_insert_element(spH0,htmp,impi,j)
+              endif
               !
            endif
         enddo
@@ -156,7 +184,7 @@
   !                   if ((ib(beta)==1) .AND. (ib(alfa)==0)) then
   !                      call c(beta,m,k1,sg1)
   !                      call cdg(alfa,k1,k2,sg2)
-  !                      j = binary_search(H%map,k2)
+  !                      j = binary_search(H%up,k2)
   !                      print*,"4",iorb,jorb,ispin,jspin,j
   !                      htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*sg1*sg2
   !                      call sp_insert_element(spH0,htmp,impi,j)

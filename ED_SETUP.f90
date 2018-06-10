@@ -24,7 +24,6 @@ MODULE ED_SETUP
   public :: setup_pointers_superc
   public :: setup_pointers_nonsu2
   public :: build_sector
-  public :: build_sector_2
   public :: delete_sector
   public :: bdecomp
   public :: bjoin
@@ -856,10 +855,9 @@ contains
   !states i\in Hilbert_space from the states count in H_sector.
   !|ImpUP,BathUP>|ImpDW,BathDW >
   !+------------------------------------------------------------------+
-  subroutine build_sector(isector,Hup,Hdw)
+  subroutine build_sector(isector,Map)
     integer                   :: isector
-    type(sector_map)          :: Hup
-    type(sector_map),optional :: Hdw
+    type(sector_map)          :: Map
     integer                   :: nup,ndw,sz,nt,twoJz
     integer                   :: nup_,ndw_,sz_,nt_
     integer                   :: twoSz_,twoLz_
@@ -873,60 +871,50 @@ contains
     case default
        nup = getNup(isector)
        ndw = getNdw(isector)
-
-       if(present(Hdw))then
-          !UP
-          call map_allocate(Hup,getDimUp(isector))
-          dim=0
-          do i=0,2**Ns-1
-             ivec  = bdecomp(i,Ns)
-             nup_  = sum(ivec) 
-             if(nup_ /= nup)cycle
-             dim       = dim+1
-             Hup%map(dim) = i
-          enddo
-          !DW
-          call map_allocate(Hdw,getDimDw(isector))
-          dim=0
-          do i=0,2**Ns-1
-             ivec  = bdecomp(i,Ns)
-             ndw_  = sum(ivec) 
-             if(ndw_ /= ndw)cycle
-             dim       = dim+1
-             Hdw%map(dim) = i
-          enddo
-       else
-          call map_allocate(Hup,getDim(isector))
-          dim=0
-          do idw=0,2**Ns-1
-             jvec  = bdecomp(idw,Ns)
-             ndw_  = sum(jvec)
-             if(ndw_ /= ndw)cycle
-             do iup=0,2**Ns-1
-                ivec  = bdecomp(iup,Ns)
-                nup_  = sum(ivec)
-                if(nup_ /= nup)cycle
-                dim      = dim+1
-                Hup%map(dim) = iup + idw*2**Ns
-             enddo
-          enddo
-       endif
+       !
+       call map_allocate(Map,getDimUp(isector),getDimDw(isector))
+       !UP
+       dim=0
+       do iup=0,2**Ns-1
+          ivec  = bdecomp(iup,Ns)
+          nup_  = sum(ivec)
+          ! nup_ = popcnt(iup)
+          if(nup_ /= nup)cycle
+          !
+          dim         = dim+1
+          Map%up(dim) = iup
+       enddo
+       !DW
+       dim=0
+       do idw=0,2**Ns-1
+          ivec  = bdecomp(idw,Ns)
+          ndw_  = sum(ivec)
+          ! ndw_=popcnt(idw)
+          if(ndw_ /= ndw)cycle
+          !
+          dim         = dim+1
+          Map%dw(dim) = idw
+       enddo
        !
        !
     case ("superc")
        sz  = getSz(isector)
-       call map_allocate(Hup,getDim(isector))
+       call map_allocate(Map,getDim(isector))
        dim=0
        do idw=0,2**Ns-1
           jvec = bdecomp(idw,Ns)
           ndw_ = sum(jvec)
+          ! ndw_=popcnt(i)
+          !
           do iup=0,2**Ns-1
              ivec = bdecomp(iup,Ns)
              nup_ = sum(ivec)
+             ! nup_ = popcnt(i)             
              sz_  = nup_ - ndw_
+             !
              if(sz_ == sz)then
-                dim=dim+1
-                Hup%map(dim)=iup + idw*2**Ns
+                dim         = dim+1
+                Map%up(dim) = iup + idw*2**Ns
              endif
           enddo
        enddo
@@ -937,13 +925,16 @@ contains
           nt  = getN(isector)
           dim = getDim(isector)
           twoJz = gettwoJz(isector)
-          call map_allocate(Hup,dim)
+          call map_allocate(Map,dim)
           dim=0
           do idw=0,2**Ns-1
              jvec = bdecomp(idw,Ns)
+             !
              do iup=0,2**Ns-1
                 ivec = bdecomp(iup,Ns)
+                !
                 nt_  = sum(ivec) + sum(jvec)
+                !
                 twoLz_=0;twoSz_=0
                 do ibath=0,Nbath
                    do iorb=1,Norb
@@ -955,23 +946,26 @@ contains
                 !
                 if(nt_ == nt .and. twoJz==(twoSz_+twoLz_) )then
                    dim=dim+1
-                   Hup%map(dim)=iup + idw*2**Ns
+                   Map%up(dim)=iup + idw*2**Ns
                 endif
              enddo
           enddo
        else
           nt  = getN(isector)
           dim = getDim(isector)
-          call map_allocate(Hup,dim)
+          call map_allocate(Map,dim)
           dim=0
           do idw=0,2**Ns-1
              jvec = bdecomp(idw,Ns)
+             !
              do iup=0,2**Ns-1
                 ivec = bdecomp(iup,Ns)
+                !
                 nt_  = sum(ivec) + sum(jvec)
+                !
                 if(nt_ == nt)then
                    dim=dim+1
-                   Hup%map(dim)=iup + idw*2**Ns
+                   Map%up(dim)=iup + idw*2**Ns
                 endif
              enddo
           enddo
@@ -981,85 +975,15 @@ contains
 
 
 
-
-
-
-  subroutine build_sector_2(isector)
-    integer                   :: isector
-    integer                   :: nup,ndw,sz,nt
-    integer                   :: nup_,ndw_,sz_,nt_
-    integer                   :: i,ibath
-    integer                   :: iup,idw
-    integer                   :: dim
-    real(8)                   :: Sz_tot,Lz_tot,shift,stride,jzv
-    real(8),allocatable       :: Jz(:)
-    integer                   :: ivec(Ns),jvec(Ns)
-    stride=0.d0
-    nt  = getN(isector)
-    dim = getDim(isector)
-    write(123,*)
-    write(123,'(A20,I5)') "sector N",nt
-    write(123,'(A20,I5)') "sector dim(N)",dim
-    write(123,*)
-    write(124,*)
-    write(124,'(A20,I5)') "sector N",nt
-    write(124,'(A20,I5)') "sector dim(N)",dim
-    if(allocated(Jz))deallocate(Jz);allocate(Jz(dim));Jz=0.d0
-    dim=0
-    !mi guardo tutti i possibili valori di nup,ndw 
-    !anche quelli con la densità diversa da quella del settore
-    do idw=0,2**Ns-1
-       jvec = bdecomp(idw,Ns)
-       do iup=0,2**Ns-1
-          ivec = bdecomp(iup,Ns)
-          !ivec e jvec sono la decomposizione in vettore
-          !qui controllo la densità che ho ottenuto con lo specifico vettore
-          nt_  = sum(ivec) + sum(jvec)
-          Lz_tot=0.d0;Sz_tot=0.d0
-          do ibath=0,Nbath
-             Lz_tot = Lz_tot + 1.d0 * ivec(1+Norb*ibath) + 1.d0 * jvec(1+Norb*ibath)
-             Lz_tot = Lz_tot - 1.d0 * ivec(2+Norb*ibath) - 1.d0 * jvec(2+Norb*ibath)
-          enddo
-          Sz_tot = 0.5*(sum(ivec) - sum(jvec))
-
-          !se la densità è quella del settore metto lo stato in rappresentazione decimale dentro la mappa
-          if(nt_ == nt)then
-             dim=dim+1
-             Jz(dim)=(Lz_tot+Sz_tot)
-             !write(123,'(3I3,4X,3I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
-             !write(123,'(6I3,4X,6I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
-             write(123,'(9I3,4X,9I3,4X,3(1F5.2,4X),9I5)')ivec,jvec,Lz_tot,Sz_tot,Jz(dim),dim
-          endif
-       enddo
-    enddo
-    !
-    ! algorithm
-    if(nt==0.or.nt==2*Ns)then
-       jzv=0
-    else
-       shift=0.
-       if(nt<=Nbath+1)shift=Nbath-nt+1
-       if(nt>=2*Ns-Nbath)shift=Nbath-2*Ns+nt+1
-       jzv = 5/2. +(5/2.*Nbath) -(1/2.)*abs(nt-Ns)-shift
-    endif
-    !
-    write(124,*)
-    write(124,*)"-----------------------------"
-    write(124,'(2(A20,3X,1F5.2),30F5.2)')"maxval(Jz)",maxval(Jz),"algorithm",Jzv
-    write(124,*)
-    write(124,'(2(A20,3X,1F5.2))')"minval(Jz)",minval(Jz)
-    write(124,*)
-    write(124,'(2(A20,3X,1I5))')"degeneracy",int(2.d0*maxval(Jz))+1
-    write(124,*)"-----------------------------"
-    write(124,*)
-  end subroutine build_sector_2
-
-  subroutine delete_sector(isector,Hup)!,Hdw)
-    integer                   :: isector
-    type(sector_map)          :: Hup
-    ! type(sector_map),optional :: Hdw
-    call map_deallocate(Hup)
+  subroutine delete_sector(isector,Map)
+    integer          :: isector
+    type(sector_map) :: Map
+    call map_deallocate(Map)
   end subroutine delete_sector
+
+
+
+
 
 
   !+-------------------------------------------------------------------+
@@ -1113,31 +1037,30 @@ contains
   subroutine twin_sector_order(isector,order)
     integer                          :: isector
     integer,dimension(:)             :: order
-    type(sector_map)                 :: H,Hup,Hdw
+    type(sector_map)                 :: Map
     integer                          :: i,dim
     dim = getdim(isector)
     if(size(Order)/=dim)stop "twin_sector_order error: wrong dimensions of *order* array"
     !- build the map from the A-sector to \HHH
     !- get the list of states in \HHH corresponding to sector B twin of A
     !- return the ordering of B-states in \HHH with respect to those of A
+    call build_sector(isector,Map)
     select case(ed_mode)        
     case default
-       call build_sector(isector,H)
        do i=1,dim
-          Order(i)=flip_state(H%map(i))
+          Order(i)=flip_state(Map%up(i))
        enddo
-       call sort_array(Order)
-       deallocate(H%map)
        !
     case('normal')
-       call build_sector(isector,H)!up,Hdw)
        do i=1,dim
-          Order(i)=flip_state(H%map(i))!flip_state(Hup%map(i),Hdw%map(i))
+          Order(i)=flip_state(Map%up(i),Map%dw(i))
        enddo
-       call sort_array(Order)
-       deallocate(H%map)!deallocate(Hup%map,Hdw%map)
        !
     end select
+    !
+    call sort_array(Order)
+    call delete_sector(isector,Map)
+    !
   end subroutine twin_sector_order
 
 
@@ -1438,3 +1361,81 @@ contains
   end subroutine print_state_vector_int
 
 end MODULE ED_SETUP
+
+
+
+
+
+
+
+
+
+
+! subroutine build_sector_2(isector)
+!   integer                   :: isector
+!   integer                   :: nup,ndw,sz,nt
+!   integer                   :: nup_,ndw_,sz_,nt_
+!   integer                   :: i,ibath
+!   integer                   :: iup,idw
+!   integer                   :: dim
+!   real(8)                   :: Sz_tot,Lz_tot,shift,stride,jzv
+!   real(8),allocatable       :: Jz(:)
+!   integer                   :: ivec(Ns),jvec(Ns)
+!   stride=0.d0
+!   nt  = getN(isector)
+!   dim = getDim(isector)
+!   write(123,*)
+!   write(123,'(A20,I5)') "sector N",nt
+!   write(123,'(A20,I5)') "sector dim(N)",dim
+!   write(123,*)
+!   write(124,*)
+!   write(124,'(A20,I5)') "sector N",nt
+!   write(124,'(A20,I5)') "sector dim(N)",dim
+!   if(allocated(Jz))deallocate(Jz);allocate(Jz(dim));Jz=0.d0
+!   dim=0
+!   !mi guardo tutti i possibili valori di nup,ndw 
+!   !anche quelli con la densità diversa da quella del settore
+!   do idw=0,2**Ns-1
+!      jvec = bdecomp(idw,Ns)
+!      do iup=0,2**Ns-1
+!         ivec = bdecomp(iup,Ns)
+!         !ivec e jvec sono la decomposizione in vettore
+!         !qui controllo la densità che ho ottenuto con lo specifico vettore
+!         nt_  = sum(ivec) + sum(jvec)
+!         Lz_tot=0.d0;Sz_tot=0.d0
+!         do ibath=0,Nbath
+!            Lz_tot = Lz_tot + 1.d0 * ivec(1+Norb*ibath) + 1.d0 * jvec(1+Norb*ibath)
+!            Lz_tot = Lz_tot - 1.d0 * ivec(2+Norb*ibath) - 1.d0 * jvec(2+Norb*ibath)
+!         enddo
+!         Sz_tot = 0.5*(sum(ivec) - sum(jvec))
+!         !se la densità è quella del settore metto lo stato in rappresentazione decimale dentro la mappa
+!         if(nt_ == nt)then
+!            dim=dim+1
+!            Jz(dim)=(Lz_tot+Sz_tot)
+!            !write(123,'(3I3,4X,3I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
+!            !write(123,'(6I3,4X,6I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
+!            write(123,'(9I3,4X,9I3,4X,3(1F5.2,4X),9I5)')ivec,jvec,Lz_tot,Sz_tot,Jz(dim),dim
+!         endif
+!      enddo
+!   enddo
+!   !
+!   ! algorithm
+!   if(nt==0.or.nt==2*Ns)then
+!      jzv=0
+!   else
+!      shift=0.
+!      if(nt<=Nbath+1)shift=Nbath-nt+1
+!      if(nt>=2*Ns-Nbath)shift=Nbath-2*Ns+nt+1
+!      jzv = 5/2. +(5/2.*Nbath) -(1/2.)*abs(nt-Ns)-shift
+!   endif
+!   !
+!   write(124,*)
+!   write(124,*)"-----------------------------"
+!   write(124,'(2(A20,3X,1F5.2),30F5.2)')"maxval(Jz)",maxval(Jz),"algorithm",Jzv
+!   write(124,*)
+!   write(124,'(2(A20,3X,1F5.2))')"minval(Jz)",minval(Jz)
+!   write(124,*)
+!   write(124,'(2(A20,3X,1I5))')"degeneracy",int(2.d0*maxval(Jz))+1
+!   write(124,*)"-----------------------------"
+!   write(124,*)
+! end subroutine build_sector_2

@@ -38,11 +38,15 @@
      endif
   endif
   !
-  call sp_insert_element(spH0,htmp,impi,i)
-  !
+  if(present(Hmat))then
+     Hredux(impi,i) = htmp
+  else
+     call sp_insert_element(spH0,htmp,impi,i)
+  endif
 
 
-  ! SPIN-EXCHANGE (S-E) and PAIR-HOPPING TERMS
+
+  ! SPIN-EXCHANGE (S-E)
   !    S-E: J c^+_iorb_up c^+_jorb_dw c_iorb_dw c_jorb_up  (i.ne.j) 
   !    S-E: J c^+_{iorb} c^+_{jorb+Ns} c_{iorb+Ns} c_{jorb}
   if(Norb>1.AND.Jhflag)then
@@ -59,17 +63,23 @@
               call c(iorb+Ns,k1,k2,sg2)
               call cdg(jorb+Ns,k2,k3,sg3)
               call cdg(iorb,k3,k4,sg4)
-              j=binary_search(H%map,k4)
+              j=binary_search(H%up,k4)
               htmp = one*Jx*sg1*sg2*sg3*sg4
               !
-              if(j/=0)call sp_insert_element(spH0,htmp,impi,j)
+              if(j/=0)then
+                 if(present(Hmat))then
+                    Hredux(impi,j) = htmp
+                 else
+                    call sp_insert_element(spH0,htmp,impi,j)
+                 endif
+              endif
               !
            endif
         enddo
      enddo
   endif
 
-  
+
   ! PAIR-HOPPING (P-H) TERMS
   !    P-H: J c^+_iorb_up c^+_iorb_dw   c_jorb_dw   c_jorb_up  (i.ne.j) 
   !    P-H: J c^+_{iorb}  c^+_{iorb+Ns} c_{jorb+Ns} c_{jorb}
@@ -87,10 +97,16 @@
               call c(jorb+Ns,k1,k2,sg2)
               call cdg(iorb+Ns,k2,k3,sg3)
               call cdg(iorb,k3,k4,sg4)
-              j=binary_search(H%map,k4)
+              j=binary_search(H%up,k4)
               htmp = one*Jp*sg1*sg2*sg3*sg4
               !
-              if(j/=0)call sp_insert_element(spH0,htmp,impi,j)
+              if(j/=0)then
+                 if(present(Hmat))then
+                    Hredux(impi,j) = htmp
+                 else
+                    call sp_insert_element(spH0,htmp,impi,j)
+                 endif
+              endif
               !
            endif
         enddo

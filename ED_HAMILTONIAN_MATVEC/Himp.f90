@@ -7,7 +7,11 @@
      htmp = htmp + impHloc(Nspin,Nspin,iorb,iorb)*ndw(iorb)
   enddo
   !
-  call sp_insert_element(spH0,htmp,impi,i)
+  if(present(Hmat))then
+     Hredux(impi,i) = htmp
+  else
+     call sp_insert_element(spH0,htmp,impi,i)
+  endif
   !
 
   !Off-diagonal elements, i.e. non-local part
@@ -25,10 +29,14 @@
         if (Jcondition) then
            call c(jorb,m,k1,sg1)
            call cdg(iorb,k1,k2,sg2)
-           j = binary_search(H%map,k2)
+           j = binary_search(H%up,k2)
            htmp = impHloc(1,1,iorb,jorb)*sg1*sg2
            !
-           call sp_insert_element(spH0,htmp,impi,j)
+           if(present(Hmat))then
+              Hredux(impi,j) = htmp
+           else
+              call sp_insert_element(spH0,htmp,impi,j)
+           endif
            !
         endif
         !DW
@@ -39,10 +47,14 @@
         if (Jcondition) then
            call c(jorb+Ns,m,k1,sg1)
            call cdg(iorb+Ns,k1,k2,sg2)
-           j = binary_search(H%map,k2)
+           j = binary_search(H%up,k2)
            htmp = impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2
            !
-           call sp_insert_element(spH0,htmp,impi,j)
+           if(present(Hmat))then
+              Hredux(impi,j) = htmp
+           else
+              call sp_insert_element(spH0,htmp,impi,j)
+           endif
            !
         endif
      enddo
@@ -63,10 +75,14 @@
               if(Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 j = binary_search(H%up,k2)
                  htmp = impHloc(ispin,jspin,iorb,jorb)*sg1*sg2
                  !
-                 call sp_insert_element(spH0,htmp,impi,j)
+                 if(present(Hmat))then
+                    Hredux(impi,j) = htmp
+                 else
+                    call sp_insert_element(spH0,htmp,impi,j)
+                 endif
                  !
               endif
               !

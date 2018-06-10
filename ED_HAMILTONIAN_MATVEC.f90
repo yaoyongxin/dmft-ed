@@ -27,11 +27,11 @@ MODULE ED_HAMILTONIAN_MATVEC
 #endif
   !
   !
-  !>Sparse Mat-Vec direct on-the-fly product 
-  public  :: directMatVec_cc
-#ifdef _MPI
-  public  :: directMatVec_MPI_cc
-#endif
+  !   !>Sparse Mat-Vec direct on-the-fly product 
+  !   public  :: directMatVec_cc
+  ! #ifdef _MPI
+  !   public  :: directMatVec_MPI_cc
+  ! #endif
   !
   !
   !> Related auxiliary routines:
@@ -52,11 +52,15 @@ MODULE ED_HAMILTONIAN_MATVEC
   integer                      :: MpiRank=0
   integer                      :: MpiSize=1
   integer                      :: mpiQ=1
+  integer                      :: mpiQup=1
+  integer                      :: mpiQdw=1
   integer                      :: mpiR=0
+  integer                      :: mpiRup=0
+  integer                      :: mpiRdw=0
   !
   integer                      :: Hsector=0
   logical                      :: Hstatus=.false.
-  type(sector_map)             :: H,Hup,Hdw
+  type(sector_map)             :: H
 
 
 
@@ -97,7 +101,7 @@ contains
 
 
   subroutine setup_Hv_sector(isector)
-    integer                   :: isector
+    integer :: isector
     Hsector=isector
     Hstatus=.true.
     call build_sector(isector,H)
@@ -130,7 +134,7 @@ contains
     integer                                :: i,iup,idw
     integer                                :: m,mup,mdw
     integer                                :: ishift,ishift_up,ishift_dw
-    integer                                :: j,ms,impi
+    integer                                :: j,ms,impi,impi_up,impi_dw
     integer                                :: iorb,jorb,ispin,jspin,ibath
     integer                                :: kp,k1,k2,k3,k4
     integer                                :: alfa,beta
@@ -146,21 +150,16 @@ contains
     if(.not.Hstatus)stop "ed_buildH_c ERROR: Hsector NOT set"
     isector=Hsector
     !
-    if(spH0%status)call sp_delete_matrix(spH0) 
-    !
-    dim=getdim(isector)
-    mpiQ = dim/MpiSize
-    mpiR = 0
-    if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
-    call sp_init_matrix(spH0,mpiQ + mpiR)
-    ishift      = MpiRank*mpiQ
-    first_state = MpiRank*mpiQ + 1
-    last_state  = (MpiRank+1)*mpiQ + mpiR
-    !
+    if(present(Hmat))then
+       if(any(shape(Hmat)/=[dim,dim]))stop "ed_buildH_c ERROR: size(Hmat) != dim**2"
+       allocate(Hredux(dim,dim))
+       Hredux=zero
+    endif
     !
     !Get diagonal hybridization
     diag_hybr=zero
-    if(bath_type/="replica")then
+    select case(bath_type)
+    case default
        do ibath=1,Nbath
           do ispin=1,Nspin
              do iorb=1,Norb
@@ -168,7 +167,7 @@ contains
              enddo
           enddo
        enddo
-    else
+    case ("replica")
        do ibath=1,Nbath
           do ispin=1,Nspin
              do iorb=1,Norb
@@ -176,24 +175,87 @@ contains
              enddo
           enddo
        enddo
-    endif
+    end select
     !
-    !-----------------------------------------------!
-    include "ED_HAMILTONIAN_MATVEC/build_h.f90"
-    !-----------------------------------------------!
+    if(spH0%status)call sp_delete_matrix(spH0)
+    if(spH0up%status)call sp_delete_matrix(spH0up)
+    if(spH0dw%status)call sp_delete_matrix(spH0dw)
     !
-    if(present(Hmat))then
-       if(size(Hmat,1)/=dim.OR.size(Hmat,2)/=dim)stop "ed_buildH_c ERROR: size(Hmat) != dim**2"
-       if(MpiStatus)then
-          allocate(Hredux(dim,dim));Hredux=zero
-          call sp_dump_matrix(spH0,Hredux(first_state:last_state,:))
+    !
+    !We have different cases (at least for now):
+    !A. if( ed_mode = normal AND Hmat is not present) USE Nup & Ndw and store to spH0,_up,_dw
+    !B. if( ed_mode = normal AND Hmat is present)USE Nup & Ndw but store to Hmat
+    !C. if( ed_mode != normal AND Hmat is not present) USE old method and store to spH0
+    !D. if( ed_mode != normal AND Hmat is present) USE old method and store to Hmat
+    !
+    select case(ed_mode)
+    case default
+       !
+       dim  = getdim(isector)
+       mpiQ = dim/MpiSize
+       mpiR = 0
+       if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
+       !
+       call sp_init_matrix(spH0,mpiQ + mpiR)
+       ishift      = MpiRank*mpiQ
+       first_state = MpiRank*mpiQ + 1
+       last_state  = (MpiRank+1)*mpiQ + mpiR
+       !      
+       !-----------------------------------------------!
+       include "ED_HAMILTONIAN_MATVEC/build_h.f90"
+       !-----------------------------------------------!
+       !
+       if(present(Hmat))then
+          if(MpiStatus)then
 #ifdef _MPI
-          call MPI_AllReduce(Hredux,Hmat,dim*dim,MPI_Double_Complex,MPI_Sum,MpiComm,MpiIerr)
+             call MPI_AllReduce(Hredux,Hmat,dim*dim,MPI_Double_Complex,MPI_Sum,MpiComm,MpiIerr)
 #endif
-       else
-          call sp_dump_matrix(spH0,Hmat)
+          else
+             Hmat = Hredux
+          endif
        endif
-    endif
+       !
+       !
+       !
+    case("normal")
+       !
+       !UP:
+       dimUp  = getDimUp(isector)
+       mpiQup = dimUp/MpiSize
+       mpiRup = 0
+       if(MpiRank==(MpiSize-1))mpiRup=mod(dimUp,MpiSize)
+       call sp_init_matrix(spH0up,mpiQup + mpiRup)
+       ishift_up      = MpiRank*mpiQup
+       first_state_up = MpiRank*mpiQup + 1
+       last_state_up  = (MpiRank+1)*mpiQup + mpiRup
+       !
+       !DW
+       dimDw  = getDimDw(isector)
+       mpiQdw = dimDw/MpiSize
+       mpiRdw = 0
+       if(MpiRank==(MpiSize-1))mpiRdw=mod(dimDw,MpiSize)
+       call sp_init_matrix(spH0dw,mpiQdw + mpiRdw)
+       ishift_dw      = MpiRank*mpiQdw
+       first_state_dw = MpiRank*mpiQdw + 1
+       last_state_dw  = (MpiRank+1)*mpiQdw + mpiRdw
+       !
+       !FULL:
+       dim  = dimUp*dimDw
+       mpiQ = dim/MpiSize
+       mpiR = 0
+       if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
+       call sp_init_matrix(spH0,dim)
+       ishift      = MpiRank*mpiQ
+       first_state = MpiRank*mpiQ + 1
+       last_state  = (MpiRank+1)*mpiQ + mpiR
+       !
+       !-----------------------------------------------!
+       include "ED_HAMILTONIAN_MATVEC/build_h.f90"
+       !-----------------------------------------------!
+
+    end select
+    !
+
     !
   end subroutine ed_buildH_c
 
@@ -283,160 +345,160 @@ contains
 
 
 
-  !####################################################################
-  !            SPARSE MAT-VEC DIRECT ON-THE-FLY PRODUCT 
-  !####################################################################
-  subroutine directMatVec_cc(Nloc,vin,Hv)
-    integer                                :: Nloc
-    complex(8),dimension(Nloc)             :: vin
-    complex(8),dimension(Nloc)             :: Hv
-    integer                                :: isector
-    integer,dimension(Nlevels)             :: ib
-    integer,dimension(Ns)                  :: ibup,ibdw
-    integer                                :: dim,dimUp,dimDw
-    integer                                :: i,iup,idw
-    integer                                :: m,mup,mdw
-    integer                                :: ishift,ishift_up,ishift_dw
-    integer                                :: j,ms,impi
-    integer                                :: iorb,jorb,ispin,jspin,ibath
-    integer                                :: kp,k1,k2,k3,k4
-    integer                                :: alfa,beta
-    real(8)                                :: sg1,sg2,sg3,sg4
-    real(8),dimension(Norb)                :: nup,ndw
-    complex(8)                             :: htmp,htmpup,htmpdw
-    complex(8),dimension(Nspin,Norb,Nbath) :: diag_hybr
-    logical                                :: Jcondition
-    integer                                :: first_state,last_state
-    integer                                :: first_state_up,last_state_up
-    integer                                :: first_state_dw,last_state_dw
-    !
-    if(.not.Hstatus)stop "directMatVec_cc ERROR: Hsector NOT set"
-    isector=Hsector
-    !
-    dim=getdim(isector)
-    if(Nloc/=dim)stop "directMatVec_cc ERROR: Nloc != dim(isector)"
-    !
-    mpiQ = dim/MpiSize
-    mpiR = 0
-    if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
-    ishift      = MpiRank*mpiQ
-    first_state = MpiRank*mpiQ + 1
-    last_state  = (MpiRank+1)*mpiQ + mpiR
-    !
-    !Get diagonal hybridization
-    diag_hybr=zero
-    if(bath_type/="replica")then
-       do ibath=1,Nbath
-          do ispin=1,Nspin
-             do iorb=1,Norb
-                diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
-             enddo
-          enddo
-       enddo
-    else
-       do ibath=1,Nbath
-          do ispin=1,Nspin
-             do iorb=1,Norb
-                diag_hybr(ispin,iorb,ibath)=dmft_bath%vr(ibath)
-             enddo
-          enddo
-       enddo
-    endif
-    !
-    Hv=zero
-    !-----------------------------------------------!
-    include "ED_HAMILTONIAN_MATVEC/build_hxv.f90"
-    !-----------------------------------------------!
-    !
-  end subroutine directMatVec_cc
+  !   !####################################################################
+  !   !            SPARSE MAT-VEC DIRECT ON-THE-FLY PRODUCT 
+  !   !####################################################################
+  !   subroutine directMatVec_cc(Nloc,vin,Hv)
+  !     integer                                :: Nloc
+  !     complex(8),dimension(Nloc)             :: vin
+  !     complex(8),dimension(Nloc)             :: Hv
+  !     integer                                :: isector
+  !     integer,dimension(Nlevels)             :: ib
+  !     integer,dimension(Ns)                  :: ibup,ibdw
+  !     integer                                :: dim,dimUp,dimDw
+  !     integer                                :: i,iup,idw
+  !     integer                                :: m,mup,mdw
+  !     integer                                :: ishift,ishift_up,ishift_dw
+  !     integer                                :: j,ms,impi
+  !     integer                                :: iorb,jorb,ispin,jspin,ibath
+  !     integer                                :: kp,k1,k2,k3,k4
+  !     integer                                :: alfa,beta
+  !     real(8)                                :: sg1,sg2,sg3,sg4
+  !     real(8),dimension(Norb)                :: nup,ndw
+  !     complex(8)                             :: htmp,htmpup,htmpdw
+  !     complex(8),dimension(Nspin,Norb,Nbath) :: diag_hybr
+  !     logical                                :: Jcondition
+  !     integer                                :: first_state,last_state
+  !     integer                                :: first_state_up,last_state_up
+  !     integer                                :: first_state_dw,last_state_dw
+  !     !
+  !     if(.not.Hstatus)stop "directMatVec_cc ERROR: Hsector NOT set"
+  !     isector=Hsector
+  !     !
+  !     dim=getdim(isector)
+  !     if(Nloc/=dim)stop "directMatVec_cc ERROR: Nloc != dim(isector)"
+  !     !
+  !     mpiQ = dim/MpiSize
+  !     mpiR = 0
+  !     if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
+  !     ishift      = MpiRank*mpiQ
+  !     first_state = MpiRank*mpiQ + 1
+  !     last_state  = (MpiRank+1)*mpiQ + mpiR
+  !     !
+  !     !Get diagonal hybridization
+  !     diag_hybr=zero
+  !     if(bath_type/="replica")then
+  !        do ibath=1,Nbath
+  !           do ispin=1,Nspin
+  !              do iorb=1,Norb
+  !                 diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
+  !              enddo
+  !           enddo
+  !        enddo
+  !     else
+  !        do ibath=1,Nbath
+  !           do ispin=1,Nspin
+  !              do iorb=1,Norb
+  !                 diag_hybr(ispin,iorb,ibath)=dmft_bath%vr(ibath)
+  !              enddo
+  !           enddo
+  !        enddo
+  !     endif
+  !     !
+  !     Hv=zero
+  !     !-----------------------------------------------!
+  !     include "ED_HAMILTONIAN_MATVEC/build_hxv.f90"
+  !     !-----------------------------------------------!
+  !     !
+  !   end subroutine directMatVec_cc
 
 
 
-#ifdef _MPI
-  subroutine directMatVec_MPI_cc(Nloc,v,Hv)
-    integer                                :: Nloc
-    complex(8),dimension(Nloc)             :: v
-    complex(8),dimension(Nloc)             :: Hv
-    integer                                :: N
-    complex(8),dimension(:),allocatable    :: vin
-    integer,allocatable,dimension(:)       :: SendCounts,Displs
-    integer                                :: isector
-    integer,dimension(Nlevels)             :: ib
-    integer,dimension(Ns)                  :: ibup,ibdw
-    integer                                :: dim,dimUp,dimDw
-    integer                                :: i,iup,idw
-    integer                                :: m,mup,mdw
-    integer                                :: ishift,ishift_up,ishift_dw
-    integer                                :: j,ms,impi
-    integer                                :: iorb,jorb,ispin,jspin,ibath
-    integer                                :: kp,k1,k2,k3,k4
-    integer                                :: alfa,beta
-    real(8)                                :: sg1,sg2,sg3,sg4
-    real(8),dimension(Norb)                :: nup,ndw
-    complex(8)                             :: htmp,htmpup,htmpdw
-    complex(8),dimension(Nspin,Norb,Nbath) :: diag_hybr
-    logical                                :: Jcondition
-    integer                                :: first_state,last_state
-    integer                                :: first_state_up,last_state_up
-    integer                                :: first_state_dw,last_state_dw
-    !
-    if(.not.Hstatus)stop "directMatVec_MPI_cc ERROR: Hsector NOT set"
-    isector=Hsector
-    !
-    dim=getdim(isector)
-    !
-    !
-    !Get diagonal hybridization
-    diag_hybr=zero
-    if(bath_type/="replica")then
-       do ibath=1,Nbath
-          do ispin=1,Nspin
-             do iorb=1,Norb
-                diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
-             enddo
-          enddo
-       enddo
-    else
-       do ibath=1,Nbath
-          do ispin=1,Nspin
-             do iorb=1,Norb
-                diag_hybr(ispin,iorb,ibath)=dmft_bath%vr(ibath)
-             enddo
-          enddo
-       enddo
-    endif
-    !
-    if(MpiComm==MPI_UNDEFINED)stop "directMatVec_MPI_cc ERRROR: MpiComm = MPI_UNDEFINED"
-    !
-    mpiQ = dim/MpiSize
-    mpiR = 0
-    if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
-    ishift      = MpiRank*mpiQ
-    first_state = MpiRank*mpiQ + 1
-    last_state  = (MpiRank+1)*mpiQ + mpiR
-    !
-    N=0
-    if(MpiComm==MPI_UNDEFINED)stop "directMatVec_MPI_cc ERRROR: MpiComm = MPI_UNDEFINED"
-    call MPI_AllReduce(Nloc,N,1,MPI_Integer,MPI_Sum,MpiComm,MpiIerr)
-    if(N/=dim)stop "directMatVec_MPI_cc ERROR: N != dim(isector)"
-    !
-    allocate(vin(N))
-    allocate(SendCounts(0:MpiSize-1),displs(0:MpiSize-1))
-    vin                   = zero
-    SendCounts(0:)        = mpiQ
-    SendCounts(MpiSize-1) = mpiQ+mod(N,MpiSize)
-    forall(i=0:MpiSize-1)Displs(i)=i*mpiQ
-    call MPI_Allgatherv(v(1:Nloc),Nloc,MPI_Double_Complex,vin,SendCounts,Displs,MPI_Double_Complex,MpiComm,MpiIerr)
-    call MPI_Bcast(vin,N,MPI_Double_Complex,0,MpiComm,MpiIerr)
-    !
-    Hv=zero
-    !
-    !-----------------------------------------------!
-    include "ED_HAMILTONIAN_MATVEC/build_hxv.f90"
-    !-----------------------------------------------!
-    !
-  end subroutine directMatVec_MPI_cc
-#endif
+  ! #ifdef _MPI
+  !   subroutine directMatVec_MPI_cc(Nloc,v,Hv)
+  !     integer                                :: Nloc
+  !     complex(8),dimension(Nloc)             :: v
+  !     complex(8),dimension(Nloc)             :: Hv
+  !     integer                                :: N
+  !     complex(8),dimension(:),allocatable    :: vin
+  !     integer,allocatable,dimension(:)       :: SendCounts,Displs
+  !     integer                                :: isector
+  !     integer,dimension(Nlevels)             :: ib
+  !     integer,dimension(Ns)                  :: ibup,ibdw
+  !     integer                                :: dim,dimUp,dimDw
+  !     integer                                :: i,iup,idw
+  !     integer                                :: m,mup,mdw
+  !     integer                                :: ishift,ishift_up,ishift_dw
+  !     integer                                :: j,ms,impi
+  !     integer                                :: iorb,jorb,ispin,jspin,ibath
+  !     integer                                :: kp,k1,k2,k3,k4
+  !     integer                                :: alfa,beta
+  !     real(8)                                :: sg1,sg2,sg3,sg4
+  !     real(8),dimension(Norb)                :: nup,ndw
+  !     complex(8)                             :: htmp,htmpup,htmpdw
+  !     complex(8),dimension(Nspin,Norb,Nbath) :: diag_hybr
+  !     logical                                :: Jcondition
+  !     integer                                :: first_state,last_state
+  !     integer                                :: first_state_up,last_state_up
+  !     integer                                :: first_state_dw,last_state_dw
+  !     !
+  !     if(.not.Hstatus)stop "directMatVec_MPI_cc ERROR: Hsector NOT set"
+  !     isector=Hsector
+  !     !
+  !     dim=getdim(isector)
+  !     !
+  !     !
+  !     !Get diagonal hybridization
+  !     diag_hybr=zero
+  !     if(bath_type/="replica")then
+  !        do ibath=1,Nbath
+  !           do ispin=1,Nspin
+  !              do iorb=1,Norb
+  !                 diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
+  !              enddo
+  !           enddo
+  !        enddo
+  !     else
+  !        do ibath=1,Nbath
+  !           do ispin=1,Nspin
+  !              do iorb=1,Norb
+  !                 diag_hybr(ispin,iorb,ibath)=dmft_bath%vr(ibath)
+  !              enddo
+  !           enddo
+  !        enddo
+  !     endif
+  !     !
+  !     if(MpiComm==MPI_UNDEFINED)stop "directMatVec_MPI_cc ERRROR: MpiComm = MPI_UNDEFINED"
+  !     !
+  !     mpiQ = dim/MpiSize
+  !     mpiR = 0
+  !     if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
+  !     ishift      = MpiRank*mpiQ
+  !     first_state = MpiRank*mpiQ + 1
+  !     last_state  = (MpiRank+1)*mpiQ + mpiR
+  !     !
+  !     N=0
+  !     if(MpiComm==MPI_UNDEFINED)stop "directMatVec_MPI_cc ERRROR: MpiComm = MPI_UNDEFINED"
+  !     call MPI_AllReduce(Nloc,N,1,MPI_Integer,MPI_Sum,MpiComm,MpiIerr)
+  !     if(N/=dim)stop "directMatVec_MPI_cc ERROR: N != dim(isector)"
+  !     !
+  !     allocate(vin(N))
+  !     allocate(SendCounts(0:MpiSize-1),displs(0:MpiSize-1))
+  !     vin                   = zero
+  !     SendCounts(0:)        = mpiQ
+  !     SendCounts(MpiSize-1) = mpiQ+mod(N,MpiSize)
+  !     forall(i=0:MpiSize-1)Displs(i)=i*mpiQ
+  !     call MPI_Allgatherv(v(1:Nloc),Nloc,MPI_Double_Complex,vin,SendCounts,Displs,MPI_Double_Complex,MpiComm,MpiIerr)
+  !     call MPI_Bcast(vin,N,MPI_Double_Complex,0,MpiComm,MpiIerr)
+  !     !
+  !     Hv=zero
+  !     !
+  !     !-----------------------------------------------!
+  !     include "ED_HAMILTONIAN_MATVEC/build_hxv.f90"
+  !     !-----------------------------------------------!
+  !     !
+  !   end subroutine directMatVec_MPI_cc
+  ! #endif
 
 
 

@@ -21,8 +21,17 @@ MODULE ED_VARS_GLOBAL
 
 
   !---------------- SECTOR-TO-FOCK SPACE STRUCTURE -------------------!
+  !> pointer are used here instead of allocatable.
+  !> this way we can distinguish between the Nup,Ndw case (normal) hosting
+  !> two distinct maps and the Sz or Ntot case (superc,nonSU2) hosting 
+  !> a single map.
+  !> In one case we allocate two components and build on them.
+  !> In the other case we allocate one map (up) and have the second be an 
+  !> actual *alias* (pointer) to this one. This avoid any possible memory waste.
   type sector_map
-     integer,dimension(:),allocatable :: map
+     integer,dimension(:),pointer :: up
+     integer,dimension(:),pointer :: dw
+     logical                      :: status=.false.
   end type sector_map
 
   interface map_allocate
@@ -115,7 +124,7 @@ MODULE ED_VARS_GLOBAL
   real(8)                                            :: zeta_function
 
 
-  
+
   !Impurity Green's function and Self-Energies: (Nspin,Nspin,Norb,Norb,:)
   !PRIVATE (now public but accessible thru routine)
   !=========================================================
@@ -216,32 +225,51 @@ contains
 
 
 
-  subroutine map_allocate_scalar(H,N)
+  subroutine map_allocate_scalar(H,Nup,Ndw)
     type(sector_map) :: H
-    integer :: N
-    allocate(H%map(N))
+    integer          :: Nup
+    integer,optional :: Ndw
+    if(H%status) stop "ERROR map_allocate_scalar: H is allocated"
+    if(present(Ndw))then
+       allocate(H%up(Nup))
+       allocate(H%dw(Ndw))
+    else
+       allocate(H%up(Nup))
+       H%dw => H%up
+    endif
+    H%status=.true.
   end subroutine map_allocate_scalar
   !
-  subroutine map_allocate_vector(H,N)
-    type(sector_map),dimension(:) :: H
-    integer,dimension(size(H))    :: N
-    integer :: i
-    do i=1,size(H)
-       allocate(H(i)%map(N(i)))
-    enddo
+  subroutine map_allocate_vector(H,Nup,Ndw)
+    type(sector_map),dimension(:)       :: H
+    integer,dimension(size(H))          :: Nup
+    integer,dimension(size(H)),optional :: Ndw
+    integer                             :: i
+    if(present(Ndw))then
+       do i=1,size(H)          
+          call map_allocate_scalar(H(i),Nup(i),Ndw(i))
+       enddo
+    else
+       do i=1,size(H)
+          call map_allocate_scalar(H(i),Nup(i))
+       enddo
+    endif
   end subroutine map_allocate_vector
 
 
   subroutine map_deallocate_scalar(H)
     type(sector_map) :: H
-    deallocate(H%map)
+    if(.not.H%status)stop "ERROR map_deallocate_scalar: H not allocated"
+    if(associated(H%up))deallocate(H%up)
+    if(associated(H%dw))deallocate(H%dw)
+    H%status=.false.
   end subroutine map_deallocate_scalar
   !
   subroutine map_deallocate_vector(H)
     type(sector_map),dimension(:) :: H
-    integer :: i
+    integer                       :: i
     do i=1,size(H)
-       deallocate(H(i)%map)
+       call map_deallocate_scalar(H(i))
     enddo
   end subroutine map_deallocate_vector
 
