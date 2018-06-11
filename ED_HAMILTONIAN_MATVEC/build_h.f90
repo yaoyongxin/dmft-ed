@@ -50,9 +50,10 @@
 !       <TEST
         nvec = [nup,ndw]
  
+        include "ED_HAMILTONIAN_MATVEC/Hint_Umatrix.f90"
+
         deallocate(nvec,Umatrix)
 
-        include "ED_HAMILTONIAN_MATVEC/Hint_Umatrix.f90"
      end select
      !
      !BATH HAMILTONIAN

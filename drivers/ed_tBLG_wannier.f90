@@ -111,7 +111,12 @@ program ed_effective_tBLG
 
 
   !Setup solver
-  Nb=get_bath_dimension()
+  if(bath_type=="replica")then
+     Nb=get_bath_dimension(Hloc)
+  else
+     Nb=get_bath_dimension()
+  endif
+
   allocate(Bath(Nb))
   allocate(Bath_prev(Nb))
   call ed_init_solver(Bath,Hloc)
@@ -237,7 +242,7 @@ contains
     !
     allocate(graphHloc(Nvso,Nvso))
     graphHloc = sum(Hk(:,:,:),dim=3)/Lk
-    where(abs(dreal(graphHloc))<1.d-4)graphHloc=0d0
+    !where(abs(dreal(graphHloc))<1.d-4)graphHloc=0d0
     call TB_write_Hloc(graphHloc)
     call TB_write_Hloc(graphHloc,'Hloc_tBLG_wannier.dat')
     !
