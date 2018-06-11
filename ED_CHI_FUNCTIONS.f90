@@ -141,13 +141,6 @@ contains
     call deallocate_grids
   end subroutine buildChi_impurity
 
-  !+------------------------------------------------------------------+
-  !                    SUSCEPTIBILITIES (SPIN, CHARGE, PAIR)
-  !+------------------------------------------------------------------+
-  ! include 'ED_GREENS_FUNCTIONS/build_chi_spin.f90'
-  ! include 'ED_GREENS_FUNCTIONS/build_chi_dens.f90'
-  ! include 'ED_GREENS_FUNCTIONS/build_chi_pair.f90'
-
 
 
 
@@ -194,11 +187,9 @@ contains
     type(sector_map) :: HI    !map of the Sector S to Hilbert space H
     !
     !
-    
-    !
     do izero=1,state_list%size
-       isector     =  es_return_sector(state_list,izero)
-       idim      =  getdim(isector)
+       isector    =  es_return_sector(state_list,izero)
+       idim       =  getdim(isector)
        state_e    =  es_return_energy(state_list,izero)
        state_cvec => es_return_cvector(state_list,izero)
        norm0=sqrt(dot_product(state_cvec,state_cvec))
@@ -208,7 +199,7 @@ contains
        call build_sector(isector,HI)
        vvinit=0.d0
        do m=1,idim                     !loop over |gs> components m
-          i=HI%map(m)
+          i=HI%up(m)
           ib = bdecomp(i,2*Ns)
           sgn = dble(ib(iorb))-dble(ib(iorb+Ns))
           vvinit(m) = 0.5d0*sgn*state_cvec(m)   !build the cdg_up|gs> state
@@ -244,7 +235,7 @@ contains
        if(spH0%status)call sp_delete_matrix(spH0)
        nullify(state_cvec)
     enddo
-    
+
   end subroutine lanc_ed_build_spinChi_c
 
   subroutine lanc_ed_build_spinChi_tot_c()

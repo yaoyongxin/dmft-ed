@@ -129,17 +129,17 @@ contains
     complex(8),dimension(:,:),allocatable  :: Hredux
     integer                                :: isector
     integer,dimension(Nlevels)             :: ib
-    integer,dimension(Ns)                  :: ibup,ibdw
+    integer,dimension(Ns)                  :: ibup,ibdw,nup,ndw
     integer                                :: dim,dimUp,dimDw
     integer                                :: i,iup,idw
+    integer                                :: j,jup,jdw
     integer                                :: m,mup,mdw
     integer                                :: ishift,ishift_up,ishift_dw
-    integer                                :: j,ms,impi,impi_up,impi_dw
+    integer                                :: ms,impi,impi_up,impi_dw
     integer                                :: iorb,jorb,ispin,jspin,ibath
     integer                                :: kp,k1,k2,k3,k4
     integer                                :: alfa,beta
     real(8)                                :: sg1,sg2,sg3,sg4
-    real(8),dimension(Norb)                :: nup,ndw
     complex(8)                             :: htmp,htmpup,htmpdw
     complex(8),dimension(Nspin,Norb,Nbath) :: diag_hybr
     logical                                :: Jcondition
@@ -182,80 +182,102 @@ contains
     if(spH0dw%status)call sp_delete_matrix(spH0dw)
     !
     !
-    !We have different cases (at least for now):
-    !A. if( ed_mode = normal AND Hmat is not present) USE Nup & Ndw and store to spH0,_up,_dw
-    !B. if( ed_mode = normal AND Hmat is present)USE Nup & Ndw but store to Hmat
-    !C. if( ed_mode != normal AND Hmat is not present) USE old method and store to spH0
-    !D. if( ed_mode != normal AND Hmat is present) USE old method and store to Hmat
+    !
+    !FULL:
+    dim  = getdim(isector)
+    mpiQ = dim/MpiSize
+    mpiR = 0
+    if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
+    !
+    call sp_init_matrix(spH0,mpiQ + mpiR)
+    ishift      = MpiRank*mpiQ
+    first_state = MpiRank*mpiQ + 1
+    last_state  = (MpiRank+1)*mpiQ + mpiR
     !
     select case(ed_mode)
     case default
        !
-       dim  = getdim(isector)
-       mpiQ = dim/MpiSize
-       mpiR = 0
-       if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
-       !
-       call sp_init_matrix(spH0,mpiQ + mpiR)
-       ishift      = MpiRank*mpiQ
-       first_state = MpiRank*mpiQ + 1
-       last_state  = (MpiRank+1)*mpiQ + mpiR
-       !      
        !-----------------------------------------------!
-       include "ED_HAMILTONIAN_MATVEC/build_h.f90"
+       !IMPURITY  HAMILTONIAN
+       include "ED_HAMILTONIAN_MATVEC/Himp.f90"
+       !
+       !LOCAL INTERACTION
+       include "ED_HAMILTONIAN_MATVEC/Hint.f90"
+       !
+       !BATH HAMILTONIAN
+       include "ED_HAMILTONIAN_MATVEC/Hbath.f90"
+       !
+       !IMPURITY- BATH HYBRIDIZATION
+       include "ED_HAMILTONIAN_MATVEC/Himp_bath.f90"
        !-----------------------------------------------!
-       !
-       if(present(Hmat))then
-          if(MpiStatus)then
-#ifdef _MPI
-             call MPI_AllReduce(Hredux,Hmat,dim*dim,MPI_Double_Complex,MPI_Sum,MpiComm,MpiIerr)
-#endif
-          else
-             Hmat = Hredux
-          endif
-       endif
-       !
-       !
        !
     case("normal")
        !
-       !UP:
-       dimUp  = getDimUp(isector)
-       mpiQup = dimUp/MpiSize
-       mpiRup = 0
-       if(MpiRank==(MpiSize-1))mpiRup=mod(dimUp,MpiSize)
-       call sp_init_matrix(spH0up,mpiQup + mpiRup)
-       ishift_up      = MpiRank*mpiQup
-       first_state_up = MpiRank*mpiQup + 1
-       last_state_up  = (MpiRank+1)*mpiQup + mpiRup
+       if(present(Hmat))then
+          !
+          !-----------------------------------------------!
+          !IMPURITY  HAMILTONIAN
+          include "ED_HAMILTONIAN_MATVEC/Himp.f90"
+          !
+          !LOCAL INTERACTION
+          include "ED_HAMILTONIAN_MATVEC/Hint.f90"
+          !
+          !BATH HAMILTONIAN
+          include "ED_HAMILTONIAN_MATVEC/Hbath.f90"
+          !
+          !IMPURITY- BATH HYBRIDIZATION
+          include "ED_HAMILTONIAN_MATVEC/Himp_bath.f90"
+          !-----------------------------------------------!
+          !
+       else
+          !
+          !UP:
+          dimUp  = getDimUp(isector)
+          mpiQup = dimUp/MpiSize
+          mpiRup = 0
+          if(MpiRank==(MpiSize-1))mpiRup=mod(dimUp,MpiSize)
+          call sp_init_matrix(spH0up,mpiQup + mpiRup)
+          ishift_up      = MpiRank*mpiQup
+          first_state_up = MpiRank*mpiQup + 1
+          last_state_up  = (MpiRank+1)*mpiQup + mpiRup
+          !
+          !DW
+          dimDw  = getDimDw(isector)
+          mpiQdw = dimDw/MpiSize
+          mpiRdw = 0
+          if(MpiRank==(MpiSize-1))mpiRdw=mod(dimDw,MpiSize)
+          call sp_init_matrix(spH0dw,mpiQdw + mpiRdw)
+          ishift_dw      = MpiRank*mpiQdw
+          first_state_dw = MpiRank*mpiQdw + 1
+          last_state_dw  = (MpiRank+1)*mpiQdw + mpiRdw
+          !
+          !-----------------------------------------------!
+          !IMPURITY  HAMILTONIAN
+          include "ED_HAMILTONIAN_MATVEC/Himp_ud.f90"
+          !
+          !LOCAL INTERACTION
+          include "ED_HAMILTONIAN_MATVEC/Hint_ud.f90"
+          !
+          !BATH HAMILTONIAN
+          include "ED_HAMILTONIAN_MATVEC/Hbath_ud.f90"
+          !
+          !IMPURITY- BATH HYBRIDIZATION
+          include "ED_HAMILTONIAN_MATVEC/Himp_bath_ud.f90"
+          !-----------------------------------------------!
+          !
+       endif
        !
-       !DW
-       dimDw  = getDimDw(isector)
-       mpiQdw = dimDw/MpiSize
-       mpiRdw = 0
-       if(MpiRank==(MpiSize-1))mpiRdw=mod(dimDw,MpiSize)
-       call sp_init_matrix(spH0dw,mpiQdw + mpiRdw)
-       ishift_dw      = MpiRank*mpiQdw
-       first_state_dw = MpiRank*mpiQdw + 1
-       last_state_dw  = (MpiRank+1)*mpiQdw + mpiRdw
-       !
-       !FULL:
-       dim  = dimUp*dimDw
-       mpiQ = dim/MpiSize
-       mpiR = 0
-       if(MpiRank==(MpiSize-1))mpiR=mod(dim,MpiSize)
-       call sp_init_matrix(spH0,dim)
-       ishift      = MpiRank*mpiQ
-       first_state = MpiRank*mpiQ + 1
-       last_state  = (MpiRank+1)*mpiQ + mpiR
-       !
-       !-----------------------------------------------!
-       include "ED_HAMILTONIAN_MATVEC/build_h.f90"
-       !-----------------------------------------------!
-
     end select
     !
-
+    if(present(Hmat))then
+       if(MpiStatus)then
+#ifdef _MPI
+          call MPI_AllReduce(Hredux,Hmat,dim*dim,MPI_Double_Complex,MPI_Sum,MpiComm,MpiIerr)
+#endif
+       else
+          Hmat = Hredux
+       endif
+    endif
     !
   end subroutine ed_buildH_c
 
