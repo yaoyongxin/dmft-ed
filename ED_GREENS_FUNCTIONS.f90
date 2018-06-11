@@ -243,12 +243,13 @@ contains
        enddo
     endif
     !
-    if(ed_para.and.Nspin==2)then
-       impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
-       impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
-       impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
-       impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
-    endif
+    ! This should be performed in the driver by the user if needed. Symmetrization is out of scope in the ED code.
+    ! if(ed_para.and.Nspin==2)then
+    !    impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
+    !    impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
+    !    impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
+    !    impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
+    ! endif
     !
   end subroutine build_gf_normal
 
