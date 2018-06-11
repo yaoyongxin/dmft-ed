@@ -646,25 +646,28 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
   case ('replica')
      !
      select case(ed_mode)
-     case("normal")
+     case default               !normal
         !
-        if(ed_para)then
-           Maxspin=1
-        else
-           Maxspin=2
-        endif
+        ! if(ed_para)then
+        !    Maxspin=1
+        ! else
+        !    Maxspin=2
+        ! endif
         dmft_bath_%h=zero
         dmft_bath_%vr=zero
         i = 0
         !all non-vanishing terms in imploc - all spin
-        do ispin=1,Maxspin
+        do ispin=1,Nspin!Maxspin
            do iorb=1,Norb
               do jorb=1,Norb
                  do ibath=1,Nbath
                     io = iorb + (ispin-1)*Norb
                     jo = jorb + (ispin-1)*Norb
                     if(io.gt.jo)cycle!only diagonal and upper triangular are saved for hermiticity
-                    element_R=0.0d0;element_I=0.0d0
+                    !
+                    element_R=0d0
+                    element_I=0d0
+                    !
                     if(dmft_bath_%mask(ispin,ispin,iorb,jorb,1)) then
                        i=i+1
                        element_R=bath_(i)
@@ -673,9 +676,12 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
                        i=i+1
                        element_I=bath_(i)
                     endif
-                    dmft_bath_%h(ispin,ispin,iorb,jorb,ibath)=cmplx(element_R,element_I)
+                    !
+                    dmft_bath_%h(ispin,ispin,iorb,jorb,ibath)=dcmplx(element_R,element_I)
+                    !
                     !hermiticity
                     if(iorb/=jorb)dmft_bath_%h(ispin,ispin,jorb,iorb,ibath)=conjg(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
+                    !
                     !spin-conservation
                     !if(Maxspin==1)dmft_bath_%h(2,2,iorb,jorb,ibath)=dmft_bath_%h(1,1,iorb,jorb,ibath)
                     !if(Maxspin==1)dmft_bath_%h(2,2,jorb,iorb,ibath)=dmft_bath_%h(1,1,jorb,iorb,ibath)
@@ -686,7 +692,8 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
         !
         !all Re[Hybr]
         do ibath=1,Nbath
-           element_R=0.0d0;element_I=0.0d0
+           element_R=0d0
+           element_I=0d0
            i=i+1
            element_R=bath_(i)
            dmft_bath_%vr(ibath)=cmplx(element_R,element_I)
@@ -769,7 +776,7 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
         enddo
         !
      case ("superc")
-
+        stop "ERROR: bath_type= replica AND ed_mode=superc not allowed yet (will ever be?)"
         !
      end select
      !
@@ -956,14 +963,14 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
      select case(ed_mode)
      case("normal")
         !
-        if(ed_para)then
-           Maxspin=1
-        else
-           Maxspin=2
-        endif
+        ! if(ed_para)then
+        !    Maxspin=1
+        ! else
+        !    Maxspin=2
+        ! endif
         i = 0
         !all non-vanishing terms in imploc - all spin
-        do ispin=1,Maxspin
+        do ispin=1,Nspin!Maxspin
            do iorb=1,Norb
               do jorb=1,Norb
                  do ibath=1,Nbath
@@ -972,11 +979,11 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
                     if(io.gt.jo)cycle!only diagonal and upper triangular are saved for hermiticity
                     if(dmft_bath_%mask(ispin,ispin,iorb,jorb,1)) then
                        i=i+1
-                       bath_(i)=real(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
+                       bath_(i)=dreal(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
                     endif
                     if(dmft_bath_%mask(ispin,ispin,iorb,jorb,2)) then
                        i=i+1
-                       bath_(i)=aimag(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
+                       bath_(i)=dimag(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
                     endif
                  enddo
               enddo
@@ -986,7 +993,7 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
         !all Re[Hybr]
         do ibath=1,Nbath
            i=i+1
-           bath_(i)=real(dmft_bath_%vr(ibath))
+           bath_(i)=dreal(dmft_bath_%vr(ibath))
         enddo
         !
      case("nonsu2")
@@ -1006,21 +1013,21 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
                  !off-diagonal lambda_k
                  if(dmft_bath_%mask(1,2,3,2,1).or.dmft_bath_%mask(1,2,3,2,2))then
                     i=i+1
-                    bath_(i)=real(hrep_aux(3,4))*2.d0
+                    bath_(i)=dreal(hrep_aux(3,4))*2.d0
                  endif
                  !diagonal eps_k
                  i=i+1
-                 bath_(i)=real(hrep_aux(1,1))
+                 bath_(i)=dreal(hrep_aux(1,1))
               else
                  !
                  !off-diagonal lambda_k
                  if(dmft_bath_%mask(1,2,3,1,1).or.dmft_bath_%mask(1,2,3,1,2))then
                     i=i+1
-                    bath_(i)=real(dmft_bath_%h(1,2,3,1,ibath))*2.d0
+                    bath_(i)=dreal(dmft_bath_%h(1,2,3,1,ibath))*2.d0
                  endif
                  !diagonal eps_k
                  i=i+1
-                 bath_(i)=real(dmft_bath_%h(1,1,1,1,ibath))
+                 bath_(i)=dreal(dmft_bath_%h(1,1,1,1,ibath))
               endif
            enddo
         else
@@ -1035,11 +1042,11 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
                           if(io.gt.jo)cycle!only diagonal and upper triangular are saved for hermiticity
                           if(dmft_bath_%mask(ispin,jspin,iorb,jorb,1)) then
                              i=i+1
-                             bath_(i)=real(dmft_bath_%h(ispin,jspin,iorb,jorb,ibath))
+                             bath_(i)=dreal(dmft_bath_%h(ispin,jspin,iorb,jorb,ibath))
                           endif
                           if(dmft_bath_%mask(ispin,jspin,iorb,jorb,2)) then
                              i=i+1
-                             bath_(i)=aimag(dmft_bath_%h(ispin,jspin,iorb,jorb,ibath))
+                             bath_(i)=dimag(dmft_bath_%h(ispin,jspin,iorb,jorb,ibath))
                           endif
                        enddo
                     enddo
@@ -1056,12 +1063,15 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
         !
      case ("superc")
         stride = 0
-
+        stop "ERROR: bath_type= replica AND ed_mode=superc not allowed yet (will ever be?)"
         !
      end select
      !
   end select
 end subroutine get_dmft_bath
+
+
+
 
 
 

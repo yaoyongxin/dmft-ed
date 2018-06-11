@@ -8,12 +8,16 @@
 ! 2 for get_spin_component_size_bath & get_orb_component_size_bath
 ! 1 for get_spin_orb_component_size_bath
 !+-------------------------------------------------------------------+
-function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
+function get_bath_dimension(Hloc_nn,ispin_,Hloc_threshold) result(bath_size)
   complex(8),optional,intent(in) :: Hloc_nn(:,:,:,:)
   integer,optional               :: ispin_
   integer                        :: bath_size,ndx,ispin,iorb,jspin,jorb,io,jo,Maxspin
   complex(8),allocatable         :: Hloc(:,:,:,:)
+  real(8),optional               :: Hloc_threshold
+  real(8)                        :: Hloc_threshold_
 
+  Hloc_threshold_=1d-6 ; if(present(Hloc_threshold))Hloc_threshold_=Hloc_threshold
+  !
   select case(bath_type)
   case default
      select case(ed_mode)
@@ -55,34 +59,41 @@ function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
      select case(ed_mode)
      case default
         !
-        if(ed_para)then
-           Maxspin=1
-        else
-           Maxspin=2
-        endif
+        ! if(ed_para)then
+        !    Maxspin=1
+        ! else
+        !    Maxspin=2
+        ! endif
+        !
+        write(LOGfile,"(A)")"Using Hloc_threshloc=",str(Hloc_threshold_)
+        !
         ndx=0
-        do ispin=1,Maxspin
+        do ispin=1,Nspin!Maxspin
            do iorb=1,Norb
               do jorb=1,Norb
                  io = iorb + (ispin-1)*Norb
                  jo = jorb + (ispin-1)*Norb
                  if(io.lt.jo)then
-                    if(abs(dreal(Hloc(ispin,ispin,iorb,jorb))).gt.1d-6)ndx=ndx+1
-                    if(abs(dimag(Hloc(ispin,ispin,iorb,jorb))).gt.1d-6)ndx=ndx+1
+                    if(abs(dreal(Hloc(ispin,ispin,iorb,jorb))).gt.Hloc_threshold_)ndx=ndx+1
+                    if(abs(dimag(Hloc(ispin,ispin,iorb,jorb))).gt.Hloc_threshold_)ndx=ndx+1
                  endif
               enddo
            enddo
         enddo
+        !
         !Real diagonal elements (always assumed)
-        ndx= ndx + Maxspin * Norb
+        ndx= ndx + Nspin*Norb   !Maxspin * Norb
+        !
         !complex diagonal elements checked
         do ispin=1,Maxspin
            do iorb=1,Norb
-              if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.1d-6)stop "Hloc is not Hermitian"
+              if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.Hloc_threshold_)stop "Hloc is not Hermitian"
            enddo
         enddo
+        !        
         !number of non vanishing elements for each replica
         ndx = ndx * Nbath
+        !
         !real diagonal hybridizations
         ndx = ndx + Nbath
         !
@@ -98,8 +109,8 @@ function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
                     io = iorb + (ispin-1)*Norb
                     jo = jorb + (jspin-1)*Norb
                     if(io.lt.jo)then
-                       if(abs(dreal(Hloc(ispin,jspin,iorb,jorb))).gt.1d-6)ndx=ndx+1
-                       if(abs(dimag(Hloc(ispin,jspin,iorb,jorb))).gt.1d-6)ndx=ndx+1
+                       if(abs(dreal(Hloc(ispin,jspin,iorb,jorb))).gt.Hloc_threshold_)ndx=ndx+1
+                       if(abs(dimag(Hloc(ispin,jspin,iorb,jorb))).gt.Hloc_threshold_)ndx=ndx+1
                     endif
                  enddo
               enddo
@@ -110,7 +121,7 @@ function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
         !complex diagonal elements checked
         do ispin=1,Nspin
            do iorb=1,Norb
-              if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.1d-6)stop "Hloc is not Hermitian"
+              if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.Hloc_threshold_)stop "Hloc is not Hermitian"
            enddo
         enddo
         !number of non vanishing elements for each replica
