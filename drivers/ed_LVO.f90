@@ -18,15 +18,21 @@ program ed_LVO_hetero
   integer                                             :: i,j,io,jo,ndx
   integer                                             :: iorb,jorb
   integer                                             :: ispin,jspin
-  integer                                             :: ilat,jlat,Nlat
+  integer                                             :: ilat,jlat
   integer                                             :: ifreq,Lfreq
   integer                                             :: ilayer,Nlayer
   integer                                             :: NlNsNo,NsNo
   logical                                             :: converged
-  real(8)                                             :: wmixing
+  !Parsed:
   character(len=60)                                   :: finput
-  character(len=32)                                   :: geometry
-  character(len=32)                                   :: z_symmetry
+  integer                                             :: Nk,Nlat,Nkpath
+  real(8)                                             :: wmixing
+  logical                                             :: computeG0loc
+  character(len=32)                                   :: geometry,z_symmetry,gauge
+  logical                                             :: bulk_magsym,diaglocalpbm
+  integer                                             :: Nr,Nt,Nphotons
+  logical                                             :: Efield
+  real(8)                                             :: tmax
   !Mpi:
   integer                                             :: comm,rank,ier,siz
   logical                                             :: master
@@ -35,7 +41,7 @@ program ed_LVO_hetero
   real(8)   ,allocatable,dimension(:,:)               :: Bath
   real(8)   ,allocatable,dimension(:)                 :: Bath_single
   !Hamiltoninas:
-  integer                                             :: ik,Nk,Lk,Nkpath
+  integer                                             :: ik,Lk
   complex(8),allocatable,dimension(:,:,:)             :: Hk
   complex(8),allocatable,dimension(:,:)               :: Hloc_lso
   complex(8),allocatable,dimension(:,:,:,:,:)         :: Hloc_nnn
@@ -60,12 +66,8 @@ program ed_LVO_hetero
   real(8)   ,allocatable,dimension(:)                 :: orb_dens_single,orb_mag_single
   logical                                             :: look4n=.true.
   !custom variables misc:
-  integer                                             :: Nr
-  real(8)                                             :: variance
-  logical                                             :: computeG0loc
   logical                                             :: lattice_flag=.true.
-  logical                                             :: bulk_magsym
-  logical                                             :: diaglocalpbm
+  character(len=60)                                   :: HRfile
   complex(8),allocatable,dimension(:,:)               :: U,Udag
   complex(8),allocatable,dimension(:,:)               :: zeta
   complex(8),allocatable,dimension(:,:)               :: Nmatrix_so
@@ -101,29 +103,37 @@ program ed_LVO_hetero
   call parse_input_variable(z_symmetry     ,"ZSYMMETRY"   ,finput, default="FERRO"         )
   call parse_input_variable(bulk_magsym    ,"BULKMAGSYM"  ,finput, default=.false.         )
   call parse_input_variable(diaglocalpbm   ,"DIAGLOCAL"   ,finput, default=.false.         )
+  call parse_input_variable(Efield         ,"EFIELD"      ,finput, default=.false.         )
   call parse_input_variable(Nr             ,"NR"          ,finput, default=10              )
-  call parse_input_variable(variance       ,"VAR"         ,finput, default=0.5d0           )
+  call parse_input_variable(Nt             ,"NT"          ,finput, default=100             )
+  call parse_input_variable(tmax           ,"TMAX"        ,finput, default=5.d0            )
+  call parse_input_variable(gauge          ,"GAUGE"       ,finput, default="E"             )
+  call parse_input_variable(Nphotons       ,"NPHOTONS"    ,finput, default=5               )
   !
   call ed_read_input(trim(finput),comm)
   !
   !Add DMFT CTRL Variables:
-  call add_ctrl_var(Norb   ,"norb"   )
-  call add_ctrl_var(Nspin  ,"nspin"  )
-  call add_ctrl_var(Nlat   ,"nlat"   )
-  call add_ctrl_var(beta   ,"beta"   )
-  call add_ctrl_var(Lfit   ,"Lfit"   )
-  call add_ctrl_var(xmu    ,"xmu"    )
-  call add_ctrl_var(wini   ,'wini'   )
-  call add_ctrl_var(wfin   ,'wfin'   )
-  call add_ctrl_var(eps    ,"eps"    )
-  call add_ctrl_var(ed_para,"ed_para")
+  call add_ctrl_var(Norb    ,"norb"    )
+  call add_ctrl_var(Nspin   ,"nspin"   )
+  call add_ctrl_var(Nlat    ,"nlat"    )
+  call add_ctrl_var(beta    ,"beta"    )
+  call add_ctrl_var(Lfit    ,"Lfit"    )
+  call add_ctrl_var(xmu     ,"xmu"     )
+  call add_ctrl_var(wini    ,'wini'    )
+  call add_ctrl_var(wfin    ,'wfin'    )
+  call add_ctrl_var(eps     ,"eps"     )
+  call add_ctrl_var(ed_para ,"ed_para" )
+  call add_ctrl_var(cg_Ftol ,"cg_Ftol" )
+  call add_ctrl_var(cg_Niter,"cg_Niter")
   !
   geometry=reg(geometry)
   z_symmetry=reg(z_symmetry)
+  gauge=reg(gauge)
   if (geometry=="bulk".and.ed_para)    lattice_flag=.false.
   if (geometry=="bulk".and.bulk_magsym)lattice_flag=.false.
   if (geometry=="bulk".and.Nlat/=4) stop
   if (bath_type=="replica") stop
+  if(Efield.and.(nloop.ne.-1))stop "  Time-dependent Hk and DMFT not compatible"
   !
   Nlayer=Nlat/2
   NlNsNo=Nlat*Nspin*Norb
@@ -133,18 +143,13 @@ program ed_LVO_hetero
   !##########################       ALLOCATION       ##########################
   !
   !
-  allocate(Smats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));   Smats=zero
-  allocate(Gmats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));   Gmats=zero
-  allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));   Sreal=zero
-  allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));   Greal=zero
-  allocate(field(Nlat,Nspin,Nspin,Norb,Norb,Lmats));   field=zero
-  !
-  allocate(Hk(NlNsNo,NlNsNo,Nk*Nk*Nk));                Hk=zero
-  allocate(Hloc_lso(NlNsNo,NlNsNo));                   Hloc_lso=zero
-  allocate(Hloc_nnn(Nlat,Nspin,Nspin,Norb,Norb));      Hloc_nnn=zero
-  allocate(Wtk(Nk*Nk*Nk));                             Wtk=1.d0/(Nk*Nk*Nk)
-  allocate(U(NlNsNo,NlNsNo));                          U=eye(NlNsNo)
-  allocate(Udag(NlNsNo,NlNsNo));                       Udag=eye(NlNsNo)
+  if(nloop.gt.-1)then
+     allocate(Smats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));   Smats=zero
+     allocate(Gmats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));   Gmats=zero
+     allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));   Sreal=zero
+     allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));   Greal=zero
+     allocate(field(Nlat,Nspin,Nspin,Norb,Norb,Lmats));   field=zero
+  endif
   !
   allocate(wr(Lreal));wr=0.0d0;      wr=linspace(wini,wfin,Lreal,mesh=dw)
   allocate(wm(Lmats));wm=0.0d0;      wm = pi/beta*real(2*arange(1,Lmats)-1,8)
@@ -156,8 +161,12 @@ program ed_LVO_hetero
   !##########################        BUILD Hk        ##########################
   !
   !
-  if(geometry=="bulk")  call read_myhk("LVO_hr_bulk.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
-  if(geometry=="hetero")call read_myhk("LVO_hr_hete.dat","Hk.dat","Hloc","Kpoints.dat",diaglocalpbm)
+  if(geometry=="bulk")  HRfile=reg("LVO_hr_bulk.dat")  
+  if(geometry=="hetero")HRfile=reg("LVO_hr_hete.dat")
+  !
+  call read_myhk(HRfile,"Hk.dat","Hloc","Kpoints.dat",diaglocalpbm,Efield)
+  !
+  if(nloop==-1) stop "  STOP. Calc of Ho"
   !
   if(diaglocalpbm)then
      write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE DIAGONAL BASIS --- "
@@ -379,14 +388,14 @@ program ed_LVO_hetero
      allocate(zeta(NlNsNo,NlNsNo));zeta=zero
      allocate(Gloc(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Gloc=zero
      !
-     do ik = 1+rank,Lk, siz
+     do ik =1+rank,Lk,siz
         do i=1,Lreal
            zeta=zero
            zeta=Hk(:,:,ik)+nnn2lso_reshape(Sreal(:,:,:,:,:,i),Nlat,Nspin,Norb)
            Gloc(:,:,:,:,:,i)=Gloc(:,:,:,:,:,i)+lso2nnn_reshape(inverse_g0k(dcmplx(wr(i),eps),zeta,Nlat,xmu)/Lk,Nlat,Nspin,Norb)
         enddo
      enddo
-     call Mpi_AllReduce(Gloc,Greal, size(Greal), MPI_Double_Complex, MPI_Sum, Comm, ier)
+     call Mpi_AllReduce(Gloc,Greal,size(Greal),MPI_Double_Complex,MPI_Sum,Comm,ier)
      call MPI_Barrier(Comm,ier)
      deallocate(zeta,Gloc)
      !
@@ -429,7 +438,7 @@ contains
           !
           !I'm plugging impS in the neighboring site same plane no spin-flip
           do ilayer=1,Nlayer
-             write(LOGfile,'(2(A,I5))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1,"&",2*ilayer
+             write(LOGfile,'(3(A,I3))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1," & ",2*ilayer
              !site 1 in plane - same spin - same layer
              Smats(2*ilayer-1,:,:,:,:,:)=Smats_hetero(ilayer,:,:,:,:,:)
              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_hetero(ilayer,:,:,:,:,:)
@@ -441,11 +450,11 @@ contains
        elseif(.not.ed_para)then
           !
           do ilayer=1,Nlayer
-             write(LOGfile,'(2(A,I5))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1
+             write(LOGfile,'(2(A,I3))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1
              !site 1 in plane - same spin - same layer
              Smats(2*ilayer-1,:,:,:,:,:)=Smats_hetero(ilayer,:,:,:,:,:)
              Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_hetero(ilayer,:,:,:,:,:)
-             write(LOGfile,'(2(A,I5))') " plugghing spin-flipped impS nr.",ilayer," into ilat nr. ",2*ilayer
+             write(LOGfile,'(2(A,I3))') " plugghing spin-flipped impS nr.",ilayer," into ilat nr. ",2*ilayer
              !site 2 in plane - flip spin - same layer
              Smats(2*ilayer,1,1,:,:,:)  =Smats_hetero(ilayer,2,2,:,:,:)
              Smats(2*ilayer,2,2,:,:,:)  =Smats_hetero(ilayer,1,1,:,:,:)
@@ -505,20 +514,21 @@ contains
   !         translator of the W90 output
   !         The re-ordering part can be used or not, depending on what the user of W90 did.
   !+------------------------------------------------------------------------------------------+!
-  subroutine read_myhk(fileHR,fileHk,fileHloc,fileKpoints,local_diagonal_basis)
+  subroutine read_myhk(fileHR,fileHk,fileHloc,fileKpoints,local_diagonal_basis,Efield)
     implicit none
     character(len=*)            ,intent(in)           ::   fileHR
     character(len=*)            ,intent(in)           ::   fileHk
     character(len=*)            ,intent(in)           ::   fileHloc
     character(len=*)            ,intent(in)           ::   fileKpoints
     logical                     ,intent(in)           ::   local_diagonal_basis
-    real(8)                                           ::   Rx(3),Ry(3),Rz(3)
+    logical                     ,intent(in)           ::   Efield
+    real(8)                                           ::   R1(3),R2(3),R3(3)
     real(8)                                           ::   Ruc(Nlat,3)
     logical                                           ::   IOfile
-    integer                                           ::   ndx
+    integer                                           ::   ndx,ios,unitIO
     integer                                           ::   P(NlNsNo,NlNsNo)
     real(8)                                           ::   mu
-    real(8)         ,allocatable                      ::   Aw(:,:)
+    real(8)         ,allocatable                      ::   Awt(:,:),var(:)
     integer         ,allocatable                      ::   Nkvec(:)
     real(8)         ,allocatable                      ::   Kvec(:,:)
     complex(8)      ,allocatable                      ::   Hloc(:,:)
@@ -526,45 +536,85 @@ contains
     complex(8)      ,allocatable                      ::   Potential_so(:,:)
     complex(8)      ,allocatable                      ::   Potential_nn(:,:,:,:,:)
     !
+    character(len=32)                                 ::   fileDR
+    integer                                           ::   Nw,nph!,Nphotons
+    real(8)                                           ::   dumw,dumF,lvl
+    real(8)                                           ::   Deltaw,wo,dt
+    real(8)         ,allocatable                      ::   w(:),t(:),rndp(:)
+    real(8)         ,allocatable                      ::   tflex(:,:)
+    real(8)         ,allocatable                      ::   fieldvect(:,:,:,:)
+    complex(8)      ,allocatable                      ::   Ew(:,:),Et(:,:)
+    complex(8)      ,allocatable                      ::   At(:,:),Aw(:,:)
+    complex(8)      ,allocatable                      ::   Hkt(:,:,:,:)
+    complex(8)      ,allocatable                      ::   Hloct(:,:,:),Wt(:,:,:)
+    complex(8)      ,allocatable                      ::   Gloct(:,:,:,:,:,:,:)
+    complex(8)      ,allocatable                      ::   Gloct_aux(:,:,:,:,:,:,:)
+    !
     !
     if(geometry=="bulk") then
-       Rx = [ 1.d0, 0.d0, 0.d0 ]*10.35845665
-       Ry = [ 0.d0, 1.d0, 0.d0 ]*10.45462699
-       Rz = [ 0.d0, 0.d0, 1.d0 ]*14.69267364
+       R1 = [ 1.d0, 0.d0, 0.d0 ]*10.35845665
+       R2 = [ 0.d0, 1.d0, 0.d0 ]*10.45462699
+       R3 = [ 0.d0, 0.d0, 1.d0 ]*14.69267364
        !
-       Ruc(1,:) = 0.0 * Rx + 0.5 * Ry + 0.5 * Rz
-       Ruc(2,:) = 0.5 * Rx + 0.0 * Ry + 0.5 * Rz
-       Ruc(3,:) = 0.0 * Rx + 0.5 * Ry + 0.0 * Rz
-       Ruc(4,:) = 0.5 * Rx + 0.0 * Ry + 0.0 * Rz
+       Ruc(1,:) = 0.0 * R1 + 0.5 * R2 + 0.5 * R3
+       Ruc(2,:) = 0.5 * R1 + 0.0 * R2 + 0.5 * R3
+       Ruc(3,:) = 0.0 * R1 + 0.5 * R2 + 0.0 * R3
+       Ruc(4,:) = 0.5 * R1 + 0.0 * R2 + 0.0 * R3
+       !
+       allocate(Nkvec(3));Nkvec=0;Nkvec=[Nk,Nk,Nk]
+       Lk=Nk*Nk*Nk
+       allocate(Kvec(Lk,3));Kvec=0d0
        !
     elseif(geometry=="hetero") then
-       Rx = [ 1.d0,-1.d0, 0.d0 ]*7.544034205
-       Ry = [ 1.d0, 1.d0, 0.d0 ]*7.544034205
-       Rz = [ 0.d0, 0.d0, 1.d0 ]*49.45119675
+       R1 = [ 1.d0,-1.d0, 0.d0 ]*7.544034205
+       R2 = [ 1.d0, 1.d0, 0.d0 ]*7.544034205
+       R3 = [ 0.d0, 0.d0, 1.d0 ]*49.45119675
+       !
+       Ruc(1,:) =  0.507500528*R1+0.005255428*R2+0.373321376*R3
+       Ruc(2,:) = -0.007176847*R1+0.505266961*R2+0.373317900*R3
+       Ruc(3,:) =  0.499897916*R1+0.007491222*R2+0.524851544*R3
+       Ruc(4,:) =  0.000400200*R1+0.507499434*R2+0.524840303*R3
+       Ruc(5,:) =  0.494510887*R1+0.001974406*R2+0.674543358*R3
+       Ruc(6,:) =  0.005774613*R1+0.501984647*R2+0.674540998*R3
+       Ruc(7,:) =  0.509842981*R1-0.009512102*R2+0.821921782*R3
+       Ruc(8,:) = -0.009630883*R1+0.490490079*R2+0.821911583*R3
+       !
+       allocate(Nkvec(3));Nkvec=0;Nkvec=[Nk,Nk,1]
+       Lk=Nk*Nk
+       allocate(Kvec(Lk,3));Kvec=0d0
+       !
     endif
+    !
+    !
+    !
+    allocate(Hk(NlNsNo,NlNsNo,Lk))                 ;Hk=zero 
+    allocate(Wtk(Lk))                              ;Wtk=1.d0/Lk
+    !
+    allocate(Hloc(NlNsNo,NlNsNo))                  ;Hloc=zero
+    allocate(Hloc_lso(NlNsNo,NlNsNo))              ;Hloc_lso=zero
+    allocate(Hloc_nnn(Nlat,Nspin,Nspin,Norb,Norb)) ;Hloc_nnn=zero
+    allocate(U(NlNsNo,NlNsNo))                     ;U=eye(NlNsNo)
+    allocate(Udag(NlNsNo,NlNsNo))                  ;Udag=eye(NlNsNo)
     !
     !
     call Hk_order(P)
     !
     !
-    Lk=Nk*Nk*Nk
     if(master)write(LOGfile,*)" Bulk tot k-points:",Lk
-    !
-    !
-    allocate(Hloc(NlNsNo,NlNsNo));Hloc=zero
-    allocate(Kvec(Lk,3));Kvec=0d0
-    allocate(Nkvec(3));Nkvec=0
-    Nkvec=[Nk,Nk,Nk]
     !
     !
     inquire(file=fileHk,exist=IOfile)
     if(IOfile)then
-       write(LOGfile,'(2A)') "  Reading existing Hk from:  ",fileHk
-       call TB_read_hk(Hk,fileHk,Nspin*Norb*Nlat,1,1,Nlat,Nkvec,Kvec)
+       if(master)then
+          write(LOGfile,'(2A)') "  Reading existing Hk from:  ",fileHk
+          call TB_read_hk(Hk,fileHk,Nspin*Norb*Nlat,1,1,Nlat,Nkvec,Kvec)
+          call TB_read_Hloc(Hloc,reg(fileHloc//".w90"))
+       endif
+       call Bcast_MPI(Comm,Hk) 
+       call Bcast_MPI(Comm,Hloc) 
     else
-       write(LOGfile,'(2A)') "  Transforming HR from:  ",fileHR
-       call TB_hr_to_hk(comm,Rx,Ry,Rz,Hk,fileHR,Nspin,Norb,Nlat,Nkvec,P,Kvec,fileHk,fileKpoints)
-       call TB_dipole(comm,Rx,Ry,Rz,Ruc,fileHR,Norb,Nlat,"dipole_bulk.dat", Nr, variance)
+       if(master)write(LOGfile,'(2A)') "  Transforming HR from:  ",fileHR
+       call TB_hr_to_hk(comm,R1,R2,R3,Hk,Hloc,fileHR,Nspin,Norb,Nlat,Nkvec,P,Kvec,fileHk,fileKpoints)
     endif
     !
     !
@@ -587,8 +637,8 @@ contains
     endif
     !
     !
-    Hloc=zero
-    Hloc=sum(Hk,dim=3)/Lk
+    !Hloc=zero
+    !Hloc=sum(Hk,dim=3)/Lk
     call TB_write_Hloc(Hloc,reg(fileHloc//".w90"))
     !
     !
@@ -602,24 +652,260 @@ contains
     Hloc_nnn=lso2nnn_reshape(Hloc_lso,Nlat,Nspin,Norb)
     call TB_write_Hloc(Hloc_lso,reg(fileHloc//".used"))
     call TB_write_Hloc(U,reg("rotation.used"))
+    if(master)write(LOGfile,*) " H(k) and Hloc linked"
     !
     !
-    write(LOGfile,*) " H(k) and Hloc linked"
+    if(Efield)then
+       !
+       !------------------ FIELD DEFINITION ------------------
+       Nw=0
+       ios=0
+       unitIO=free_unit()
+       open(unit=unitIO,file="Fluence_w.dat",status="old",action="read",iostat=ios)
+       do while (ios==0)
+          read(unitIO,*,iostat=ios)
+          Nw=Nw+1
+       enddo
+       close(unitIO)
+       Nw=Nw-1
+       if(master)write(LOGfile,'(A,1I8)') "  H(w) Frequencies: ",Nw
+       if(master)write(LOGfile,'(A,1I8)') "  Number of windows: ",Nphotons+1
+       !
+       !
+       if(allocated(w))    deallocate(w)    ;allocate(w(2*Nw))             ;w=0d0
+       if(allocated(t))    deallocate(t)    ;allocate(t(Nt))               ;t=linspace(-tmax,tmax,Nt)
+       if(allocated(rndp)) deallocate(rndp) ;allocate(rndp(Nt))            ;call random_number(rndp)!;write(*,*)rndp
+       !
+       if(allocated(Ew))   deallocate(Ew)   ;allocate(Ew(2*Nw,Nphotons+1)) ;Ew=zero
+       if(allocated(Aw))   deallocate(Aw)   ;allocate(Aw(2*Nw,Nphotons+1)) ;Aw=zero
+       if(allocated(Et))   deallocate(Et)   ;allocate(Et(2000,Nphotons+1)) ;Et=zero
+       if(allocated(At))   deallocate(At)   ;allocate(At(2000,Nphotons+1)) ;At=zero
+       !
+       !1) read Fluence
+       unitIO=free_unit()
+       open(unit=unitIO,file="Fluence_w.dat",status="old",action="read",position="rewind")
+       do i=1,Nw
+          read(unitIO,*) dumw,dumF
+          w(i+Nw)=dumw
+          w(Nw-i+1)=-w(i+Nw)
+          !
+          if(w(i+Nw).le.6.8)then
+             Ew(i+Nw,Nphotons+1)=dcmplx(sqrt(2.d0*dumF/electric_constant)*Bohr_radius,0d0) !* dcmplx(cos(rndp(i))*2*pi,sin(rndp(i))*2*pi)
+             Ew(Nw-i+1,Nphotons+1)=Ew(i+Nw,Nphotons+1)
+          endif
+          !
+       enddo
+       close(unitIO)
+       !
+       !
+       !2a) generate E(w) and photons
+       Deltaw=w(2*Nw)/Nphotons
+       do nph=1,Nphotons
+          wo = (nph-1)*Deltaw + Deltaw/2
+          do i=1,Nw
+             Ew(i+Nw,nph)=Ew(i+Nw,Nphotons+1)*exp( -( (w(i+Nw) - wo ) / (Deltaw/1.5d0) )**2 )
+             Ew(Nw-i+1,nph)=Ew(i+Nw,nph)
+          enddo
+       enddo
+       !2b) print E(w)
+       if(master)then
+          unitIO=free_unit()
+          open(unit=unitIO,file="E_w.dat",status="unknown",action="write",position="rewind")
+             do i=1,2*Nw
+             write(unitIO,'(3000F12.7)')  w(i),real(Ew(i,Nphotons+1)),(real(Ew(i,nph)),nph=1,Nphotons)
+          enddo
+          close(unitIO)
+       endif
+       !
+       !
+       !3a) generate A(w)
+       do nph=1,Nphotons+1
+          Aw(:,nph)=Ew(:,nph)/(Xi*w)
+       enddo
+       !3b) print A(w)
+       if(master)then
+          unitIO=free_unit()
+          open(unit=unitIO,file="A_w.dat",status="unknown",action="write",position="rewind")
+          do i=1,2*Nw
+             write(unitIO,'(3000F12.7)')  w(i),aimag(Aw(i,Nphotons+1)),(aimag(Aw(i,nph)),nph=1,Nphotons)
+          enddo
+          close(unitIO)
+       endif
+       !
+       !
+       dt=0.01
+       if(allocated(tflex))deallocate(tflex);allocate(tflex(Nt,Nphotons+1));tflex=0d0
+       if(gauge=="A")then
+          !
+          !generate A(t)
+          do nph=1,Nphotons+1
+             tflex(:,nph)=linspace(-tmax,tmax,Nt)
+             call invFourier(w,Aw(:,nph),t,At(:,nph))
+             write(LOGfile,'(A,1I3,1F12.7)')"  photon#",nph,abs(At(Nt,nph))
+             i=0
+             do while (abs(real(At(Nt,nph))).gt.1e-5) !1e-5
+                tflex(:,nph)=0d0;tflex(:,nph)=linspace(-(tmax+i*dt),(tmax+i*dt),Nt)
+                call invFourier(w,Aw(:,nph),tflex(:,nph),At(:,nph))
+                i=i+1
+                write(LOGfile,'(A,1I3,A,1I6,A,2F12.7)')"  photon#",nph," it: ",i," tmax: ",tmax+i*dt,abs(At(Nt,nph))
+             enddo
+          enddo
+          write(LOGfile,'(1A)') "  A(t) generated"
+          !print A(t)
+          if(master)then
+             unitIO=free_unit()
+             open(unit=unitIO,file="A_t.dat",status="unknown",action="write",position="rewind")
+             do i=1,2000
+                write(unitIO,'(3000F12.7)')  (abs(tflex(1,nph)-tflex(2,nph))*i,nph=1,Nphotons+1), &
+                                             (real(At(i,nph)),nph=1,Nphotons+1)
+             enddo
+             close(unitIO)
+          endif
+          !generate E(t)
+          do nph=1,Nphotons+1
+             call invFourier(w,Ew(:,nph),tflex(:,nph),Et(:,nph))
+          enddo
+          write(LOGfile,'(1A)') "  E(t) generated"
+          !print E(t)
+          if(master)then
+             unitIO=free_unit()
+             open(unit=unitIO,file="E_t.dat",status="unknown",action="write",position="rewind")
+             do i=1,2000
+                write(unitIO,'(3000F12.7)')  (abs(tflex(1,nph)-tflex(2,nph))*i,nph=1,Nphotons+1), &
+                                             (real(Et(i,nph)),nph=1,Nphotons+1)
+             enddo
+             close(unitIO)
+          endif
+          !
+       elseif(gauge=="E")then
+          !
+          do nph=1,Nphotons+1
+             tflex(:,nph)=linspace(-tmax,tmax,Nt)
+             call invFourier(w,Ew(:,nph),t,Et(:,nph))
+             write(LOGfile,'(A,1I3,1F12.7)')"  photon#",nph,abs(Et(Nt,nph))
+             i=0
+             do while (abs(real(Et(Nt,nph))).gt.1e-5) !1e-5
+                tflex(:,nph)=0d0;tflex(:,nph)=linspace(-(tmax+i*dt),(tmax+i*dt),Nt)
+                call invFourier(w,Ew(:,nph),tflex(:,nph),Et(:,nph))
+                i=i+1
+                write(LOGfile,'(A,1I3,A,1I6,A,2F12.7)')"  photon#",nph," it: ",i," tmax: ",tmax+i*dt,abs(Et(Nt,nph))
+             enddo
+          enddo
+          !print E(t)
+          write(LOGfile,'(1A)') "  E(t) generated"
+          if(master)then
+             unitIO=free_unit()
+             open(unit=unitIO,file="E_t.dat",status="unknown",action="write",position="rewind")
+             do i=1,2000
+                write(unitIO,'(3000F12.7)')  (abs(tflex(1,nph)-tflex(2,nph))*i,nph=1,Nphotons+1), &
+                                             (real(Et(i,nph)),nph=1,Nphotons+1)
+             enddo
+             close(unitIO)
+          endif
+          !generate A(t)
+          do nph=1,Nphotons+1
+             call invFourier(w,Aw(:,nph),tflex(:,nph),At(:,nph))
+          enddo
+          write(LOGfile,'(1A)') "  A(t) generated"
+          !print A(t)
+          if(master)then
+             unitIO=free_unit()
+             open(unit=unitIO,file="A_t.dat",status="unknown",action="write",position="rewind")
+             do i=1,2000
+                write(unitIO,'(3000F12.7)')  (abs(tflex(1,nph)-tflex(2,nph))*i,nph=1,Nphotons+1), &
+                                             (real(At(i,nph)),nph=1,Nphotons+1)
+             enddo
+             close(unitIO)
+          endif
+          !
+          !
+       endif
+       !
+       if(allocated(fieldvect))deallocate(fieldvect);allocate(fieldvect(2000,Nphotons+1,3,2)) ;fieldvect=0d0
+       fieldvect(:,:,1,1)=real(Et); fieldvect(:,:,1,2)=real(At)
+       fieldvect(:,:,2,1)=real(Et); fieldvect(:,:,2,2)=real(At)
+       fieldvect(:,:,3,1)=0d0     ; fieldvect(:,:,3,2)=0d0
+       !
+       deallocate(w,t,Ew,Et,Aw,At)
+       !
+       !--------------------- DIPOLE --------------------
+       if(allocated(var))deallocate(var);allocate(var(Norb));var=0d0
+       var(1)=0.318358
+       var(2)=0.213643
+       var(3)=0.340087
+       !
+       fileDR=reg("dipole_bulk.dat")
+       inquire(file=fileDR,exist=IOfile)
+       if(.not.IOfile)then
+          if(master)write(LOGfile,'(1A)') "  Dipole not found-->build"
+          call TB_dipole(comm,R1,R2,R3,Ruc,fileHR,Norb,Nlat,fileDR,Nr,var,optimize=.false.  , &
+                                                                         t_thresh_=0.0001d0 , &
+                                                                         cg_niter_=cg_Niter , &
+                                                                         cg_Ftol_=cg_Ftol   )
+       else
+          if(master)write(LOGfile,'(1A)') "  Dipole found"
+       endif
+       deallocate(var)
+       !
+       !--------------------- HAMILTONIAN --------------------
+       if(allocated(Wt))deallocate(Wt);allocate(Wt(NlNsNo,Nt+10,Nphotons+1));Wt=zero
+       do nph=1,Nphotons+1
+          if(master)write(LOGfile,'(A,1I3,1A4,1I3)') "  Photon",nph," of ",Nphotons+1
+          if(allocated(Hloct))deallocate(Hloct);allocate(Hloct(NlNsNo,NlNsNo,Nt+10))  ;Hloct =zero
+          !
+          call TB_hr_to_hk(comm,fieldvect(:,nph,:,:),gauge,R1,R2,R3,Ruc,Hloct,fileHR,fileDR,Nspin,Norb,Nlat,Nt+10,P)
+          !
+          !rotate Hloc to CF
+          do i=1,Nt+10
+             Hloct(:,:,i)=matmul(Udag,matmul(Hloct(:,:,i),U))
+          enddo
+          !
+          !print Hloc(t)
+          unitIO=free_unit()
+          open(unit=unitIO,file="Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+          do i=1,Nt+10
+             write(unitIO,'(1I8)') i
+             do io=1,NlNsNo
+                write(unitIO,'(90F12.8)') (real(Hloct(io,jo,i)),jo=1,NlNsNo),(aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
+             enddo
+          enddo
+          close(unitIO)
+          deallocate(Hloct)
+          !
+          !excite diagonal hopping
+          dumw=-2.d0*pi/(Planck_constant_in_eV_s*1e15)
+          do i=1,Nt+10
+             dumF = dumw * ( fieldvect(i,nph,1,2)*norm2(R1) + fieldvect(i,nph,2,2)*norm2(R2) + fieldvect(i,nph,3,2)*norm2(R3) )
+             Wt(:,i,nph)=0.5*dcmplx(cos(dumF),sin(dumF))
+          enddo
+          !
+          !print diagonal hopping
+          unitIO=free_unit()
+          open(unit=unitIO,file="Wt_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+          do i=1,Nt+10
+             write(unitIO,'(90F12.8)') abs(tflex(1,nph)-tflex(2,nph))*i,(real(Wt(j,i,nph)),j=1,NlNsNo),(aimag(Wt(j,i,nph)),j=1,NlNsNo)
+          enddo
+          close(unitIO)
+          !
+       enddo
+       deallocate(tflex)
+    endif
+    !
     !
     !-----  Build the local GF in the spin-orbital Basis   -----
     if(computeG0loc)then
        if(geometry=="bulk")   mu=15.429
-       if(geometry=="hetero") mu=14.329
+       if(geometry=="hetero") mu=7.329
        !
        !matsu freq
-       if(master)write(LOGfile,*)" Build G0loc(wm)"
+       if(master)write(LOGfile,'(1A)')"  Build G0loc(wm)"
        allocate(Gloc(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Gloc=zero
-       do ik = 1+rank,Lk, siz
+       do ik=1+rank,Lk,siz
           do i=1,Lmats
              Gloc(:,:,:,:,:,i)=Gloc(:,:,:,:,:,i)+lso2nnn_reshape(inverse_g0k(xi*wm(i),Hk(:,:,ik),Nlat,mu)/Lk,Nlat,Nspin,Norb)
           enddo
        enddo
-       call Mpi_AllReduce(Gloc,Gmats, size(Gmats), MPI_Double_Complex, MPI_Sum, Comm, ier)
+       call Mpi_AllReduce(Gloc,Gmats,size(Gmats),MPI_Double_Complex,MPI_Sum,Comm,ier)
        call MPI_Barrier(Comm,ier)
        deallocate(Gloc)
        if(master)call dmft_print_gf_matsubara(Gmats,"G0loc_t2g",iprint=6)
@@ -630,14 +916,14 @@ contains
        Gmats=zero
        !
        !real freq
-       if(master)write(LOGfile,*)" Build G0loc(wr)"
+       if(master)write(LOGfile,'(1A)')"  Build G0loc(wr)"
        allocate(Gloc(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Gloc=zero
-       do ik = 1+rank,Lk, siz
+       do ik=1+rank,Lk,siz
           do i=1,Lreal
              Gloc(:,:,:,:,:,i)=Gloc(:,:,:,:,:,i)+lso2nnn_reshape(inverse_g0k(dcmplx(wr(i),eps),Hk(:,:,ik),Nlat,mu)/Lk,Nlat,Nspin,Norb)
           enddo
        enddo
-       call Mpi_AllReduce(Gloc,Greal, size(Greal), MPI_Double_Complex, MPI_Sum, Comm, ier)
+       call Mpi_AllReduce(Gloc,Greal,size(Greal),MPI_Double_Complex,MPI_Sum,Comm,ier)
        call MPI_Barrier(Comm,ier)
        deallocate(Gloc)
        if(master)call dmft_print_gf_realaxis(Greal,"G0loc_t2g",iprint=6)
@@ -938,6 +1224,55 @@ contains
   !
   !
   !+------------------------------------------------------------------------------------------+!
+  !PURPOSE: Fourier
+  !+------------------------------------------------------------------------------------------+!
+  subroutine invFourier(w,func_in,t,func_out)
+    implicit none
+    real(8)          ,intent(in)   ::   w(:),t(:)
+    complex(8)       ,intent(in)   ::   func_in(:)
+    complex(8)       ,intent(out)  ::   func_out(size(t))
+    real(8)                        ::   dt,dw
+    integer                        ::   it,iw
+    !
+    if(size(func_in) .ne.size(w))stop "wrong size Fourier"
+    !
+    dw=abs(w(2)-w(1))
+    dt=abs(t(2)-t(1))
+    !
+    func_out=zero
+    do it=1,size(t)
+       do iw=1,size(w)
+          func_out(it) = func_out(it) + dw*func_in(iw)*dcmplx(cos(w(iw)*t(it)),-sin(w(iw)*t(it)))/sqrt(2*pi)
+       enddo
+    enddo
+    !
+  end subroutine invFourier
+  !
+  subroutine dirFourier(t,func_in,w,func_out)
+    implicit none
+    real(8)          ,intent(in)   ::   w(:),t(:)
+    complex(8)       ,intent(in)   ::   func_in(:)
+    complex(8)       ,intent(out)  ::   func_out(size(t))
+    real(8)                        ::   dt,dw
+    integer                        ::   it,iw
+    !
+    if(size(func_in) .ne.size(t))stop "wrong size Fourier"
+    !
+    dw=abs(w(2)-w(1))
+    dt=abs(t(2)-t(1))
+    !
+    func_out=zero
+    do iw=1,size(w)
+       do it=1,size(t)
+          func_out(iw) = func_out(iw) + dt*func_in(it)*dcmplx(cos(w(iw)*t(it)),sin(w(iw)*t(it)))/sqrt(2*pi)
+       enddo
+    enddo
+    !
+  end subroutine dirFourier
+  !
+  !
+  !
+  !+------------------------------------------------------------------------------------------+!
   !PURPOSE: just to get rid of some space
   !+------------------------------------------------------------------------------------------+!
   subroutine write_Nmatrix_lattice()
@@ -1055,6 +1390,98 @@ end program ed_LVO_hetero
 
 
 
+
+
+!          if(master)write(LOGfile,'(A)')"  Build A(w,t)"
+!          allocate(Gloct(Nlat,Nspin,Nspin,Norb,Norb,Lreal,Nt+10))     ;Gloct=zero
+!          allocate(Gloct_aux(Nlat,Nspin,Nspin,Norb,Norb,Lreal,Nt+10)) ;Gloct_aux=zero
+!          do ik=1+rank,Lk,siz
+
+!  if(master)write(*,*)ik
+
+!             do i=1,Lreal
+!                do j=1,Nt+10
+!                   Gloct_aux(:,:,:,:,:,i,j) = Gloct_aux(:,:,:,:,:,i,j) + &
+!                lso2nnn_reshape(inverse_g0k(dcmplx(wr(i),eps),Hkt(:,:,ik,j),Nlat,mu)/Lk,Nlat,Nspin,Norb)
+!                enddo
+!             enddo
+!          enddo
+!          call Mpi_AllReduce(Gloct_aux,Gloct,size(Gloct),MPI_Double_Complex,MPI_Sum,Comm,ier)
+!          call MPI_Barrier(Comm,ier)
+!          deallocate(Gloct_aux)
+!          !
+!          allocate(Gloc(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Gloc=zero
+!          do j=1,Nt+10
+!             Gloc=Gloct(:,:,:,:,:,:,j)
+!             call rotate_local_funct(Gloc,U)
+!             Gloct(:,:,:,:,:,:,j)=Gloc
+!          enddo
+!          deallocate(Gloc)
+!          !
+!          if(master)then
+!             !
+!             unitIO=free_unit()
+!             open(unit=unitIO,file="Awt_l11_"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+!             do i=1,Lreal
+!                write(unitIO,'(3000F12.7)')wr(i),(-aimag(Gloct(1,1,1,1,1,i,j))/pi,j=1,Nt+10)
+!             enddo
+!             close(unitIO)
+!             !
+!             unitIO=free_unit()
+!             open(unit=unitIO,file="Awt_l22_"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+!             do i=1,Lreal
+!                write(unitIO,'(3000F12.7)')wr(i),(-aimag(Gloct(1,1,1,2,2,i,j))/pi,j=1,Nt+10)
+!             enddo
+!             close(unitIO)
+!             !
+!             unitIO=free_unit()
+!             open(unit=unitIO,file="Awt_l33_"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+!             do i=1,Lreal
+!                write(unitIO,'(3000F12.7)')wr(i),(-aimag(Gloct(1,1,1,3,3,i,j))/pi,j=1,Nt+10)
+!             enddo
+!             close(unitIO)
+!          endif
+!          !
+!          !estimate bandwidth_CF vector here
+!          lvl=1e-3
+!          do j=1,Nt+10
+!             do ilat=1,Nlat
+!                do ispin=1,Nspin
+!                   do iorb=1,Norb
+!                      !
+!                      io = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb
+!                      !
+!                      bottomloop:do i=1,Lreal
+!                         if(abs(aimag(Gloct(ilat,ispin,ispin,iorb,iorb,i,j))/pi).gt.lvl)then
+!                            Wt(io,j,nph,1)=wr(i)
+!                            exit bottomloop
+!                         endif
+!                      enddo bottomloop
+!                      !
+!                      toploop:do i=Lreal,1,-1
+!                         if(abs(aimag(Gloct(ilat,ispin,ispin,iorb,iorb,i,j))/pi).gt.lvl)then
+!                            Wt(io,j,nph,2)=wr(i)
+!                            exit toploop
+!                         endif
+!                      enddo toploop
+!                      !
+!                   enddo
+!                enddo
+!             enddo
+!          enddo
+!          deallocate(Gloct)
+!          !
+!          if(master)then
+!             !
+!             unitIO=free_unit()
+!             open(unit=unitIO,file="W_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+!             do j=1,Nt+10
+!                write(unitIO,'(30F12.7)')abs(tflex(1,nph)-tflex(2,nph))*j,(Wt(io,j,nph,1),io=1,NlNsNo),(Wt(io,j,nph,2),io=1,NlNsNo)
+!             enddo
+!             close(unitIO)
+!             !
+!          endif
+!          !
 
 
 
