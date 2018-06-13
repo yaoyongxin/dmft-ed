@@ -50,7 +50,12 @@ program lancED
   Hloc=zero
 
   !setup solver
-  Nb=get_bath_dimension()
+  if(bath_type=="replica")then
+     Nb=get_bath_dimension(Hloc)
+  else
+     Nb=get_bath_dimension()
+  endif
+
   allocate(bath(Nb))
   allocate(bath_(Nb))
   call ed_init_solver(bath,Hloc)

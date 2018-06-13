@@ -1,6 +1,6 @@
 !The twisted bilayer graphene flat bands effective model can be found in arXiv:1805.06819
 ! this driver needs the file 'eff_hopping.dat' to work
-program ed_effective_tBLG
+program ed_tBLG_wannier
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
@@ -241,10 +241,18 @@ contains
     endif
     !
     allocate(graphHloc(Nvso,Nvso))
+    graphHloc=zero
     graphHloc = sum(Hk(:,:,:),dim=3)/Lk
-    !where(abs(dreal(graphHloc))<1.d-4)graphHloc=0d0
-    call TB_write_Hloc(graphHloc)
-    call TB_write_Hloc(graphHloc,'Hloc_tBLG_wannier.dat')
+    !where(abs(graphHloc)<1.d-12) graphHloc=zero
+    write(*,*)
+    do iorb=1,Norb
+       do jorb=1,Norb
+          write(*,'(2I4,2F16.9)')iorb,jorb,dreal(graphHloc(iorb,jorb)),dimag(graphHloc(iorb,jorb))
+       enddo
+    enddo
+    !where(abs(dreal(graphHloc))<1.d-12) graphHloc=0d0
+    !call TB_write_Hloc(graphHloc)
+    !call TB_write_Hloc(graphHloc,'Hloc_tBLG_wannier.dat')
     !
     !
     allocate(Kpath(4,2))
@@ -270,7 +278,7 @@ contains
 
 
 
-end program ed_effective_tBLG
+end program ed_tBLG_wannier
 
 
 

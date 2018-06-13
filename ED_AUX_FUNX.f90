@@ -83,21 +83,21 @@ contains
     !
     unit=LOGfile
     !
-    if(present(file))then
-       open(free_unit(unit),file=reg(file))
-       write(LOGfile,"(A)")"print_Hloc on file :"//reg(file)
-    endif
-    !
-    Nso = Nspin*Norb
-    write(fmt,"(A,I0,A)")"(",Nso,"A)"
-    do ispin=1,Nspin
-       do iorb=1,Norb
-          write(unit,fmt)((str(Hloc(ispin,jspin,iorb,jorb)),jorb=1,Norb),jspin=1,Nspin)
-       enddo
-    enddo
-    write(unit,*)""
-    !
-    if(present(file))close(unit)
+   ! if(present(file))then
+   !    open(free_unit(unit),file=reg(file))
+   !    write(LOGfile,"(A)")"print_Hloc on file :"//reg(file)
+   ! endif
+    !!
+   ! Nso = Nspin*Norb
+   ! write(fmt,"(A,I0,A)")"(",Nso,"A)"
+   ! do ispin=1,Nspin
+   !    do iorb=1,Norb
+   !       write(unit,str(fmt))((str(Hloc(ispin,jspin,iorb,jorb)),jorb=1,Norb),jspin=1,Nspin)
+   !    enddo
+   ! enddo
+   ! write(unit,*)""
+    !!
+   ! if(present(file))close(unit)
   end subroutine print_Hloc_nn
   !
   subroutine print_Hloc_so(hloc,file)
@@ -108,18 +108,18 @@ contains
     !
     unit=LOGfile
     !
-    if(present(file))then
-       open(free_unit(unit),file=reg(file))
-       write(LOGfile,"(A)")"print_Hloc on file :"//reg(file)
-    endif
-    !
-    Nso = Nspin*Norb
-    write(fmt,"(A,I0,A)")"(",Nso,"A)"
-    do is=1,Nso
-       write(unit,fmt)(str(Hloc(is,js),d=4),js =1,Nso)
-    enddo
-    write(unit,*)""
-    !
+    !if(present(file))then
+    !   open(free_unit(unit),file=reg(file))
+    !   write(LOGfile,"(A)")"print_Hloc on file :"//reg(file)
+    !endif
+    !!
+    !Nso = Nspin*Norb
+    !write(fmt,"(A,I0,A)")"(",Nso,"A)"
+    !do is=1,Nso
+    !   write(unit,str(fmt))(str(Hloc(is,js),d=4),js =1,Nso)
+    !enddo
+    !write(unit,*)""
+    !!
     if(present(file))close(unit)
   end subroutine print_Hloc_so
   !

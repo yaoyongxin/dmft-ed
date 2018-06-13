@@ -73,7 +73,12 @@ program ed_hm_2bands
   Hloc = so2nn_reshape(modelHloc,Nspin,Norb)
 
   !Setup solver
-  Nb=get_bath_dimension()
+  if(bath_type=="replica")then
+     Nb=get_bath_dimension(Hloc)
+  else
+     Nb=get_bath_dimension()
+  endif
+
   allocate(Bath(Nb))
   allocate(Bath_prev(Nb))
   call ed_init_solver(Bath,Hloc)
@@ -192,7 +197,7 @@ contains
     !
     allocate(modelHloc(Nlso,Nlso))
     modelHloc = sum(Hk(:,:,:),dim=3)/Lk
-    where(abs(dreal(modelHloc))<1.d-4)modelHloc=0d0
+!    where(abs(dreal(modelHloc))<1.d-4)modelHloc=0d0
 
     !path: G X M G
     allocate(kpath(4,2))

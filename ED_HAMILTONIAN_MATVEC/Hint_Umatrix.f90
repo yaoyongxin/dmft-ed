@@ -10,7 +10,7 @@
   if(hfmode)then
      do iflav=1,Nflavors
         do jflav=1,Nflavors
-           htmp = htmp - 0.5d0*Umatrix(iflav,jflav)*(nvec(iflav)+nvec(jflav))
+           htmp = htmp - 0.5d0*Umatrix(iflav,jflav)*(nvec(iflav)+nvec(jflav))+0.25d0*Umatrix(iflav,jflav)
         enddo
      enddo
   endif

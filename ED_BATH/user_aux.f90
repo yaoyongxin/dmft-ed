@@ -16,7 +16,7 @@ function get_bath_dimension(Hloc_nn,ispin_,Hloc_threshold) result(bath_size)
   real(8),optional               :: Hloc_threshold
   real(8)                        :: Hloc_threshold_
 
-  Hloc_threshold_=1d-6 ; if(present(Hloc_threshold))Hloc_threshold_=Hloc_threshold
+  Hloc_threshold_=1d-12 ; if(present(Hloc_threshold))Hloc_threshold_=Hloc_threshold
   !
   select case(bath_type)
   case default
@@ -65,7 +65,7 @@ function get_bath_dimension(Hloc_nn,ispin_,Hloc_threshold) result(bath_size)
         !    Maxspin=2
         ! endif
         !
-        write(LOGfile,"(A)")"Using Hloc_threshloc=",str(Hloc_threshold_)
+        ! write(LOGfile,*)"Using Hloc_threshold=",Hloc_threshold_
         !
         ndx=0
         do ispin=1,Nspin!Maxspin
@@ -85,7 +85,7 @@ function get_bath_dimension(Hloc_nn,ispin_,Hloc_threshold) result(bath_size)
         ndx= ndx + Nspin*Norb   !Maxspin * Norb
         !
         !complex diagonal elements checked
-        do ispin=1,Maxspin
+        do ispin=1,Nspin!Maxspin
            do iorb=1,Norb
               if(abs(dimag(Hloc(ispin,ispin,iorb,iorb))).gt.Hloc_threshold_)stop "Hloc is not Hermitian"
            enddo
