@@ -199,16 +199,16 @@ contains
        !
        !-----------------------------------------------!
        !IMPURITY  HAMILTONIAN
-       include "ED_HAMILTONIAN_MATVEC/Himp.f90"
+       include "ED_HAMILTONIAN_MATVEC/default/Himp.f90"
        !
        !LOCAL INTERACTION
-       include "ED_HAMILTONIAN_MATVEC/Hint.f90"
+       include "ED_HAMILTONIAN_MATVEC/default/Hint.f90"
        !
        !BATH HAMILTONIAN
-       include "ED_HAMILTONIAN_MATVEC/Hbath.f90"
+       include "ED_HAMILTONIAN_MATVEC/default/Hbath.f90"
        !
        !IMPURITY- BATH HYBRIDIZATION
-       include "ED_HAMILTONIAN_MATVEC/Himp_bath.f90"
+       include "ED_HAMILTONIAN_MATVEC/default/Himp_bath.f90"
        !-----------------------------------------------!
        !
     case("normal")
@@ -217,16 +217,16 @@ contains
           !
           !-----------------------------------------------!
           !IMPURITY  HAMILTONIAN
-          include "ED_HAMILTONIAN_MATVEC/Himp.f90"
+          include "ED_HAMILTONIAN_MATVEC/default/Himp.f90"
           !
           !LOCAL INTERACTION
-          include "ED_HAMILTONIAN_MATVEC/Hint.f90"
+          include "ED_HAMILTONIAN_MATVEC/default/Hint.f90"
           !
           !BATH HAMILTONIAN
-          include "ED_HAMILTONIAN_MATVEC/Hbath.f90"
+          include "ED_HAMILTONIAN_MATVEC/default/Hbath.f90"
           !
           !IMPURITY- BATH HYBRIDIZATION
-          include "ED_HAMILTONIAN_MATVEC/Himp_bath.f90"
+          include "ED_HAMILTONIAN_MATVEC/default/Himp_bath.f90"
           !-----------------------------------------------!
           !
        else
@@ -253,16 +253,16 @@ contains
           !
           !-----------------------------------------------!
           !IMPURITY  HAMILTONIAN
-          include "ED_HAMILTONIAN_MATVEC/Himp_ud.f90"
+          include "ED_HAMILTONIAN_MATVEC/NupNdw/Himp_ud.f90"
           !
           !LOCAL INTERACTION
-          include "ED_HAMILTONIAN_MATVEC/Hint_ud.f90"
+          include "ED_HAMILTONIAN_MATVEC/NupNdw/Hint_ud.f90"
           !
           !BATH HAMILTONIAN
-          include "ED_HAMILTONIAN_MATVEC/Hbath_ud.f90"
+          include "ED_HAMILTONIAN_MATVEC/NupNdw/Hbath_ud.f90"
           !
           !IMPURITY- BATH HYBRIDIZATION
-          include "ED_HAMILTONIAN_MATVEC/Himp_bath_ud.f90"
+          include "ED_HAMILTONIAN_MATVEC/NupNdw/Himp_bath_ud.f90"
           !-----------------------------------------------!
           !
        endif
