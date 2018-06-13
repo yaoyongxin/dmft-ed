@@ -31,7 +31,7 @@
 
   !variables for the model:
   integer                                       :: Nk,Nkpath,m0,r
-  real(8)                                       :: ang0,ang0r,ts,t0,t3,tsp,phi,delta,Mh,wmixing,cut,Vsi0,Vpi0,alat,r0,Lsc,Lmo
+  real(8)                                       :: ang0,ang0r,wmixing,hopping_cutoff,Vsi0,Vpi0,alat,r0,Lsc,Lmo
   character(len=32)                             :: finput
   character(len=32)                             :: hkfile
   logical                                       :: spinsym
@@ -48,15 +48,11 @@
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call parse_input_variable(nk,"NK",finput,default=100)
   call parse_input_variable(nkpath,"NKPATH",finput,default=500)
-  call parse_input_variable(ts,"TS","inputGRAPHENE.conf",default=1d0)
-  call parse_input_variable(t0,"T0","inputGRAPHENE.conf",default=0.142d0*ts)
-  call parse_input_variable(t3,"T3","inputGRAPHENE.conf",default=0.107d0*ts)
-  call parse_input_variable(mh,"MH","inputGRAPHENE.conf",default=0d0)
   call parse_input_variable(wmixing,"WMIXING",finput,default=0.75d0)
   call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
   call parse_input_variable(m0,"m0",finput,default=1)
   call parse_input_variable(r,"r",finput,default=1)
-  call parse_input_variable(cut,'cutoff',finput,default=sqrt(3.d0))
+  call parse_input_variable(hopping_cutoff,'hopping_cutoff',finput,default=sqrt(3.d0))
   call parse_input_variable(alat,"alat",finput,default=2.46d0)
   call parse_input_variable(r0,"r0",finput,default=0.184d0)
   call parse_input_variable(Vpi0,"Vpi0",finput,default=-2.7d0)
@@ -84,7 +80,7 @@
     b1=(2.d0*pi/alat)*[1.d0/sqrt(3.d0),-1.d0] 
     b2=(2.d0*pi/alat)*[1.d0/sqrt(3.d0),1.d0]
     disp=(a1+a2)/3.d0
-    cutoff=cut*alat
+    hopping_cutoff=hopping_cutoff*alat ! rescale with lattie parameters
     Lsc=alat*sqrt(dfloat(Nlat))/2.d0
     Lmo=alat/(2.d0*sin(ang0r/2.d0))
 
@@ -94,11 +90,15 @@
     GG2=(-dfloat(m0+r)*b1+dfloat(m0)*b2)/(dfloat(3*m0**2+3*m0*r+r**2))
     bk1=GG1
     bk2=GG2
-    pointK1=(GG1+2.d0*GG2)/3.d0
-    pointK2=(2.d0*GG1+GG2)/3.d0   
-
+    pointK1=[pi2/3.d0,pi2/3.d0/sqrt(3.d0)]
+    pointK2=[pi2/3.d0,-pi2/3.d0/sqrt(3.d0)]
+ 
+    !pointK1=(GG1+2.d0*GG2)/6.d0 !extra factor 1/2
+    !pointK2=(2.d0*GG1+GG2)/6.d0   
+     
 
    call TB_set_bk(bk1,bk2)
+   
    
    allocate(Ucell(Nlat,3))
 
@@ -193,17 +193,15 @@ contains
     real(8),dimension(:)                :: kvec
     integer                             :: Nlso,ii,jj,i,j
     complex(8),dimension(Nlso,Nlso)     :: Hk
-    real(8)                             :: ddd,Vpi,Vsi,ttt,dz,a0,cutoff,pi,r00
+    real(8)                             :: ddd,Vpi,Vsi,ttt,dz,a0,r00
     real(8),dimension(3)                :: RR,dist,ez,kpoint
-    real(8),dimension(:,:),allocatable           :: Ucellb
-    complex(8)                          :: uni
+    real(8),dimension(:,:),allocatable  :: Ucellb
+    !complex(8)                          :: uni
 
-    uni=(0.d0,1.d0)     !imaginary unit!
-    pi=4.d0*datan(1.d0)   !pi
+    !uni=(0.d0,1.d0)     !imaginary unit!
     dz=3.345d0*(alat/2.46d0) !displacement along the z axis of teh two planes
     a0=alat/sqrt(3.d0)  ! nearest neighbour distance
     r00=r0*alat ! decay lenght of the transfer integral (see: PRB 96,075311 (2017) Nam et. al.)  
-    cutoff=cut*alat
     
     ez=[0.d0,0.d0,1.d0]
     kpoint(1)=kvec(1)
@@ -243,14 +241,15 @@ contains
 
                 ddd=sqrt(dist(1)**2.d0+dist(2)**2.d0+dist(3)**2.d0)
                               
-                if (ddd.lt.(cutoff)) then
+                if (ddd.lt.(hopping_cutoff)) then
 
                   Vpi=Vpi0*exp(-(ddd-a0)/r00)
                   Vsi=Vsi0*exp(-(ddd-dz)/r00)
 
                   ttt=Vpi*(1.d0-(dot_product(dist,ez)/ddd)**2.d0)+Vsi*(dot_product(dist,ez)/ddd)**2.d0
 
-                  Hk(i,j)=Hk(i,j)+ttt*exp(-uni*dot_product(kpoint,dist)+uni*dot_product(kpoint,RR))
+                  Hk(i,j)=Hk(i,j)+ttt*exp(-xi*dot_product(kpoint,dist)+xi*dot_product(kpoint,RR))
+                  !Hk(i,j)=Hk(i,j)+ttt*exp(-uni*dot_product(kpoint,dist)+uni*dot_product(kpoint,RR))
                  end if
                  Hk(j,i)=conjg(Hk(i,j))
                end do                     
@@ -485,19 +484,18 @@ contains
 
     !Build the local GF:
     !Gmats=zero
-    !Greal=zero
+    Greal=zero
     !fooSmats =zero
-    !fooSreal =zero
-    !call add_ctrl_var(beta,"BETA")
-    !call add_ctrl_var(xmu,"xmu")
-    !call add_ctrl_var(wini,"wini")
-    !call add_ctrl_var(wfin,"wfin")
-    !call add_ctrl_var(eps,"eps")
+    fooSreal =zero
+    call add_ctrl_var(beta,"BETA")
+    call add_ctrl_var(xmu,"xmu")
+    call add_ctrl_var(wini,"wini")
+    call add_ctrl_var(wfin,"wfin")
+    call add_ctrl_var(eps,"eps")
     !call dmft_gloc_matsubara(Hk,Wtk,Gmats,fooSmats)
     !call dmft_print_gf_matsubara(Gmats,"LG0",iprint=1)
-    !call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal)
-    !call dmft_print_gf_realaxis(Greal,"LG0",iprint=1)
-    !
+    call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal)
+    call dmft_print_gf_realaxis(Greal,"LG0",iprint=1)
   end subroutine build_hk
 
 

@@ -98,22 +98,18 @@ program ed_BLG
   a3 = d1-d2                    !a*sqrt(3)[0, 1]
   !
   !
-  pointM = [2*pi/3, 0d0             ]
-  pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
-  pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]  
-  !
   !RECIPROCAL LATTICE VECTORS:
   bklen=4d0*pi/sqrt(3d0)
   bk1=bklen*[ sqrt(3d0)/2d0 ,  1d0/2d0 ]
   bk2=bklen*[ sqrt(3d0)/2d0 , -1d0/2d0 ]
-  call TB_set_bk(bk1,bk2)
+
+  call TB_set_bk([1d0,0d0]*bklen,[0d0,1d0]*bklen)
 
 
-  !Buil the Hamiltonian on a grid or on  path
-  call build_hk(trim(hkfile))
-  allocate(Hloc(Nlat,Nspin,Nspin,Norb,Norb));Hloc=zero
-  Hloc = lso2nnn_reshape(graphHloc,Nlat,Nspin,Norb)
 
+  pointM = [2*pi/3, 0d0             ]
+  pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
+  pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]
 
 
   !Allocate Weiss Field:
@@ -122,6 +118,7 @@ program ed_BLG
   allocate(Gmats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Gmats=zero
   allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Sreal=zero
   allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Greal=zero
+  allocate(Hloc(Nlat,Nspin,Nspin,Norb,Norb));Hloc=zero
   allocate(S0(Nlat,Nspin,Nspin,Norb,Norb));S0=zero
   allocate(Zmats(Nlso,Nlso));Zmats=eye(Nlso)
   allocate(Zfoo(Nlat,Nso,Nso));Zfoo=0d0
@@ -273,8 +270,13 @@ contains
     hk(3,2)=t0
     hk(2,3)=t0
     !
+    ! <<<<<<< HEAD
+    ! hk(1,4)=t3*hk0(2,1)
+    ! hk(4,1)=t3*hk0(1,2)
+    ! =======
     hk(1,4)=t3*hk0(1,2)
     hk(4,1)=t3*hk0(2,1)
+    ! >>>>>>> 17a0ecd2fcea8e738ea0d35d160286970e3ee752
     !
   end function hk_BLG_AB_model
 
@@ -308,19 +310,6 @@ contains
     if(allocated(wtk))deallocate(wtk)
     allocate(Hk(Nlso,Nlso,Lk));Hk=zero
     allocate(wtk(Lk));Wtk=0d0
-    ! allocate(kxgrid(Nk),kygrid(Nk))
-    ! ik=0
-    ! do iy=1,Nk
-    !    ky = dble(iy-1)/Nk
-    !    do ix=1,Nk
-    !       ik=ik+1
-    !       kx=dble(ix-1)/Nk
-    !       kvec = kx*bk1 + ky*bk2
-    !       kxgrid(ix) = kvec(1)
-    !       kygrid(iy) = kvec(2)
-    !       Hk(:,:,ik) = hk_graphene_model(kvec,Nlso)
-    !    enddo
-    ! enddo
     call TB_build_model(Hk,hk_graphene_model,Nlso,[Nk,Nk])
     Wtk = 1d0/Lk
 

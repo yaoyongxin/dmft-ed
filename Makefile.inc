@@ -1,5 +1,5 @@
 ##$ COMPILER: suppprted compilers are ifort, gnu >v4.7 or use mpif90
-FC=mpif90
+FC=gfortran
 
 ##$ PLATFORM: supported platform are intel, gnu 
 PLAT=gnu
