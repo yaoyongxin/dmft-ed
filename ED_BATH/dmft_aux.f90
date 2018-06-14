@@ -86,7 +86,7 @@ subroutine init_dmft_bath(dmft_bath_)
   integer              :: io,jo,iorb,ispin,jorb,jspin
   logical              :: IOfile
   real(8)              :: de,noise_tot
-  real(8),allocatable  :: noise_b(:),noise_s(:),noise_o(:)
+  real(8),allocatable  :: noise_b(:),noise_s(:),noise_o(:),en_center(:)
   character(len=21)    :: space
   if(.not.dmft_bath_%status)stop "init_dmft_bath error: bath not allocated"
   allocate(noise_b(Nbath));noise_b=0.d0 
@@ -137,16 +137,45 @@ subroutine init_dmft_bath(dmft_bath_)
   case('replica')
      !BATH INITIALIZATION
      dmft_bath_%h=zero
+     allocate(en_center(Nbath))
+     en_center(1)    = -hwband
+     en_center(Nbath)=  hwband
+     Nh=Nbath/2
+     if(mod(Nbath,2)==0.and.Nbath>=4)then
+        de=hwband/max(Nh-1,1)
+        en_center(Nh)  = -1.d-3 
+        en_center(Nh+1)=  1.d-3 
+        do i=2,Nh-1
+           en_center(i)         =-hwband + (i-1)*de
+           en_center(Nbath-i+1) = hwband - (i-1)*de
+        enddo
+     elseif(mod(Nbath,2)/=0.and.Nbath>=3)then
+        de=hwband/Nh
+        en_center(Nh+1)= 0.0d0
+        do i=2,Nh
+           en_center(i)        =-hwband + (i-1)*de
+           en_center(Nbath-i+1)= hwband - (i-1)*de
+        enddo
+     endif
+     !
      do i=1,Nbath
         !
-        dmft_bath_%h(:,:,:,:,i)=impHloc-(xmu+noise_b(i))*so2nn_reshape(eye(Nspin*Norb),Nspin,Norb)
+        do ispin=1,Nspin
+           do iorb=1,Norb
+              dmft_bath_%h(ispin,ispin,iorb,iorb,i)=en_center(i)
+              print*,i,en_center(i),dmft_bath_%h(ispin,ispin,iorb,iorb,i)
+           enddo
+        enddo
+        !
+        dmft_bath_%h(:,:,:,:,i) = dmft_bath_%h(:,:,:,:,i) + impHloc-(xmu+noise_b(i))*so2nn_reshape(eye(Nspin*Norb),Nspin,Norb)
         !
      enddo
+     !     
      !HYBR. INITIALIZATION
      dmft_bath_%vr=zero
      do i=1,Nbath
         noise_tot=noise_b(i)
-        dmft_bath_%vr(i)=cmplx(0.5d0+noise_b(i),0.0d0)!*(-1)**(i-1)
+        dmft_bath_%vr(i)=max(0.1d0,1.d0/sqrt(dble(Nbath)))!cmplx(0.5d0+noise_b(i),0.0d0)!*(-1)**(i-1)
      enddo
      !
      deallocate(noise_b,noise_s,noise_o)
