@@ -73,12 +73,16 @@ program ed_hm_2bands
   Hloc = so2nn_reshape(modelHloc,Nspin,Norb)
 
   !Setup solver
+<<<<<<< HEAD
   if(bath_type=="replica")then
      Nb=get_bath_dimension(Hloc)
   else
      Nb=get_bath_dimension()
   endif
 
+=======
+  Nb=get_bath_dimension()
+>>>>>>> fix_ReplicaBath
   allocate(Bath(Nb))
   allocate(Bath_prev(Nb))
   call ed_init_solver(Bath,Hloc)

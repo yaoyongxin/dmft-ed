@@ -15,8 +15,8 @@ function get_bath_dimension(Hloc_nn,ispin_,Hloc_threshold) result(bath_size)
   complex(8),allocatable         :: Hloc(:,:,:,:)
   real(8),optional               :: Hloc_threshold
   real(8)                        :: Hloc_threshold_
-
-  Hloc_threshold_=1d-12 ; if(present(Hloc_threshold))Hloc_threshold_=Hloc_threshold
+  !
+  Hloc_threshold_=1d-6 ; if(present(Hloc_threshold))Hloc_threshold_=Hloc_threshold
   !
   select case(bath_type)
   case default
