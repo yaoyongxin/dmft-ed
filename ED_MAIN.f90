@@ -90,7 +90,9 @@ contains
     call allocate_dmft_bath(dmft_bath)
     if(bath_type=="replica")call init_dmft_bath_mask(dmft_bath)
     call init_dmft_bath(dmft_bath)
-    call get_dmft_bath(dmft_bath,bath)
+    call get_dmft_bath(dmft_bath,bath) !dmft_bath --> bath
+    print*,bath
+    !
     !
     if(isetup)then
        select case(ed_mode)

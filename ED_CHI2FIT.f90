@@ -130,7 +130,12 @@ contains
           stop "chi2_fitgf ERROR: ed_mode!=normal/nonsu2 but only NORMAL component is provided" 
        end select
     case ("replica")
-       call chi2_fitgf_replica(fg,bath)
+       select case(ed_mode)
+       case ("normal","nonsu2")
+          call chi2_fitgf_replica(fg,bath)
+       case default
+          stop "chi2_fitgf ERROR: ed_mode!=normal/nonsu2 but only NORMAL component is provided"
+       end select
     end select
     !set trim_state_list to true after the first fit has been done: this 
     !marks the ends of the cycle of the 1st DMFT loop.

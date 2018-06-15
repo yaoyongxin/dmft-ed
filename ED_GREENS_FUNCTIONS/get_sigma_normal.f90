@@ -44,13 +44,23 @@ subroutine get_sigma_normal
      do ispin=1,Nspin
         do i=1,Lmats
            invGimp = impGmats(ispin,ispin,:,:,i)
-           call inv(invGimp)
+           select case(Norb)
+           case default
+              call inv(invGimp)
+           case (1)
+              invGimp(1,1) = one/invGimp(1,1)
+           end select
            invGmats(ispin,ispin,:,:,i)=invGimp
         enddo
         !
         do i=1,Lreal
            invGimp = impGreal(ispin,ispin,:,:,i)
-           call inv(invGimp)
+           select case(Norb)
+           case default
+              call inv(invGimp)
+           case (1)
+              invGimp(1,1) = one/invGimp(1,1)
+           end select
            invGreal(ispin,ispin,:,:,i)=invGimp
         enddo
      enddo
@@ -59,7 +69,6 @@ subroutine get_sigma_normal
      impSreal=zero
      do ispin=1,Nspin
         impSmats(ispin,ispin,:,:,:) = invG0mats(ispin,ispin,:,:,:) - invGmats(ispin,ispin,:,:,:)
-        !
         impSreal(ispin,ispin,:,:,:) = invG0real(ispin,ispin,:,:,:) - invGreal(ispin,ispin,:,:,:)
      enddo
      !

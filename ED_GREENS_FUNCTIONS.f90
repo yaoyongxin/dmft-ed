@@ -208,12 +208,12 @@ contains
        do ispin=1,Nspin
           do iorb=1,Norb
              do jorb=iorb+1,Norb
-                write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_m"//str(jorb)//"_s"//str(ispin)
                 !if(hybrid)always T; if(replica)T iff following condition is T
                 MaskBool=.true.   
                 if(bath_type=="replica")MaskBool=&
                      (dmft_bath%mask(ispin,ispin,iorb,jorb,1)).OR.(dmft_bath%mask(ispin,ispin,iorb,jorb,2))
                 if(.not.MaskBool)cycle
+                write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_m"//str(jorb)//"_s"//str(ispin)
                 if(MPI_MASTER)call start_timer
                 call lanc_build_gf_normal_mix_c(iorb,jorb,ispin)
                 if(MPI_MASTER)call stop_timer(LOGfile)
@@ -224,16 +224,16 @@ contains
        do ispin=1,Nspin
           do iorb=1,Norb
              do jorb=iorb+1,Norb
-                !
                 !if(hybrid)always T; if(replica)T iff following condition is T
                 MaskBool=.true.   
                 if(bath_type=="replica")MaskBool=&
                      (dmft_bath%mask(ispin,ispin,iorb,jorb,1)).OR.(dmft_bath%mask(ispin,ispin,iorb,jorb,2))
-                !
+                if(.not.MaskBool)cycle
                 impGmats(ispin,ispin,iorb,jorb,:) = 0.5d0*(impGmats(ispin,ispin,iorb,jorb,:) &
                      - (one-xi)*impGmats(ispin,ispin,iorb,iorb,:) - (one-xi)*impGmats(ispin,ispin,jorb,jorb,:))
                 impGreal(ispin,ispin,iorb,jorb,:) = 0.5d0*(impGreal(ispin,ispin,iorb,jorb,:) &
                      - (one-xi)*impGreal(ispin,ispin,iorb,iorb,:) - (one-xi)*impGreal(ispin,ispin,jorb,jorb,:))
+                !
                 !>>ACTHUNG: this relation might not be true, it depends on the value of the impHloc_ij
                 ! if impHloc_ij is REAL then it is true. if CMPLX hermiticity must be ensured
                 impGmats(ispin,ispin,jorb,iorb,:) = impGmats(ispin,ispin,iorb,jorb,:)
@@ -243,12 +243,12 @@ contains
        enddo
     endif
     !
-    if(ed_para.and.Nspin==2)then
-       impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
-       impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
-       impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
-       impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
-    endif
+    ! if(ed_para.and.Nspin==2)then
+    !    impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
+    !    impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
+    !    impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
+    !    impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
+    ! endif
     !
   end subroutine build_gf_normal
 
