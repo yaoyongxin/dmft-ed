@@ -28,11 +28,13 @@ program ed_LVO_hetero
   integer                                             :: Nk,Nlat,Nkpath
   real(8)                                             :: wmixing
   logical                                             :: computeG0loc
-  character(len=32)                                   :: geometry,z_symmetry,gauge
+  character(len=32)                                   :: geometry,hetero_kind,z_symmetry,gauge
   logical                                             :: bulk_magsym,diaglocalpbm
+  logical                                             :: fullfree
   integer                                             :: Nr,Nt,Nphotons
   logical                                             :: Efield
   real(8)                                             :: tmax
+  real(8)                                             :: potential
   !Mpi:
   integer                                             :: comm,rank,ier,siz
   logical                                             :: master
@@ -73,8 +75,7 @@ program ed_LVO_hetero
   complex(8),allocatable,dimension(:,:)               :: Nmatrix_so
   complex(8),allocatable,dimension(:,:,:,:,:)         :: Nmatrix_nn
   complex(8),allocatable,dimension(:,:,:,:,:,:)       :: Gloc
-  !fake flags
-  logical                                             :: fake_potential=.false.
+
 
   !##########################   MPI INITIALIZATION   ##########################
   !
@@ -100,9 +101,12 @@ program ed_LVO_hetero
   call parse_input_variable(wmixing        ,"WMIXING"     ,finput, default=0.5d0           )
   call parse_input_variable(computeG0loc   ,"COMPUTEG0loc",finput, default=.false.         )
   call parse_input_variable(geometry       ,"GEOMETRY"    ,finput, default="bulk"          )
+  call parse_input_variable(hetero_kind    ,"HETEROKIND"  ,finput, default="LVOSTO"        )
   call parse_input_variable(z_symmetry     ,"ZSYMMETRY"   ,finput, default="FERRO"         )
   call parse_input_variable(bulk_magsym    ,"BULKMAGSYM"  ,finput, default=.false.         )
   call parse_input_variable(diaglocalpbm   ,"DIAGLOCAL"   ,finput, default=.false.         )
+  call parse_input_variable(fullfree       ,"FULLFREE"    ,finput, default=.false.         )
+  call parse_input_variable(potential      ,"POTENTIAL"   ,finput, default=0.0d0           )
   call parse_input_variable(Efield         ,"EFIELD"      ,finput, default=.false.         )
   call parse_input_variable(Nr             ,"NR"          ,finput, default=10              )
   call parse_input_variable(Nt             ,"NT"          ,finput, default=100             )
@@ -127,6 +131,7 @@ program ed_LVO_hetero
   call add_ctrl_var(cg_Niter,"cg_Niter")
   !
   geometry=reg(geometry)
+  hetero_kind=reg(hetero_kind)
   z_symmetry=reg(z_symmetry)
   gauge=reg(gauge)
   if (geometry=="bulk".and.ed_para)    lattice_flag=.false.
@@ -135,7 +140,11 @@ program ed_LVO_hetero
   if (bath_type=="replica") stop
   if(Efield.and.(nloop.ne.-1))stop "  Time-dependent Hk and DMFT not compatible"
   !
-  Nlayer=Nlat/2
+  if(fullfree)then
+     Nlayer=Nlat
+  else
+     Nlayer=Nlat/2
+  endif
   NlNsNo=Nlat*Nspin*Norb
   NsNo=Nspin*Norb
   !
@@ -161,8 +170,9 @@ program ed_LVO_hetero
   !##########################        BUILD Hk        ##########################
   !
   !
-  if(geometry=="bulk")  HRfile=reg("LVO_hr_bulk.dat")  
-  if(geometry=="hetero")HRfile=reg("LVO_hr_hete.dat")
+  if(geometry=="bulk")  HRfile=reg("LVO_hr_bulk.dat")
+  if(geometry=="hetero".and.hetero_kind=="LVOSTO")HRfile=reg("LVOSTO_hr_hete.dat")
+  if(geometry=="hetero".and.hetero_kind=="LVOvac")HRfile=reg("LVOvac_hr_hete.dat")
   !
   call read_myhk(HRfile,"Hk.dat","Hloc","Kpoints.dat",diaglocalpbm,Efield)
   !
@@ -210,7 +220,11 @@ program ed_LVO_hetero
   !
   if(nloop.gt.0)then
      if (lattice_flag)then
-        call ed_init_solver(Comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
+        if(fullfree)then
+           call ed_init_solver(Comm,Bath,Hloc_nnn)
+        else
+           call ed_init_solver(Comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
+        endif
      else
         call ed_init_solver(Comm,Bath_single,Hloc_nnn(1,:,:,:,:))
      endif
@@ -227,7 +241,11 @@ program ed_LVO_hetero
      !
      !---------------------  solve impurity (CF basis)  ----------------------!
      if (lattice_flag)then
-        call ed_solve(comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
+        if(fullfree)then
+           call ed_solve(comm,Bath,Hloc_nnn)
+        else
+           call ed_solve(comm,Bath,Hloc_nnn(1:Nlat:2,:,:,:,:))
+        endif
      else
         call ed_solve(comm,Bath_single,Hloc_nnn(1,:,:,:,:))
      endif
@@ -279,12 +297,22 @@ program ed_LVO_hetero
      !
      !---------------------  get new field  (CF basis)  ----------------------!
      if (lattice_flag)then
-        if(ed_para)then
-           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
-           call spin_symmetrize_bath(Bath,save=.true.)
+        if(fullfree)then
+           if(ed_para)then
+              call ed_chi2_fitgf(Comm,Bath,field,Hloc_nnn,ispin=1)
+              call spin_symmetrize_bath(Bath,save=.true.)
+           else
+              call ed_chi2_fitgf(Comm,Bath,field,Hloc_nnn,ispin=1)
+              call ed_chi2_fitgf(Comm,Bath,field,Hloc_nnn,ispin=2)
+           endif
         else
-           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
-           call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=2)
+           if(ed_para)then
+              call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
+              call spin_symmetrize_bath(Bath,save=.true.)
+           else
+              call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=1)
+              call ed_chi2_fitgf(Comm,Bath,field(1:Nlat:2,:,:,:,:,:),Hloc_nnn(1:Nlat:2,:,:,:,:),ispin=2)
+           endif
         endif
      else
         call set_Hloc(Hloc_nnn(1,:,:,:,:))
@@ -344,9 +372,15 @@ program ed_LVO_hetero
         write(LOGfile,*) "   ------------------- convergence --------------------"
         allocate(conv_funct(Lmats));conv_funct=zero
         if (lattice_flag)then
-           do i=1,Lmats
-              conv_funct(i)=sum(nnn2lso_reshape(field(1:Nlat:2,:,:,:,:,i),Nlayer,Nspin,Norb))
-           enddo
+           if(fullfree)then
+              do i=1,Lmats
+                 conv_funct(i)=sum(nnn2lso_reshape(field(:,:,:,:,:,i),Nlayer,Nspin,Norb))
+              enddo
+           else
+              do i=1,Lmats
+                 conv_funct(i)=sum(nnn2lso_reshape(field(1:Nlat:2,:,:,:,:,i),Nlayer,Nspin,Norb))
+              enddo
+           endif
         else
            do i=1,Lmats
               conv_funct(i)=sum(nn2so_reshape(field(1,:,:,:,:,i),Nspin,Norb))
@@ -422,10 +456,10 @@ contains
   !PURPOSE: Perform the symmetry operations on the Sigma in the diagonal basis
   !         coming from the solver. Note that these symmetry operations acts only
   !         in the spin index, hence assuming an identical orbital ordering aming sites.
-  !         This works only in the CF basis. A specific orital rotation for the orbital 
-  !         index for sigmas in the same plane (or in different plane in bulk para/forced_sym 
-  !         case) must be used if the imp is solved in the t2g basis where also the 
-  !         off-diag sigmas are needed. 
+  !         This works only in the CF basis. A specific orital rotation for the orbital
+  !         index for sigmas in the same plane (or in different plane in bulk para/forced_sym
+  !         case) must be used if the imp is solved in the t2g basis where also the
+  !         off-diag sigmas are needed.
   !         THIS SUB WORKS ONLY IF diaglocalpbm=TRUE
   !+------------------------------------------------------------------------------------------+!
   subroutine sigma_symmetrization()
@@ -434,34 +468,54 @@ contains
     if(.not.diaglocalpbm)write(LOGfile,'(A)') "!!!Warning!!! orbital structure missing"
     !
     if (lattice_flag)then
-       if(ed_para)then
-          !
-          !I'm plugging impS in the neighboring site same plane no spin-flip
-          do ilayer=1,Nlayer
-             write(LOGfile,'(3(A,I3))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1," & ",2*ilayer
-             !site 1 in plane - same spin - same layer
-             Smats(2*ilayer-1,:,:,:,:,:)=Smats_hetero(ilayer,:,:,:,:,:)
-             Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_hetero(ilayer,:,:,:,:,:)
-             !site 2 in plane - same spin - same layer
-             Smats(2*ilayer,:,:,:,:,:)  =Smats_hetero(ilayer,:,:,:,:,:)
-             Sreal(2*ilayer,:,:,:,:,:)  =Sreal_hetero(ilayer,:,:,:,:,:)
-          enddo
-          !
-       elseif(.not.ed_para)then
-          !
-          do ilayer=1,Nlayer
-             write(LOGfile,'(2(A,I3))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1
-             !site 1 in plane - same spin - same layer
-             Smats(2*ilayer-1,:,:,:,:,:)=Smats_hetero(ilayer,:,:,:,:,:)
-             Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_hetero(ilayer,:,:,:,:,:)
-             write(LOGfile,'(2(A,I3))') " plugghing spin-flipped impS nr.",ilayer," into ilat nr. ",2*ilayer
-             !site 2 in plane - flip spin - same layer
-             Smats(2*ilayer,1,1,:,:,:)  =Smats_hetero(ilayer,2,2,:,:,:)
-             Smats(2*ilayer,2,2,:,:,:)  =Smats_hetero(ilayer,1,1,:,:,:)
-             Sreal(2*ilayer,1,1,:,:,:)  =Sreal_hetero(ilayer,2,2,:,:,:)
-             Sreal(2*ilayer,2,2,:,:,:)  =Sreal_hetero(ilayer,1,1,:,:,:)
-          enddo
-          !
+       if(fullfree)then
+          if((.not.ed_para) .and. (iloop.le.2))then
+             do ilayer=1,Nlayer/2
+                write(LOGfile,'(3(A,I3))') " averaging Sigma spins for in plane AFM"
+                Smats(2*ilayer-1,1,1,:,:,:)=(Smats_hetero(2*ilayer-1,1,1,:,:,:)+Smats_hetero(2*ilayer,2,2,:,:,:))/2.d0
+                Smats(2*ilayer-1,2,2,:,:,:)=(Smats_hetero(2*ilayer-1,2,2,:,:,:)+Smats_hetero(2*ilayer,1,1,:,:,:))/2.d0
+                Smats(2*ilayer,1,1,:,:,:)=Smats(2*ilayer-1,2,2,:,:,:)
+                Smats(2*ilayer,2,2,:,:,:)=Smats(2*ilayer-1,1,1,:,:,:)
+                !
+                Sreal(2*ilayer-1,1,1,:,:,:)=(Sreal_hetero(2*ilayer-1,1,1,:,:,:)+Sreal_hetero(2*ilayer,2,2,:,:,:))/2.d0
+                Sreal(2*ilayer-1,2,2,:,:,:)=(Sreal_hetero(2*ilayer-1,2,2,:,:,:)+Sreal_hetero(2*ilayer,1,1,:,:,:))/2.d0
+                Sreal(2*ilayer,1,1,:,:,:)=Sreal(2*ilayer-1,2,2,:,:,:)
+                Sreal(2*ilayer,2,2,:,:,:)=Sreal(2*ilayer-1,1,1,:,:,:)
+             enddo
+          else
+                Smats=Smats_hetero
+                Sreal=Sreal_hetero
+          endif
+       else
+          if(ed_para)then
+             !
+             !I'm plugging impS in the neighboring site same plane no spin-flip
+             do ilayer=1,Nlayer
+                write(LOGfile,'(3(A,I3))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1," & ",2*ilayer
+                !site 1 in plane - same spin - same layer
+                Smats(2*ilayer-1,:,:,:,:,:)=Smats_hetero(ilayer,:,:,:,:,:)
+                Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_hetero(ilayer,:,:,:,:,:)
+                !site 2 in plane - same spin - same layer
+                Smats(2*ilayer,:,:,:,:,:)  =Smats_hetero(ilayer,:,:,:,:,:)
+                Sreal(2*ilayer,:,:,:,:,:)  =Sreal_hetero(ilayer,:,:,:,:,:)
+             enddo
+             !
+          elseif(.not.ed_para)then
+             !
+             do ilayer=1,Nlayer
+                write(LOGfile,'(2(A,I3))') " plugghing impS nr.",ilayer," into ilat nr. ",2*ilayer-1
+                !site 1 in plane - same spin - same layer
+                Smats(2*ilayer-1,:,:,:,:,:)=Smats_hetero(ilayer,:,:,:,:,:)
+                Sreal(2*ilayer-1,:,:,:,:,:)=Sreal_hetero(ilayer,:,:,:,:,:)
+                write(LOGfile,'(2(A,I3))') " plugghing spin-flipped impS nr.",ilayer," into ilat nr. ",2*ilayer
+                !site 2 in plane - flip spin - same layer
+                Smats(2*ilayer,1,1,:,:,:)  =Smats_hetero(ilayer,2,2,:,:,:)
+                Smats(2*ilayer,2,2,:,:,:)  =Smats_hetero(ilayer,1,1,:,:,:)
+                Sreal(2*ilayer,1,1,:,:,:)  =Sreal_hetero(ilayer,2,2,:,:,:)
+                Sreal(2*ilayer,2,2,:,:,:)  =Sreal_hetero(ilayer,1,1,:,:,:)
+             enddo
+             !
+          endif
        endif
     else
        if(ed_para)then
@@ -566,28 +620,52 @@ contains
        allocate(Kvec(Lk,3));Kvec=0d0
        !
     elseif(geometry=="hetero") then
-       R1 = [ 1.d0,-1.d0, 0.d0 ]*7.544034205
-       R2 = [ 1.d0, 1.d0, 0.d0 ]*7.544034205
-       R3 = [ 0.d0, 0.d0, 1.d0 ]*49.45119675
-       !
-       Ruc(1,:) =  0.507500528*R1+0.005255428*R2+0.373321376*R3
-       Ruc(2,:) = -0.007176847*R1+0.505266961*R2+0.373317900*R3
-       Ruc(3,:) =  0.499897916*R1+0.007491222*R2+0.524851544*R3
-       Ruc(4,:) =  0.000400200*R1+0.507499434*R2+0.524840303*R3
-       Ruc(5,:) =  0.494510887*R1+0.001974406*R2+0.674543358*R3
-       Ruc(6,:) =  0.005774613*R1+0.501984647*R2+0.674540998*R3
-       Ruc(7,:) =  0.509842981*R1-0.009512102*R2+0.821921782*R3
-       Ruc(8,:) = -0.009630883*R1+0.490490079*R2+0.821911583*R3
-       !
-       allocate(Nkvec(3));Nkvec=0;Nkvec=[Nk,Nk,1]
-       Lk=Nk*Nk
-       allocate(Kvec(Lk,3));Kvec=0d0
+
+       if(hetero_kind=="LVOSTO")then
+          !
+          R1 = [ 1.d0, 0.d0, 0.d0 ]*10.51752790
+          R2 = [ 0.d0, 1.d0, 0.d0 ]*10.51752790
+          R3 = [ 0.d0, 0.d0, 1.d0 ]*44.03664083
+          !
+          Ruc(1,:) =  0.507963153*R1-0.003156586*R2+0.425011256*R3
+          Ruc(2,:) = -0.007963690*R1+0.496843623*R2+0.425011219*R3
+          Ruc(3,:) =  0.502258115*R1+0.000860225*R2+0.589244281*R3
+          Ruc(4,:) = -0.002258455*R1+0.500860229*R2+0.589244274*R3
+          Ruc(5,:) =  0.497507421*R1+0.006573189*R2+0.754327285*R3
+          Ruc(6,:) =  0.002492352*R1+0.506573162*R2+0.754327267*R3
+          Ruc(7,:) =  0.512167869*R1+0.005752773*R2+0.919307364*R3
+          Ruc(8,:) = -0.012168019*R1+0.505752882*R2+0.919307361*R3
+          !
+          allocate(Nkvec(3));Nkvec=0;Nkvec=[Nk,Nk,Nk]
+          Lk=Nk*Nk*Nk
+          allocate(Kvec(Lk,3));Kvec=0d0
+          !
+       elseif(hetero_kind=="LVOvac")then
+          !
+          R1 = [ 1.d0,-1.d0, 0.d0 ]*7.544034205
+          R2 = [ 1.d0, 1.d0, 0.d0 ]*7.544034205
+          R3 = [ 0.d0, 0.d0, 1.d0 ]*49.45119675
+          !
+          Ruc(1,:) =  0.507500528*R1+0.005255428*R2+0.373321376*R3
+          Ruc(2,:) = -0.007176847*R1+0.505266961*R2+0.373317900*R3
+          Ruc(3,:) =  0.499897916*R1+0.007491222*R2+0.524851544*R3
+          Ruc(4,:) =  0.000400200*R1+0.507499434*R2+0.524840303*R3
+          Ruc(5,:) =  0.494510887*R1+0.001974406*R2+0.674543358*R3
+          Ruc(6,:) =  0.005774613*R1+0.501984647*R2+0.674540998*R3
+          Ruc(7,:) =  0.509842981*R1-0.009512102*R2+0.821921782*R3
+          Ruc(8,:) = -0.009630883*R1+0.490490079*R2+0.821911583*R3
+          !
+          allocate(Nkvec(3));Nkvec=0;Nkvec=[Nk,Nk,1]
+          Lk=Nk*Nk
+          allocate(Kvec(Lk,3));Kvec=0d0
+          !
+       endif
        !
     endif
     !
     !
     !
-    allocate(Hk(NlNsNo,NlNsNo,Lk))                 ;Hk=zero 
+    allocate(Hk(NlNsNo,NlNsNo,Lk))                 ;Hk=zero
     allocate(Wtk(Lk))                              ;Wtk=1.d0/Lk
     !
     allocate(Hloc(NlNsNo,NlNsNo))                  ;Hloc=zero
@@ -610,35 +688,107 @@ contains
           call TB_read_hk(Hk,fileHk,Nspin*Norb*Nlat,1,1,Nlat,Nkvec,Kvec)
           call TB_read_Hloc(Hloc,reg(fileHloc//".w90"))
        endif
-       call Bcast_MPI(Comm,Hk) 
-       call Bcast_MPI(Comm,Hloc) 
+       call Bcast_MPI(Comm,Hk)
+       call Bcast_MPI(Comm,Hloc)
     else
        if(master)write(LOGfile,'(2A)') "  Transforming HR from:  ",fileHR
        call TB_hr_to_hk(comm,R1,R2,R3,Hk,Hloc,fileHR,Nspin,Norb,Nlat,Nkvec,P,Kvec,fileHk,fileKpoints)
-    endif
-    !
-    !
-    if(fake_potential.and.geometry=="hetero")then
-       allocate(Potential_so(NlNsNo,NlNsNo));Potential_so=zero
-       allocate(Potential_nn(Nlat,Nspin,Nspin,Norb,Norb));Potential_nn=zero
-       do ilayer=1,Nlayer
-          do iorb=1,Norb
-             do ispin=1,Nspin
-                Potential_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
-                Potential_nn(2*ilayer,ispin,ispin,iorb,iorb)  =1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
-             enddo
+       !
+       if(geometry=="hetero")then
+          allocate(Potential_so(NlNsNo,NlNsNo));Potential_so=zero
+          allocate(Potential_nn(Nlat,Nspin,Nspin,Norb,Norb));Potential_nn=zero
+          !
+          if(hetero_kind=="LVOvac")then
+             !
+             if(potential.ne.0d0)then
+                !
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(1,ispin,ispin,iorb,iorb)=6.07
+                      Potential_nn(2,ispin,ispin,iorb,iorb)=6.07
+                   enddo
+                enddo
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(3,ispin,ispin,iorb,iorb)=6.49
+                      Potential_nn(4,ispin,ispin,iorb,iorb)=6.49
+                   enddo
+                enddo
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(5,ispin,ispin,iorb,iorb)=7.11
+                      Potential_nn(6,ispin,ispin,iorb,iorb)=7.11
+                   enddo
+                enddo
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(7,ispin,ispin,iorb,iorb)=7.13
+                      Potential_nn(8,ispin,ispin,iorb,iorb)=7.13
+                   enddo
+                enddo
+                !
+             else
+                !
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(1,ispin,ispin,iorb,iorb)=7.70
+                      Potential_nn(2,ispin,ispin,iorb,iorb)=7.70
+                   enddo
+                enddo
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(3,ispin,ispin,iorb,iorb)=7.74
+                      Potential_nn(4,ispin,ispin,iorb,iorb)=7.74
+                   enddo
+                enddo
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(5,ispin,ispin,iorb,iorb)=7.75
+                      Potential_nn(6,ispin,ispin,iorb,iorb)=7.75
+                   enddo
+                enddo
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Potential_nn(7,ispin,ispin,iorb,iorb)=7.83
+                      Potential_nn(8,ispin,ispin,iorb,iorb)=7.83
+                   enddo
+                enddo
+                !
+             endif
+             !
+          elseif(hetero_kind=="LVOSTO")then
+             !
+             if(potential.ne.0d0)then
+                !
+                do ilayer=1,Nlayer
+                   do iorb=1,Norb
+                      do ispin=1,Nspin
+                         Potential_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=potential*(ilayer-1)  !0.7*(ilayer-1)/3-0.2   !-1.38*(ilayer-1)/3.d0+1.d0
+                         Potential_nn(2*ilayer,ispin,ispin,iorb,iorb)  =potential*(ilayer-1)  !0.7*(ilayer-1)/3-0.2   !-1.38*(ilayer-1)/3.d0+1.d0
+                      enddo
+                   enddo
+                enddo
+                !
+             else
+                !
+                Potential_nn=0d0
+                !
+             endif
+             !
+          endif
+          !
+          Potential_so=nnn2lso_reshape(Potential_nn,Nlat,Nspin,Norb)
+          !
+          do ik=1,Lk
+             Hk(:,:,ik)=Hk(:,:,ik)+Potential_so
           enddo
-       enddo
-       Potential_so=nnn2lso_reshape(Potential_nn,Nlat,Nspin,Norb)
-       do ik=1,Lk
-          Hk(:,:,ik)=Hk(:,:,ik)+Potential_so
-       enddo
-       deallocate(Potential_nn,Potential_so)
+          Hloc=Hloc+Potential_so
+          deallocate(Potential_nn,Potential_so)
+          !
+       endif
     endif
     !
     !
-    !Hloc=zero
-    !Hloc=sum(Hk,dim=3)/Lk
     call TB_write_Hloc(Hloc,reg(fileHloc//".w90"))
     !
     !
@@ -895,7 +1045,8 @@ contains
     !-----  Build the local GF in the spin-orbital Basis   -----
     if(computeG0loc)then
        if(geometry=="bulk")   mu=15.429
-       if(geometry=="hetero") mu=7.329
+       if(geometry=="hetero".and.hetero_kind=="LVOvac") mu=7.329
+       if(geometry=="hetero".and.hetero_kind=="LVOSTO") mu=15.2
        !
        !matsu freq
        if(master)write(LOGfile,'(1A)')"  Build G0loc(wm)"
@@ -1279,19 +1430,26 @@ contains
     allocate(Nmatrix_so(NlNsNo,NlNsNo))             ; Nmatrix_so=zero
     allocate(Nmatrix_nn(Nlat,Nspin,Nspin,Norb,Norb)); Nmatrix_nn=zero
     do ilayer=1,Nlayer
-       do iorb=1,Norb
-          !site A on ith-layer
-          Nmatrix_nn(2*ilayer-1,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
-          Nmatrix_nn(2*ilayer-1,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
-          !site B on ith-layer
-          if(ed_para)then
-             Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
-             Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
-          else
-             Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
-             Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
-          endif
-       enddo
+       if(fullfree)then
+          do iorb=1,Norb
+             !each site on each layer
+             Nmatrix_nn(ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+          enddo
+       else
+          do iorb=1,Norb
+             !site A on ith-layer
+             Nmatrix_nn(2*ilayer-1,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+             Nmatrix_nn(2*ilayer-1,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+             !site B on ith-layer
+             if(ed_para)then
+                Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+                Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+             else
+                Nmatrix_nn(2*ilayer,1,1,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)-orb_mag_lat(ilayer,iorb)),0.d0)
+                Nmatrix_nn(2*ilayer,2,2,iorb,iorb)=cmplx(0.5*(orb_dens_lat(ilayer,iorb)+orb_mag_lat(ilayer,iorb)),0.d0)
+             endif
+          enddo
+       endif
     enddo
     !
     !printing out  densities
@@ -1362,7 +1520,7 @@ contains
   !
 end program ed_LVO_hetero
 
-        
+
 
 
 
@@ -1520,6 +1678,14 @@ end program ed_LVO_hetero
 
 
 
+       !do ilayer=1,Nlayer
+       !   do iorb=1,Norb
+       !      do ispin=1,Nspin
+       !         Potential_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
+       !         Potential_nn(2*ilayer,ispin,ispin,iorb,iorb)  =1.44*(ilayer-1)/3-1.04   !-1.38*(ilayer-1)/3.d0+1.d0
+       !      enddo
+       !   enddo
+       !enddo
 
 
 
