@@ -10,17 +10,17 @@ program ed_hm_2bands
 
   !Bath:
   integer                                       :: Nb
-  real(8),allocatable,dimension(:,:)            :: Bath,Bath_prev
+  real(8),allocatable,dimension(:)              :: Bath,Bath_prev
 
   !The local hybridization function:
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Weiss
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Smats,Sreal
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Gmats,Greal
+  complex(8),allocatable,dimension(:,:,:,:,:) :: Weiss
+  complex(8),allocatable,dimension(:,:,:,:,:) :: Smats,Sreal
+  complex(8),allocatable,dimension(:,:,:,:,:) :: Gmats,Greal
 
   !hamiltonian input:
   complex(8),allocatable,dimension(:,:,:)       :: Hk
   complex(8),allocatable,dimension(:,:)         :: modelHloc
-  complex(8),allocatable,dimension(:,:,:,:,:)   :: Hloc
+  complex(8),allocatable,dimension(:,:,:,:)     :: Hloc
   real(8),allocatable,dimension(:)              :: Wtk
 
   integer,allocatable,dimension(:)              :: ik2ix,ik2iy
@@ -33,12 +33,6 @@ program ed_hm_2bands
   character(len=32)                             :: hkfile
   logical                                       :: spinsym
   !
-  real(8),dimension(2)                          :: Eout
-  real(8),allocatable,dimension(:)              :: dens
-  !
-  real(8),dimension(:,:),allocatable            :: Zmats
-  complex(8),dimension(:,:,:),allocatable       :: Zfoo
-  complex(8),allocatable,dimension(:,:,:,:,:)   :: S0
 
 
   !Parse additional variables && read Input && read H(k)^2x2
@@ -52,33 +46,36 @@ program ed_hm_2bands
   call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
   !
   call ed_read_input(trim(finput))
+  !
+  call add_ctrl_var(beta,"BETA")
+  call add_ctrl_var(xmu,"xmu")
+  call add_ctrl_var(wini,"wini")
+  call add_ctrl_var(wfin,"wfin")
+  call add_ctrl_var(eps,"eps")
+
 
   if(Norb/=2)stop "Wrong setup from input file: Norb=2"
-  Nlat=1
   Nso=Nspin*Norb
-  Nlso=Nlat*Nso
+  Nlso=Nso
 
 
 
   !Allocate Weiss Field:
-  allocate(Weiss(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Weiss=zero
-  allocate(Smats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Smats=zero
-  allocate(Gmats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Gmats=zero
-  allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Sreal=zero
-  allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Greal=zero
-  allocate(Hloc(Nlat,Nspin,Nspin,Norb,Norb));Hloc=zero
-  allocate(S0(Nlat,Nspin,Nspin,Norb,Norb));S0=zero
-  allocate(Zmats(Nlso,Nlso));Zmats=eye(Nlso)
-  allocate(Zfoo(Nlat,Nso,Nso));Zfoo=0d0
+  allocate(Weiss(Nspin,Nspin,Norb,Norb,Lmats));Weiss=zero
+  allocate(Smats(Nspin,Nspin,Norb,Norb,Lmats));Smats=zero
+  allocate(Gmats(Nspin,Nspin,Norb,Norb,Lmats));Gmats=zero
+  allocate(Sreal(Nspin,Nspin,Norb,Norb,Lreal));Sreal=zero
+  allocate(Greal(Nspin,Nspin,Norb,Norb,Lreal));Greal=zero
+  allocate(Hloc(Nspin,Nspin,Norb,Norb));Hloc=zero
 
   !Build the Hamiltonian on a grid or on a path
   call build_hk(trim(hkfile))
-  Hloc = lso2nnn_reshape(modelHloc,Nlat,Nspin,Norb)
+  Hloc = so2nn_reshape(modelHloc,Nspin,Norb)
 
   !Setup solver
   Nb=get_bath_dimension()
-  allocate(Bath(Nlat,Nb))
-  allocate(Bath_prev(Nlat,Nb))
+  allocate(Bath(Nb))
+  allocate(Bath_prev(Nb))
   call ed_init_solver(Bath,Hloc)
 
 
@@ -89,35 +86,37 @@ program ed_hm_2bands
      call start_loop(iloop,nloop,"DMFT-loop")
 
      !Solve the EFFECTIVE IMPURITY PROBLEM (first w/ a guess for the bath)
-     call ed_solve(Bath,Hloc)!,iprint=1)
+     call ed_solve(Bath,Hloc)
 
-     call ed_get_sigma_matsubara(Smats,Nlat)
+     call ed_get_sigma_matsubara(Smats)
 
      ! compute the local gf:
-     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats,iprint=4)
+     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats)
+     call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=1)
 
      ! compute the Weiss field (only the Nineq ones)
      if(cg_scheme=='weiss')then
-        call dmft_weiss(Gmats,Smats,Weiss,Hloc,iprint=0)
+        call dmft_weiss(Gmats,Smats,Weiss,Hloc)
      else
-        call dmft_delta(Gmats,Smats,Weiss,Hloc,iprint=0)
+        call dmft_delta(Gmats,Smats,Weiss,Hloc)
      endif
 
      !Fit the new bath, starting from the old bath + the supplied Weiss
-     call ed_chi2_fitgf(Bath,Weiss,Hloc,ispin=1)
+     call ed_chi2_fitgf(Weiss,Bath,ispin=1)
 
      !MIXING:
      if(iloop>1)Bath=wmixing*Bath + (1.d0-wmixing)*Bath_prev
      Bath_prev=Bath
 
-     converged = check_convergence(Weiss(:,1,1,1,1,:),dmft_error,nsuccess,nloop)
-
+     converged = check_convergence(Weiss(1,1,1,1,:),dmft_error,nsuccess,nloop)
      call end_loop
   enddo
 
-  call ed_get_sigma_real(Sreal,Nlat)
-  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal,iprint=4)
+  call ed_get_sigma_real(Sreal)
+  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal)
+  call dmft_print_gf_realaxis(Greal,"Gloc",iprint=1)
 
+  
 
 contains
 
@@ -141,8 +140,8 @@ contains
     !
     hk(:,:) = zero
     !
-    hk(1,1) = -2d0*ts*(cos(kx)+cos(ky)) + Mh
-    hk(2,2) = -2d0*ts*(cos(kx)+cos(ky)) - Mh
+    hk(1,1) = -2d0*ts*(cos(kx)+cos(ky)) !+ Mh
+    hk(2,2) = -2d0*ts*(cos(kx)+cos(ky)) !- Mh
     !
   end function hk_model
 
@@ -205,21 +204,6 @@ contains
          colors_name=[red1,green1,blue1],&
          points_name=[character(len=10) :: "G","X","M", "G"],&
          file="Eigenbands.nint")
-
-
-
-    !Build the local GF:
-    Gmats=zero
-    Greal=zero
-    fooSmats =zero
-    fooSreal =zero
-    call add_ctrl_var(beta,"BETA")
-    call add_ctrl_var(xmu,"xmu")
-    call add_ctrl_var(wini,"wini")
-    call add_ctrl_var(wfin,"wfin")
-    call add_ctrl_var(eps,"eps")
-    call dmft_gloc_matsubara(Hk,Wtk,Gmats,fooSmats,iprint=1)
-    call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal,iprint=1)
     !
   end subroutine build_hk
 
