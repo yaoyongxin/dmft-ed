@@ -32,7 +32,7 @@ program ed_LVO_hetero
   logical                                             :: bulk_magsym,diaglocalpbm
   logical                                             :: fullfree
   integer                                             :: Nr,Nt,Nphotons
-  logical                                             :: Efield
+  logical                                             :: Efield,optimize_dipole
   real(8)                                             :: tmax
   real(8)                                             :: potential
   !Mpi:
@@ -108,6 +108,7 @@ program ed_LVO_hetero
   call parse_input_variable(fullfree       ,"FULLFREE"    ,finput, default=.false.         )
   call parse_input_variable(potential      ,"POTENTIAL"   ,finput, default=0.0d0           )
   call parse_input_variable(Efield         ,"EFIELD"      ,finput, default=.false.         )
+  call parse_input_variable(optimize_dipole,"OPTIMIZE"    ,finput, default=.false.         )
   call parse_input_variable(Nr             ,"NR"          ,finput, default=10              )
   call parse_input_variable(Nt             ,"NT"          ,finput, default=100             )
   call parse_input_variable(tmax           ,"TMAX"        ,finput, default=5.d0            )
@@ -700,7 +701,7 @@ contains
           !
           if(hetero_kind=="LVOvac")then
              !
-             if(potential.ne.0d0)then
+             if(potential.ne.0d0.and.iloop.gt.1)then
                 !
                 do iorb=1,Norb
                    do ispin=1,Nspin
@@ -758,7 +759,7 @@ contains
              !
           elseif(hetero_kind=="LVOSTO")then
              !
-             if(potential.ne.0d0)then
+             if(potential.ne.0d0.and.iloop.gt.1)then
                 !
                 do ilayer=1,Nlayer
                    do iorb=1,Norb
@@ -980,15 +981,31 @@ contains
        !
        !--------------------- DIPOLE --------------------
        if(allocated(var))deallocate(var);allocate(var(Norb));var=0d0
-       var(1)=0.318358
-       var(2)=0.213643
-       var(3)=0.340087
+       var(1)=0.115733 !0.318358
+       var(2)=0.262632 !0.213643
+       var(3)=0.304756 !0.340087
        !
-       fileDR=reg("dipole_bulk.dat")
+       if(geometry=="bulk") then
+          !
+          fileDR=reg("dipole_bulk.dat")   
+          !
+       elseif(geometry=="hetero") then
+          !
+       if(hetero_kind=="LVOSTO")then
+             !
+             fileDR=reg("dipole_LVOSTO.dat")
+             !
+          elseif(hetero_kind=="LVOvac")then
+             !
+             fileDR=reg("dipole_LVOvac.dat")
+             !
+          endif
+          !
+       endif
        inquire(file=fileDR,exist=IOfile)
        if(.not.IOfile)then
           if(master)write(LOGfile,'(1A)') "  Dipole not found-->build"
-          call TB_dipole(comm,R1,R2,R3,Ruc,fileHR,Norb,Nlat,fileDR,Nr,var,optimize=.false.  , &
+          call TB_dipole(comm,R1,R2,R3,Ruc,fileHR,Norb,Nlat,fileDR,Nr,var,optimize_dipole   , &
                                                                          t_thresh_=0.0001d0 , &
                                                                          cg_niter_=cg_Niter , &
                                                                          cg_Ftol_=cg_Ftol   )
@@ -996,6 +1013,7 @@ contains
           if(master)write(LOGfile,'(1A)') "  Dipole found"
        endif
        deallocate(var)
+       call MPI_Barrier(Comm,ier)
        !
        !--------------------- HAMILTONIAN --------------------
        if(allocated(Wt))deallocate(Wt);allocate(Wt(NlNsNo,Nt+10,Nphotons+1));Wt=zero
@@ -1016,7 +1034,7 @@ contains
           do i=1,Nt+10
              write(unitIO,'(1I8)') i
              do io=1,NlNsNo
-                write(unitIO,'(90F12.8)') (real(Hloct(io,jo,i)),jo=1,NlNsNo),(aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
+                write(unitIO,'(9000F12.8)') (real(Hloct(io,jo,i)),jo=1,NlNsNo),(aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
              enddo
           enddo
           close(unitIO)
@@ -1033,7 +1051,7 @@ contains
           unitIO=free_unit()
           open(unit=unitIO,file="Wt_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
           do i=1,Nt+10
-             write(unitIO,'(90F12.8)') abs(tflex(1,nph)-tflex(2,nph))*i,(real(Wt(j,i,nph)),j=1,NlNsNo),(aimag(Wt(j,i,nph)),j=1,NlNsNo)
+             write(unitIO,'(9000F12.8)') abs(tflex(1,nph)-tflex(2,nph))*i,(real(Wt(j,i,nph)),j=1,NlNsNo),(aimag(Wt(j,i,nph)),j=1,NlNsNo)
           enddo
           close(unitIO)
           !
