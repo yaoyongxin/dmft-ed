@@ -177,7 +177,10 @@ program ed_LVO_hetero
   !
   call read_myhk(HRfile,"Hk.dat","Hloc","Kpoints.dat",diaglocalpbm,Efield)
   !
-  if(nloop==-1) stop "  STOP. Calc of Ho"
+  if(nloop==-1) then
+     call finalize_MPI()
+     stop "  STOP. Calc of Ho"
+  endif
   !
   if(diaglocalpbm)then
      write(LOGfile,*) " --- LOCAL PROBLEM SOLVED IN THE DIAGONAL BASIS --- "
@@ -341,7 +344,7 @@ program ed_LVO_hetero
            do ilayer=1,Nlayer
               sumdens=sumdens+sum(orb_dens_lat(ilayer,:))/float(Nlayer)
               write(LOGfile,*)
-              write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",ilayer,orb_dens_lat(ilayer,:),orb_mag_lat(ilayer,:)
+              write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",ilayer,orb_dens_lat(ilayer,:),orb_mag_lat(ilayer,:),sum(orb_dens_lat(ilayer,:)),sum(orb_mag_lat(ilayer,:))
               write(LOGfile,*)
            enddo
            call write_Nmatrix_lattice()
@@ -350,7 +353,7 @@ program ed_LVO_hetero
            allocate(orb_dens_single(Norb)) ;orb_dens_single=0.d0;call ed_get_dens(orb_dens_single)
            allocate(orb_mag_single(Norb))  ;orb_mag_single=0.d0 ;call ed_get_mag(orb_mag_single)
            write(LOGfile,*)
-           write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",1,orb_dens_single(:),orb_mag_single(:)
+           write(LOGfile,'(A7,I3,100F10.4)')"  Nlat: ",1,orb_dens_single(:),orb_mag_single(:),sum(orb_dens_single(:)),sum(orb_mag_single(:))
            write(LOGfile,*)
            sumdens=sum(orb_dens_single)
            call write_Nmatrix_single()
@@ -581,7 +584,6 @@ contains
     real(8)                                           ::   Ruc(Nlat,3)
     logical                                           ::   IOfile
     integer                                           ::   ndx,ios,unitIO
-    integer                                           ::   P(NlNsNo,NlNsNo)
     real(8)                                           ::   mu
     real(8)         ,allocatable                      ::   Awt(:,:),var(:)
     integer         ,allocatable                      ::   Nkvec(:)
@@ -592,18 +594,21 @@ contains
     complex(8)      ,allocatable                      ::   Potential_nn(:,:,:,:,:)
     !
     character(len=32)                                 ::   fileDR
-    integer                                           ::   Nw,nph!,Nphotons
-    real(8)                                           ::   dumw,dumF,lvl
+    integer                                           ::   Nw,nph
+    real(8)                                           ::   top,bottom,lvl,dumw,dumF
     real(8)                                           ::   Deltaw,wo,dt
-    real(8)         ,allocatable                      ::   w(:),t(:),rndp(:)
+    real(8)                                           ::   Afact
+    real(8)         ,allocatable                      ::   w(:),t(:),rndp(:),Wband(:)
     real(8)         ,allocatable                      ::   tflex(:,:)
     real(8)         ,allocatable                      ::   fieldvect(:,:,:,:)
     complex(8)      ,allocatable                      ::   Ew(:,:),Et(:,:)
     complex(8)      ,allocatable                      ::   At(:,:),Aw(:,:)
     complex(8)      ,allocatable                      ::   Hkt(:,:,:,:)
-    complex(8)      ,allocatable                      ::   Hloct(:,:,:),Wt(:,:,:)
+    complex(8)      ,allocatable                      ::   Hloct(:,:,:)
     complex(8)      ,allocatable                      ::   Gloct(:,:,:,:,:,:,:)
     complex(8)      ,allocatable                      ::   Gloct_aux(:,:,:,:,:,:,:)
+    !
+    Afact=2.d0*pi/(Planck_constant_in_eV_s*1e15)
     !
     !
     if(geometry=="bulk") then
@@ -676,9 +681,6 @@ contains
     allocate(Udag(NlNsNo,NlNsNo))                  ;Udag=eye(NlNsNo)
     !
     !
-    call Hk_order(P)
-    !
-    !
     if(master)write(LOGfile,*)" Bulk tot k-points:",Lk
     !
     !
@@ -693,7 +695,7 @@ contains
        call Bcast_MPI(Comm,Hloc)
     else
        if(master)write(LOGfile,'(2A)') "  Transforming HR from:  ",fileHR
-       call TB_hr_to_hk(comm,R1,R2,R3,Hk,Hloc,fileHR,Nspin,Norb,Nlat,Nkvec,P,Kvec,fileHk,fileKpoints)
+       call TB_hr_to_hk(comm,R1,R2,R3,Hk,Hloc,fileHR,Nspin,Norb,Nlat,Nkvec,Kvec,fileHk,fileKpoints)
        !
        if(geometry=="hetero")then
           allocate(Potential_so(NlNsNo,NlNsNo));Potential_so=zero
@@ -701,7 +703,7 @@ contains
           !
           if(hetero_kind=="LVOvac")then
              !
-             if(potential.ne.0d0.and.iloop.gt.1)then
+             if(potential.ne.0d0)then
                 !
                 do iorb=1,Norb
                    do ispin=1,Nspin
@@ -759,7 +761,7 @@ contains
              !
           elseif(hetero_kind=="LVOSTO")then
              !
-             if(potential.ne.0d0.and.iloop.gt.1)then
+             if(potential.ne.0d0)then
                 !
                 do ilayer=1,Nlayer
                    do iorb=1,Norb
@@ -776,6 +778,23 @@ contains
                 !
              endif
              !
+          endif
+          !
+          if(master)then
+             unitIO=free_unit()
+             open(unit=unitIO,file="Potential_up.w90",status="unknown",action="write",position="rewind")
+             do ilayer=1,Nlayer
+                write(LOGfile,'(1A4,3F12.6,1X,3F12.6)')"up ",(real(Potential_nn(2*ilayer-1,1,1,iorb,iorb)),iorb=1,3),(real(Potential_nn(2*ilayer,1,1,iorb,iorb)),iorb=1,3)
+                write(unitIO,'(6F12.6,1X,6F12.6)')(Potential_nn(2*ilayer-1,1,1,iorb,iorb),iorb=1,3),(Potential_nn(2*ilayer,1,1,iorb,iorb),iorb=1,3)
+             enddo
+             close(unitIO)
+             unitIO=free_unit()
+             open(unit=unitIO,file="Potential_dw.w90",status="unknown",action="write",position="rewind")
+             do ilayer=1,Nlayer
+                write(LOGfile,'(1A4,3F12.6,1X,3F12.6)')"dw ",(real(Potential_nn(2*ilayer-1,2,2,iorb,iorb)),iorb=1,3),(real(Potential_nn(2*ilayer,2,2,iorb,iorb)),iorb=1,3)
+                write(unitIO,'(6F12.6,1X,6F12.6)')(Potential_nn(2*ilayer-1,2,2,iorb,iorb),iorb=1,3),(Potential_nn(2*ilayer,2,2,iorb,iorb),iorb=1,3)
+             enddo
+             close(unitIO)
           endif
           !
           Potential_so=nnn2lso_reshape(Potential_nn,Nlat,Nspin,Norb)
@@ -825,7 +844,7 @@ contains
        !
        if(allocated(w))    deallocate(w)    ;allocate(w(2*Nw))             ;w=0d0
        if(allocated(t))    deallocate(t)    ;allocate(t(Nt))               ;t=linspace(-tmax,tmax,Nt)
-       if(allocated(rndp)) deallocate(rndp) ;allocate(rndp(Nt))            ;call random_number(rndp)!;write(*,*)rndp
+       if(allocated(rndp)) deallocate(rndp) ;allocate(rndp(Nt))            ;call random_number(rndp)
        !
        if(allocated(Ew))   deallocate(Ew)   ;allocate(Ew(2*Nw,Nphotons+1)) ;Ew=zero
        if(allocated(Aw))   deallocate(Aw)   ;allocate(Aw(2*Nw,Nphotons+1)) ;Aw=zero
@@ -841,7 +860,7 @@ contains
           w(Nw-i+1)=-w(i+Nw)
           !
           if(w(i+Nw).le.6.8)then
-             Ew(i+Nw,Nphotons+1)=dcmplx(sqrt(2.d0*dumF/electric_constant)*Bohr_radius,0d0) !* dcmplx(cos(rndp(i))*2*pi,sin(rndp(i))*2*pi)
+             Ew(i+Nw,Nphotons+1)=dcmplx(sqrt(2.d0*dumF/electric_constant)*Bohr_radius,0d0)
              Ew(Nw-i+1,Nphotons+1)=Ew(i+Nw,Nphotons+1)
           endif
           !
@@ -973,9 +992,9 @@ contains
        endif
        !
        if(allocated(fieldvect))deallocate(fieldvect);allocate(fieldvect(2000,Nphotons+1,3,2)) ;fieldvect=0d0
-       fieldvect(:,:,1,1)=real(Et); fieldvect(:,:,1,2)=real(At)
-       fieldvect(:,:,2,1)=real(Et); fieldvect(:,:,2,2)=real(At)
-       fieldvect(:,:,3,1)=0d0     ; fieldvect(:,:,3,2)=0d0
+       fieldvect(3:2+Nt,:,1,1)=real(Et(1:Nt,:)); fieldvect(3:2+Nt,:,1,2)=real(At(1:Nt,:))*Afact
+       fieldvect(3:2+Nt,:,2,1)=real(Et(1:Nt,:)); fieldvect(3:2+Nt,:,2,2)=real(At(1:Nt,:))*Afact
+       fieldvect(3:2+Nt,:,3,1)=0d0             ; fieldvect(3:2+Nt,:,3,2)=0d0
        !
        deallocate(w,t,Ew,Et,Aw,At)
        !
@@ -987,7 +1006,7 @@ contains
        !
        if(geometry=="bulk") then
           !
-          fileDR=reg("dipole_bulk.dat")   
+          fileDR=reg("dipole_bulk.dat")
           !
        elseif(geometry=="hetero") then
           !
@@ -1016,46 +1035,47 @@ contains
        call MPI_Barrier(Comm,ier)
        !
        !--------------------- HAMILTONIAN --------------------
-       if(allocated(Wt))deallocate(Wt);allocate(Wt(NlNsNo,Nt+10,Nphotons+1));Wt=zero
        do nph=1,Nphotons+1
           if(master)write(LOGfile,'(A,1I3,1A4,1I3)') "  Photon",nph," of ",Nphotons+1
-          if(allocated(Hloct))deallocate(Hloct);allocate(Hloct(NlNsNo,NlNsNo,Nt+10))  ;Hloct =zero
+          if(allocated(Hloct))deallocate(Hloct);allocate(Hloct(NlNsNo,NlNsNo,Nt+10))        ;Hloct =zero
           !
-          call TB_hr_to_hk(comm,fieldvect(:,nph,:,:),gauge,R1,R2,R3,Ruc,Hloct,fileHR,fileDR,Nspin,Norb,Nlat,Nt+10,P)
+          call TB_hr_to_hk(comm,fieldvect(:,nph,:,:),gauge,R1,R2,R3,Ruc,Hloct,fileHR,fileDR,Nspin,Norb,Nlat,Nt+10)
           !
           !rotate Hloc to CF
           do i=1,Nt+10
              Hloct(:,:,i)=matmul(Udag,matmul(Hloct(:,:,i),U))
+             call herm_check(Hloct(:,:,i))
           enddo
           !
           !print Hloc(t)
           unitIO=free_unit()
-          open(unit=unitIO,file="Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+          open(unit=unitIO,file="RE_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
           do i=1,Nt+10
              write(unitIO,'(1I8)') i
              do io=1,NlNsNo
-                write(unitIO,'(9000F12.8)') (real(Hloct(io,jo,i)),jo=1,NlNsNo),(aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
+                write(unitIO,'(9000F12.8)') (real(Hloct(io,jo,i)),jo=1,NlNsNo)
+             enddo
+          enddo
+          close(unitIO)
+          unitIO=free_unit()
+          open(unit=unitIO,file="IM_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+          do i=1,Nt+10
+             write(unitIO,'(1I8)') i
+             do io=1,NlNsNo
+                write(unitIO,'(9000F12.8)') (aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
              enddo
           enddo
           close(unitIO)
           deallocate(Hloct)
-          !
-          !excite diagonal hopping
-          dumw=-2.d0*pi/(Planck_constant_in_eV_s*1e15)
-          do i=1,Nt+10
-             dumF = dumw * ( fieldvect(i,nph,1,2)*norm2(R1) + fieldvect(i,nph,2,2)*norm2(R2) + fieldvect(i,nph,3,2)*norm2(R3) )
-             Wt(:,i,nph)=0.5*dcmplx(cos(dumF),sin(dumF))
-          enddo
-          !
-          !print diagonal hopping
-          unitIO=free_unit()
-          open(unit=unitIO,file="Wt_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Nt+10
-             write(unitIO,'(9000F12.8)') abs(tflex(1,nph)-tflex(2,nph))*i,(real(Wt(j,i,nph)),j=1,NlNsNo),(aimag(Wt(j,i,nph)),j=1,NlNsNo)
-          enddo
-          close(unitIO)
-          !
        enddo
+       !
+       !--------------------- BANDWIDTH --------------------
+       inquire(file="bandwidth.used",exist=IOfile)
+       if(.not.IOfile)then
+          if(master)write(LOGfile,'(1A)') "  bandwidth-->launch G0loc calculation in diag basis"
+       else
+          if(master)write(LOGfile,'(1A)') "  bandwidth found"
+       endif
        deallocate(tflex)
     endif
     !
@@ -1064,7 +1084,7 @@ contains
     if(computeG0loc)then
        if(geometry=="bulk")   mu=15.429
        if(geometry=="hetero".and.hetero_kind=="LVOvac") mu=7.329
-       if(geometry=="hetero".and.hetero_kind=="LVOSTO") mu=15.2
+       if(geometry=="hetero".and.hetero_kind=="LVOSTO") mu=14
        !
        !matsu freq
        if(master)write(LOGfile,'(1A)')"  Build G0loc(wm)"
@@ -1074,15 +1094,17 @@ contains
              Gloc(:,:,:,:,:,i)=Gloc(:,:,:,:,:,i)+lso2nnn_reshape(inverse_g0k(xi*wm(i),Hk(:,:,ik),Nlat,mu)/Lk,Nlat,Nspin,Norb)
           enddo
        enddo
+       if(nloop==-1)allocate(Gmats(Nlat,Nspin,Nspin,Norb,Norb,Lmats));Gmats=zero
        call Mpi_AllReduce(Gloc,Gmats,size(Gmats),MPI_Double_Complex,MPI_Sum,Comm,ier)
        call MPI_Barrier(Comm,ier)
        deallocate(Gloc)
        if(master)call dmft_print_gf_matsubara(Gmats,"G0loc_t2g",iprint=6)
        if(diaglocalpbm)then
-          call rotate_local_funct(Greal,U)
+          call rotate_local_funct(Gmats,U)
           if(master)call dmft_print_gf_matsubara(Gmats,"G0loc_CF",iprint=6)
        endif
        Gmats=zero
+       if(iloop==-1)deallocate(Gmats)
        !
        !real freq
        if(master)write(LOGfile,'(1A)')"  Build G0loc(wr)"
@@ -1092,6 +1114,7 @@ contains
              Gloc(:,:,:,:,:,i)=Gloc(:,:,:,:,:,i)+lso2nnn_reshape(inverse_g0k(dcmplx(wr(i),eps),Hk(:,:,ik),Nlat,mu)/Lk,Nlat,Nspin,Norb)
           enddo
        enddo
+       if(nloop==-1)allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Greal=zero
        call Mpi_AllReduce(Gloc,Greal,size(Greal),MPI_Double_Complex,MPI_Sum,Comm,ier)
        call MPI_Barrier(Comm,ier)
        deallocate(Gloc)
@@ -1099,8 +1122,43 @@ contains
        if(diaglocalpbm)then
           call rotate_local_funct(Greal,U)
           if(master)call dmft_print_gf_realaxis(Greal,"G0loc_CF",iprint=6)
+          !
+          if(allocated(Wband)) deallocate(Wband) ;allocate(Wband(Nlat*Norb));Wband=0d0
+          lvl=0.005
+          do ilat=1,Nlat
+             do ispin=1,1
+                do iorb=1,Norb
+                   !
+                   io = iorb + (ispin-1)*Norb + (ilat-1)*1*Norb
+                   !
+                   bottomloop:do i=1,Lreal
+                      if(abs(-aimag(Greal(ilat,ispin,ispin,iorb,iorb,i))/pi).gt.lvl)then
+                         bottom=wr(i)
+                         exit bottomloop
+                      endif
+                   enddo bottomloop
+                   !
+                   toploop:do i=Lreal,1,-1
+                      if(abs(-aimag(Greal(ilat,ispin,ispin,iorb,iorb,i))/pi).gt.lvl)then
+                         top=wr(i)
+                         exit toploop
+                      endif
+                   enddo toploop
+                   !
+                   Wband(io)=top-bottom
+                   if(master)write(LOGfile,*) "  bandwidth of: ",io,"  ",Wband(io)/8.d0
+                   !
+                enddo
+             enddo
+          enddo
+          open(unit=unitIO,file="bandwidth.used",status="unknown",action="write",position="rewind")
+          write(unitIO,'(9000F12.8)') (Wband(io)/8.d0,io=1,Nlat*Norb)
+          close(unitIO)
+          deallocate(Wband)
+          !
        endif
        Greal=zero
+       if(iloop==-1)deallocate(Greal)
        !
     endif
     !
@@ -1216,7 +1274,6 @@ contains
        write(LOGfile,*) "   Solving model on path"
        call TB_solve_model(   fileHR,Nspin,Norb,Nlat,kpath,Nkpath,colors               &
                           ,   [character(len=20) ::'M', 'R', 'G', 'M', 'X', 'G', 'X']  &
-                          ,   P                                                        &
                           ,   fileband                                                 &
                           ,   fileHk_path                                              &
                           ,   fileKpoints_path                                         &
@@ -1393,6 +1450,32 @@ contains
   !
   !
   !+------------------------------------------------------------------------------------------+!
+  !PURPOSE: Hermicity test
+  !+------------------------------------------------------------------------------------------+!
+  subroutine herm_check(A)
+    implicit none
+    complex (kind=8), intent(in)   ::   A(:,:)
+    integer                        ::   row,col,i,j
+    row=size(A,1)
+    col=size(A,2)
+    do i=1,col
+       do j=1,row
+          if(abs(A(i,j))-abs(A(j,i)) .gt. 1e-5)then
+             write(LOGfile,'(1A)') "--> NON HERMITIAN MATRIX <--"
+             write(LOGfile,'(2(1A7,I3))') " row: ",i," col: ",j
+             write(LOGfile,'(1A)') "  A(i,j)"
+             write(LOGfile,'(2F22.18)') real(A(i,j)),aimag(A(i,j))
+             write(LOGfile,'(1A)') "  A(j,i)"
+             write(LOGfile,'(2F22.18)') real(A(j,i)),aimag(A(j,i))
+             !stop
+          endif
+       enddo
+    enddo
+  end subroutine herm_check
+  !
+  !
+  !
+  !+------------------------------------------------------------------------------------------+!
   !PURPOSE: Fourier
   !+------------------------------------------------------------------------------------------+!
   subroutine invFourier(w,func_in,t,func_out)
@@ -1565,6 +1648,41 @@ end program ed_LVO_hetero
 !    kpath(18,:)=kpoint_X3
 
 
+
+
+!!excite diagonal hopping
+!!e/hbar*( Ax*Rx + Az*Rz )
+!phi(:,1)=2.d0*pi/(Planck_constant_in_eV_s*1e15)*(fieldvect(:,nph,1,2)*(R1(1)+R2(1)+R3(1))+fieldvect(i,nph,3,2)*(R1(3)+R2(3)+R3(3)))
+!!e/hbar*( Ay*Ry + Az*Rz )
+!phi(:,2)=2.d0*pi/(Planck_constant_in_eV_s*1e15)*(fieldvect(:,nph,2,2)*(R1(2)+R2(2)+R3(2))+fieldvect(i,nph,3,2)*(R1(3)+R2(3)+R3(3)))
+!!e/hbar*( Ax*Rx + Ay*Ry )
+!phi(:,3)=2.d0*pi/(Planck_constant_in_eV_s*1e15)*(fieldvect(:,nph,1,2)*(R1(1)+R2(1)+R3(1))+fieldvect(i,nph,2,2)*(R1(2)+R2(2)+R3(2)))
+!do ilat=1,Nlat
+!   do iorb=1,Norb
+!      do ispin=1,Nspin
+!         io = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb
+!         do i=1,Nt+10
+!            nnHloct(io,io,i)=0.5*dcmplx(cos(phi(i,iorb)),sin(phi(i,iorb)))
+!         enddo
+!      enddo
+!   enddo
+!enddo
+!do i=1,Nt+10
+!   nnHloct(:,:,i)=matmul(Udag,matmul(nnHloct(:,:,i),U))
+!enddo
+!!
+!!print diagonal hopping
+!unitIO=free_unit()
+!open(unit=unitIO,file="Wt_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+!do i=1,Nt+10
+!   write(unitIO,'(9000F12.8)') abs(tflex(1,nph)-tflex(2,nph))*i,(nnHloct(j,j,i),j=1,NlNsNo)!,(aimag(Wt(j,i,nph)),j=1,NlNsNo)
+!   !write(unitIO,'(9000F12.8)') abs(tflex(1,nph)-tflex(2,nph))*i,((Wt(1+j*(Norb*Nspin),i,nph)),j=1,Nlat)!,(aimag(Wt(j,i,nph)),j=1,NlNsNo)
+!   if(i==20) call TB_write_Hloc(nnHloct(:,:,i),reg("nnHloct.used"))
+!   if(i==Nt+10) call TB_write_Hloc(nnHloct(:,:,i),reg("nnHloct.used2"))
+!enddo
+!close(unitIO)
+!deallocate(nnHloct)
+!!
 
 
 
