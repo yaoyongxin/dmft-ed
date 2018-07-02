@@ -173,7 +173,7 @@ contains
           eig_values=0d0 ; eig_basis=zero
           !
           call setup_Hv_sector(isector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
 #ifdef _MPI
           if(MpiStatus)then
@@ -184,19 +184,18 @@ contains
 #else
           call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,tol=lanc_tolerance)
 #endif
-          call delete_Hv_sector()
+          call delete_Hv_sector(isector)
        else
           if(allocated(eig_values))deallocate(eig_values)
           if(allocated(eig_basis))deallocate(eig_basis)
           allocate(eig_values(Dim),eig_basis(Dim,dim))
           eig_values=0d0 ; eig_basis=zero
-          call setup_Hv_sector(isector)
-          call ed_buildH_c(eig_basis)
-          call delete_Hv_sector()
+          call setup_Hv_sector(isector,eig_basis)
+          ! call ed_buildH_c(eig_basis)
+          call delete_Hv_sector(isector)
           call eigh(eig_basis,eig_values,'V','U')
           if(dim==1)eig_basis(dim,dim)=one
        endif
-       !print *,eig_values
        if(spH0%status)call sp_delete_matrix(spH0)
        !
        if(finiteT)then

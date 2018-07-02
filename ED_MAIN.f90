@@ -280,8 +280,6 @@ contains
        spHtimesV_cc => spMatVec_cc
     case (.false.)
        spHtimesV_cc => directMatVec_cc
-    case default
-       stop "ed_solve_single ERROR: ed_sparse_H undefined"
     end select
     !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
@@ -326,8 +324,6 @@ contains
        spHtimesV_cc => spMatVec_MPI_cc
     case (.false.)
        spHtimesV_cc => directMatVec_MPI_cc
-    case default
-       stop "ed_solve_single_mpi ERROR: ed_sparse_H undefined"
     end select
     !
     !SET THE LOCAL COMMUNICATORS IN ALL THE RELEVANT PARTS OF THE CODE:

@@ -229,7 +229,7 @@ contains
                 MaskBool=.true.   
                 if(bath_type=="replica")MaskBool=&
                      (dmft_bath%mask(ispin,ispin,iorb,jorb,1)).OR.(dmft_bath%mask(ispin,ispin,iorb,jorb,2))
-                !
+                if(.not.MaskBool)cycle
                 impGmats(ispin,ispin,iorb,jorb,:) = 0.5d0*(impGmats(ispin,ispin,iorb,jorb,:) &
                      - (one-xi)*impGmats(ispin,ispin,iorb,iorb,:) - (one-xi)*impGmats(ispin,ispin,jorb,jorb,:))
                 impGreal(ispin,ispin,iorb,jorb,:) = 0.5d0*(impGreal(ispin,ispin,iorb,jorb,:) &
@@ -243,12 +243,12 @@ contains
        enddo
     endif
     !
-    if(ed_para.and.Nspin==2)then
-       impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
-       impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
-       impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
-       impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
-    endif
+    ! if(ed_para.and.Nspin==2)then
+    !    impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
+    !    impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
+    !    impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
+    !    impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
+    ! endif
     !
   end subroutine build_gf_normal
 
@@ -268,7 +268,7 @@ contains
     !
     isite=impIndex(iorb,ispin)
     !
-    
+
     !
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
@@ -301,7 +301,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -316,7 +316,7 @@ contains
 #endif
           call add_to_lanczos_gf_normal(one*norm2,state_e,alfa_,beta_,1,iorb,iorb,ispin)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -344,7 +344,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -359,7 +359,7 @@ contains
 #endif
           call add_to_lanczos_gf_normal(one*norm2,state_e,alfa_,beta_,-1,iorb,iorb,ispin)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -369,7 +369,7 @@ contains
        deallocate(HI%map)
        !
     enddo
-    
+
   end subroutine lanc_build_gf_normal_c
 
   subroutine lanc_build_gf_normal_mix_c(iorb,jorb,ispin)
@@ -389,7 +389,7 @@ contains
     isite=impIndex(iorb,ispin)  !orbital 1
     jsite=impIndex(jorb,ispin)  !orbital 2
     !
-    
+
     !
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
@@ -432,7 +432,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -447,7 +447,7 @@ contains
 #endif
           call add_to_lanczos_gf_normal(one*norm2,state_e,alfa_,beta_,1,iorb,jorb,ispin)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -484,7 +484,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -499,7 +499,7 @@ contains
 #endif
           call add_to_lanczos_gf_normal(one*norm2,state_e,alfa_,beta_,-1,iorb,jorb,ispin)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -536,7 +536,7 @@ contains
           cvinit=cvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -551,7 +551,7 @@ contains
 #endif
           call add_to_lanczos_gf_normal(-xi*norm2,state_e,alfa_,beta_,1,iorb,jorb,ispin)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(cvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -588,7 +588,7 @@ contains
           cvinit=cvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -603,7 +603,7 @@ contains
 #endif
           call add_to_lanczos_gf_normal(-xi*norm2,state_e,alfa_,beta_,-1,iorb,jorb,ispin)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(cvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -614,7 +614,7 @@ contains
        !
     enddo
     !
-    
+
     !
   end subroutine lanc_build_gf_normal_mix_c
 
@@ -761,7 +761,7 @@ contains
     integer                :: Nitermax,Nlanc
     type(sector_map)       :: HI,HJ
     !
-    
+
     !
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
@@ -794,7 +794,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -809,7 +809,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=1)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -837,7 +837,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -852,7 +852,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=1)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -881,7 +881,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -896,7 +896,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=2)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -925,7 +925,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -940,7 +940,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=2)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -979,7 +979,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -994,7 +994,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=3)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1034,7 +1034,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1049,7 +1049,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=3)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1059,7 +1059,7 @@ contains
        deallocate(HI%map)
        !
     enddo
-    
+
   end subroutine lanc_build_gf_superc_c
 
   subroutine lanc_build_gf_superc_mix_c(iorb,jorb)
@@ -1125,7 +1125,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1140,7 +1140,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,1,ichan=3)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1180,7 +1180,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1195,7 +1195,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(one*norm2,state_e,alfa_,beta_,-1,ichan=3)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1234,7 +1234,7 @@ contains
           cvinit=cvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1249,7 +1249,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(-xi*norm2,state_e,alfa_,beta_,1,ichan=3)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(cvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1289,7 +1289,7 @@ contains
           cvinit=cvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1304,7 +1304,7 @@ contains
 #endif
           call add_to_lanczos_gf_superc(-xi*norm2,state_e,alfa_,beta_,-1,ichan=3)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(cvinit,alfa_,beta_)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1776,7 +1776,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1793,7 +1793,7 @@ contains
           call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,1,iorb,iorb,ispin,ispin)
           deallocate(alfa_,beta_)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1836,7 +1836,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1853,7 +1853,7 @@ contains
           call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,-1,iorb,iorb,ispin,ispin)
           deallocate(alfa_,beta_)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -1957,7 +1957,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -1974,7 +1974,7 @@ contains
           call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,1,iorb,jorb,ispin,jspin)
           deallocate(alfa_,beta_)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -2041,7 +2041,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -2058,7 +2058,7 @@ contains
           call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,-1,iorb,jorb,ispin,jspin)
           deallocate(alfa_,beta_)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -2126,7 +2126,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -2143,7 +2143,7 @@ contains
           call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,1,iorb,jorb,ispin,jspin)
           deallocate(alfa_,beta_)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit)
           if(spH0%status)call sp_delete_matrix(spH0)
@@ -2210,7 +2210,7 @@ contains
           vvinit=vvinit/sqrt(norm2)
           !
           call setup_Hv_sector(jsector)
-          if(ed_sparse_H)call ed_buildH_c()
+          ! if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(jdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
@@ -2227,7 +2227,7 @@ contains
           call add_to_lanczos_gf_nonsu2(cnorm2,state_e,alfa_,beta_,-1,iorb,jorb,ispin,jspin)
           deallocate(alfa_,beta_)
           !
-          call delete_Hv_sector()
+          call delete_Hv_sector(jsector)
           !
           deallocate(vvinit)
           if(spH0%status)call sp_delete_matrix(spH0)
