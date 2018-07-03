@@ -503,6 +503,11 @@ contains
     end do
     allocate(Vout(k))
     Vout = Vtmp(1:k)
+    do i=0,MpiSize-1
+       if(MpiRank==i)then
+          write(*,"(A,2(I0,1x))")"Column list: ",minval(vout),maxval(vout)
+       endif
+    enddo
     !
     columns_range(1) = minval(Vout)
     columns_range(2) = maxval(Vout)
@@ -555,6 +560,15 @@ contains
     Columns_Range(MpiRank,1) = Imin
     Columns_Range(MpiRank,2) = Imax
     !
+    ! do irank=0,MpiSize-1
+    !    if(MpiRank==irank)then
+    !       write(*,"(A,2(I0,1x))")"Column list     > ",minval(vout),maxval(vout)          
+    !       write(*,"(A,2(I0,2x))")"Col owner Range > ",columns_range(irank,:)
+    !       call MPI_Barrier(MpiComm,mpiierr)
+    !    endif
+    !    call MPI_Barrier(MpiComm,mpiierr)
+    ! enddo
+    ! call MPI_Barrier(MpiComm,mpiierr)
   end subroutine mpi_sp_columns_range_matrix
 #endif
 

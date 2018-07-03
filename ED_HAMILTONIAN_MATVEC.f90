@@ -17,7 +17,6 @@ MODULE ED_HAMILTONIAN_MATVEC
   private
 
   !>build sparse hamiltonian of the sector
-  ! public  :: ed_buildH_c
   public  :: setup_Hv_sector
   public  :: delete_Hv_sector
 
@@ -41,9 +40,6 @@ MODULE ED_HAMILTONIAN_MATVEC
   public  :: ed_hamiltonian_matvec_set_MPI
   public  :: ed_hamiltonian_matvec_del_MPI
   !
-  public  :: ed_hamiltonian_matvec_set_ColumnsRange
-  public  :: ed_hamiltonian_matvec_del_ColumnsRange
-  !
 
 
   !> MPI local variables (shared)
@@ -60,7 +56,7 @@ MODULE ED_HAMILTONIAN_MATVEC
   integer                            :: mpiR=0
   !
   integer                            :: Hsector=0
-  logical                            :: Hstatus=.false.
+  logical                            :: Hstatus=.false.,Pbool=.true.
   type(sector_map)                   :: H,Hup,Hdw
   !
   integer,dimension(:,:),allocatable :: columns_range
@@ -108,13 +104,7 @@ contains
        if(allocated(columns_range))deallocate(columns_range)
        allocate(columns_range(0:MpiSize-1,2))
        call sp_columns_range_matrix(MpiComm,spH0,columns_range(0:,:))
-       ! else
-       !    allocate(columns_range(1,2))
-       !    call sp_columns_range_matrix(spH0,columns_range(1,:))
     end if
-    ! #else
-    !     allocate(columns_range(1,2))
-    !     call sp_columns_range_matrix(spH0,columns_range(1,:))
 #endif
   end subroutine ed_hamiltonian_matvec_set_ColumnsRange
 
@@ -133,7 +123,7 @@ contains
   !             BUILD SPARSE HAMILTONIAN of the SECTOR
   !####################################################################
   subroutine setup_Hv_sector(isector,Hmat)
-    integer                            :: isector,SectorDim
+    integer                            :: isector,SectorDim,irank
     complex(8),dimension(:,:),optional :: Hmat
     !
     Hsector = isector
@@ -152,11 +142,11 @@ contains
     select case (ed_sparse_H)
     case (.true.)               !H is to be stored 
        call ed_buildH_c(isector)
-       call ed_hamiltonian_matvec_set_ColumnsRange
+       ! call ed_hamiltonian_matvec_set_ColumnsRange
     case (.false.)
        !nothing to be done: if MPI: get columns range from a dryrun
-       if(MpiStatus)call ed_buildH_c(isector,dryrun=.true.) !if MPI: get columns range anyway, dryrun
-       if(MpiStatus)call ed_hamiltonian_matvec_set_ColumnsRange
+       ! if(MpiStatus)call ed_buildH_c(isector,dryrun=.true.) !if MPI: get columns range anyway, dryrun
+       ! if(MpiStatus)call ed_hamiltonian_matvec_set_ColumnsRange
     end select
     !
   end subroutine setup_Hv_sector
@@ -179,7 +169,7 @@ contains
        endif
     endif
     !
-    call ed_hamiltonian_matvec_del_ColumnsRange
+    ! call ed_hamiltonian_matvec_del_ColumnsRange
     !
   end subroutine delete_Hv_sector
 
@@ -327,11 +317,12 @@ contains
     logical                             :: MpiMaster
     integer                             :: MpiQ
     integer                             :: MpiR,MpiShift
-    integer,allocatable,dimension(:)    :: Counts,Offset
+    integer,allocatable,dimension(:)    :: RCounts,SCounts,Offset
     type(sparse_element),pointer        :: c
     !
+    !
     if(MpiComm==MPI_UNDEFINED)stop "spMatVec_mpi_cc ERRROR: MpiComm = MPI_UNDEFINED"
-    if(.not.allocated(columns_range))stop "spMatVec_mpi_cc ERRROR: columns_range NOT allocated"
+    ! if(.not.allocated(columns_range))stop "spMatVec_mpi_cc ERRROR: columns_range NOT allocated"
     MpiRank   = get_rank_MPI(MpiComm)
     MpiSize   = get_size_MPI(MpiComm)
     MpiMaster = get_master_MPI(MpiComm)
@@ -358,22 +349,22 @@ contains
     !
     !Evaluate the non-local contribution.
     !Retrieve the component in the range Min_Column : Max_Column only by looking at ColumnsRange array
-    allocate(Counts(0:MpiSize-1)) ; Counts(0:)=0
-    allocate(Offset(0:MpiSize-1)) ; Offset(0:)=0
+    allocate(RCounts(0:MpiSize-1)) ; RCounts(0:)=0
+    allocate(SCounts(0:MpiSize-1)) ; SCounts(0:)=0
+    allocate(Offset(0:MpiSize-1))  ; Offset(0:)=0
     !
     forall(i=0:MpiSize-1)Offset(i) = i*MpiQ
+    ! !
+    ! Imin = columns_range(MpiRank,1)
+    ! Imax = columns_range(MpiRank,2)
     !
-    Imin = columns_range(MpiRank,1)
-    Imax = columns_range(MpiRank,2)
-    !
-    Counts(0:)=0              ! set Counts entirely to 0
-    Counts(Imin:Imax) = MpiQ  ! Counts MpiQ elements for all the threads: this interval contains the range of columns for each thread  
-    if(Imax==MpiSize-1)Counts(MpiSize-1) = MpiQ+mod(N,MpiSize) !last thread gets additional columns mod(N,MPIsize)
-    Counts(MpiRank)  = 0      ! each thread excludes its own part that is local
+    RCounts(0:)=MpiQ ; RCounts(MpiSize-1)=MpiQ+mod(N,MpiSize)
+    RCounts(MpiRank)  = 0
     !
     allocate(vin(N)) ; vin = zero
+    !
     do irank=0,MpiSize-1
-       call MPI_Gatherv(v,Nloc,MPI_Double_Complex,Vin,Counts,Offset,MPI_Double_Complex,Irank,MpiComm,MpiIerr)
+       call MPI_Gatherv(v,Nloc,MPI_Double_Complex,Vin,RCounts,Offset,MPI_Double_Complex,Irank,MpiComm,MpiIerr)
     enddo
     !
     do i=1,Nloc                 !==spH0%Nrow
@@ -384,41 +375,13 @@ contains
        end do matmul
     end do
     nullify(c)
+    deallocate(SCounts,RCounts,Offset,Vin)
   end subroutine spMatVec_mpi_cc
 
-  ! subroutine spMatVec_mpi_cc(Nloc,v,Hv)
-  !   integer                             :: Nloc
-  !   complex(8),dimension(Nloc)          :: v
-  !   complex(8),dimension(Nloc)          :: Hv
-  !   integer                             :: i
-  !   integer                             :: N
-  !   complex(8),dimension(:),allocatable :: vin
-  !   integer,allocatable,dimension(:)    :: SendCounts,Displs
-  !   type(sparse_element),pointer        :: c
-  !   N=0
-  !   if(MpiComm==MPI_UNDEFINED)stop "spHtimesV_cc ERRROR: MpiComm = MPI_UNDEFINED"
-  !   call MPI_AllReduce(Nloc,N,1,MPI_Integer,MPI_Sum,MpiComm,MpiIerr)
-  !   MpiSize = get_Size_MPI(MpiComm)
-  !   mpiQ = get_Q_MPI(MpiComm,N)
-  !   mpiR = get_R_MPI(MpiComm,N)
-  !   allocate(vin(N))
-  !   allocate(SendCounts(0:MpiSize-1),displs(0:MpiSize-1))
-  !   vin                   = zero
-  !   SendCounts(0:)        = mpiQ
-  !   SendCounts(MpiSize-1) = mpiQ+mod(N,MpiSize)
-  !   forall(i=0:MpiSize-1)Displs(i)=i*mpiQ
-  !   call MPI_Allgatherv(v(1:Nloc),Nloc,MPI_Double_Complex,vin,SendCounts,Displs,MPI_Double_Complex,MpiComm,MpiIerr)
-  !   call MPI_Bcast(vin,N,MPI_Double_Complex,0,MpiComm,MpiIerr)
-  !   Hv=zero
-  !   do i=1,Nloc                 !==spH0%Nrow
-  !      c => spH0%row(i)%root%next       
-  !      matmul: do while(associated(c))
-  !         Hv(i) = Hv(i) + c%cval*vin(c%col)
-  !         c => c%next
-  !      end do matmul
-  !   end do
-  !   nullify(c)
-  ! end subroutine spMatVec_mpi_cc
+
+
+
+
 #endif
 
 
@@ -597,12 +560,10 @@ contains
     !
     forall(i=0:MpiSize-1)Offset(i) = i*MpiQ
     !
-    Imin = columns_range(MpiRank,1)
-    Imax = columns_range(MpiRank,2)
-    !
-    Counts(0:)=0
-    Counts(Imin:Imax) = MpiQ
-    if(Imax==MpiSize-1)Counts(MpiSize-1) = MpiQ+mod(N,MpiSize)
+    ! Imin = columns_range(MpiRank,1)
+    ! Imax = columns_range(MpiRank,2)
+    ! !
+    Counts(0:) = MpiQ ; Counts(MpiSize-1) = MpiQ+mod(N,MpiSize)
     Counts(MpiRank)  = 0
     !
     do irank=0,MpiSize-1
@@ -643,6 +604,166 @@ end MODULE ED_HAMILTONIAN_MATVEC
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+! subroutine spMatVec_mpi_cc(Nloc,v,Hv)
+!   integer                             :: Nloc
+!   complex(8),dimension(Nloc)          :: v,Hv
+!   !
+!   integer                             :: N
+!   complex(8),dimension(:),allocatable :: vin
+!   integer                             :: i,j,irank,Imin,Imax
+!   !MPI
+!   integer                             :: MpiIerr
+!   integer                             :: MpiRank
+!   integer                             :: MpiSize
+!   logical                             :: MpiMaster
+!   integer                             :: MpiQ
+!   integer                             :: MpiR,MpiShift,ierr
+!   integer,allocatable,dimension(:)    :: RCounts,SCounts,Offset
+!   type(sparse_element),pointer        :: c
+!   !
+!   character(len=MPI_MAX_ERROR_STRING ) :: string
+!   !
+!   if(MpiComm==MPI_UNDEFINED)stop "spMatVec_mpi_cc ERRROR: MpiComm = MPI_UNDEFINED"
+!   if(.not.allocated(columns_range))stop "spMatVec_mpi_cc ERRROR: columns_range NOT allocated"
+!   MpiRank   = get_rank_MPI(MpiComm)
+!   MpiSize   = get_size_MPI(MpiComm)
+!   MpiMaster = get_master_MPI(MpiComm)
+!   !
+!   !Get N_total by summing Nloc over all procs 
+!   N=0
+!   call AllReduce_MPI(MpiComm,Nloc,N)
+!   !
+!   !Get the chunks again (must equate Nloc for each proc)
+!   MpiQ = N/MpiSize
+!   MpiR = 0
+!   if(MpiRank==MpiSize-1)MpiR=mod(N,MpiSize)
+!   MpiShift = MpiRank*MpiQ
+!   !
+
+
+
+!   !Evaluate the local contribution: Hv_loc = Hloc*v
+!   Hv=zero
+!   do i=1,Nloc
+!      c => spH0%loc(i)%root%next
+!      local: do while(associated(c))
+!         Hv(i) = Hv(i) + c%cval*v(c%col-MpiShift)
+!         c => c%next
+!      end do local
+!   end do
+!   !
+!   !Evaluate the non-local contribution.
+!   !Retrieve the component in the range Min_Column : Max_Column only by looking at ColumnsRange array
+!   allocate(RCounts(0:MpiSize-1)) ; RCounts(0:)=0
+!   allocate(SCounts(0:MpiSize-1)) ; SCounts(0:)=0
+!   allocate(Offset(0:MpiSize-1))  ; Offset(0:)=0
+!   !
+!   forall(i=0:MpiSize-1)Offset(i) = i*MpiQ
+!   !
+!   ! Counts(0:)=MpiQ
+!   ! Counts(MpiSize-1)=MpiQ+mod(N,MpiSize)
+!   ! Counts(MpiRank)  = 0
+!   !
+!   Imin = columns_range(MpiRank,1)
+!   Imax = columns_range(MpiRank,2)
+!   !
+!   RCounts(Imin:Imax) = MpiQ ; if(Imax==MpiSize-1)RCounts(MpiSize-1) = MpiQ+mod(N,MpiSize)
+!   RCounts(MpiRank)   = 0
+!   !
+!   Scounts(Imin:Imax) = MpiQ ; if(Imax==MpiSize-1)Scounts(MpiSize-1) = MpiQ + mod(N,MpiSize)
+!   SCounts(MpiRank)   = 0
+!   !
+!   ! forall(i=Imin:Imax)Offset(i) = i*MpiQ   
+!   !
+!   !>DEBUG
+!   if(Pbool)then
+!      Pbool=.false.
+
+!      if(MpiMaster)write(*,"(10A10)")"mpiRank","mpi_Q","mpi_R","mpi_CHunk","Nloc","N"
+!      do irank=0,MpiSize-1
+!         if(MpiRank==irank)then
+!            write(*,"(10I10)")mpirank,mpiQ,mpiR,mpiQ+mpiR,Nloc,N
+!            call MPI_Barrier(MpiComm,mpiierr)
+!         endif
+!         call MPI_Barrier(MpiComm,mpiierr)
+!      enddo
+!      call MPI_Barrier(MpiComm,mpiierr)
+
+!      do irank=0,MpiSize-1
+!         if(MpiRank==irank)then
+!            print*,"rank,SCounts=",irank,">",SCounts,"|",columns_range(IRank,1),columns_range(IRank,2)
+!            print*,"rank,RCounts=",irank,">",RCounts,"|",columns_range(IRank,1),columns_range(IRank,2)             
+!            call MPI_Barrier(MpiComm,MpiIerr)
+!         endif
+!         call MPI_Barrier(MpiComm,MpiIerr)
+!      enddo
+!      if(MpiMaster)print*,""
+!      call MPI_Barrier(MpiComm,MpiIerr)
+!   endif
+!   !<DEBUG
+!   allocate(vin(N)) ; vin = zero
+
+!   do irank=0,MpiSize-1
+!      call MPI_Gatherv(v,Nloc,MPI_Double_Complex,Vin,RCounts,Offset,MPI_Double_Complex,Irank,MpiComm,MpiIerr)
+!      call MPI_ERROR_STRING(MpiIerr,string,i,ierr)
+!   enddo
+!   !
+!   do i=1,Nloc                 !==spH0%Nrow
+!      c => spH0%row(i)%root%next
+!      matmul: do while(associated(c))
+!         Hv(i) = Hv(i) + c%cval*vin(c%col)
+!         c => c%next
+!      end do matmul
+!   end do
+!   nullify(c)
+!   deallocate(SCounts,RCounts,Offset,Vin)
+! end subroutine spMatVec_mpi_cc
+
+! subroutine spMatVec_mpi_cc(Nloc,v,Hv)
+!   integer                             :: Nloc
+!   complex(8),dimension(Nloc)          :: v
+!   complex(8),dimension(Nloc)          :: Hv
+!   integer                             :: i
+!   integer                             :: N
+!   complex(8),dimension(:),allocatable :: vin
+!   integer,allocatable,dimension(:)    :: SendCounts,Displs
+!   type(sparse_element),pointer        :: c
+!   N=0
+!   if(MpiComm==MPI_UNDEFINED)stop "spHtimesV_cc ERRROR: MpiComm = MPI_UNDEFINED"
+!   call MPI_AllReduce(Nloc,N,1,MPI_Integer,MPI_Sum,MpiComm,MpiIerr)
+!   MpiSize = get_Size_MPI(MpiComm)
+!   mpiQ = get_Q_MPI(MpiComm,N)
+!   mpiR = get_R_MPI(MpiComm,N)
+!   allocate(vin(N))
+!   allocate(SendCounts(0:MpiSize-1),displs(0:MpiSize-1))
+!   vin                   = zero
+!   SendCounts(0:)        = mpiQ
+!   SendCounts(MpiSize-1) = mpiQ+mod(N,MpiSize)
+!   forall(i=0:MpiSize-1)Displs(i)=i*mpiQ
+!   call MPI_Allgatherv(v(1:Nloc),Nloc,MPI_Double_Complex,vin,SendCounts,Displs,MPI_Double_Complex,MpiComm,MpiIerr)
+!   call MPI_Bcast(vin,N,MPI_Double_Complex,0,MpiComm,MpiIerr)
+!   Hv=zero
+!   do i=1,Nloc                 !==spH0%Nrow
+!      c => spH0%row(i)%root%next       
+!      matmul: do while(associated(c))
+!         Hv(i) = Hv(i) + c%cval*vin(c%col)
+!         c => c%next
+!      end do matmul
+!   end do
+!   nullify(c)
+! end subroutine spMatVec_mpi_cc
 
 
 
