@@ -37,7 +37,7 @@ program ed_bhz_2d_edge
   real(8),dimension(:,:),allocatable            :: kpath
   integer                                       :: Nk,Ly,Nkpath
   real(8)                                       :: e0,mh,lambda,wmixing
-  logical                                       :: spinsym,tridiag,lrsym,rebuild_sigma
+  logical                                       :: spinsym,tridiag,lrsym
   character(len=60)                             :: finput
   character(len=32)                             :: hkfile
   real(8),dimension(:,:),allocatable            :: Zmats
@@ -64,7 +64,6 @@ program ed_bhz_2d_edge
   call parse_input_variable(e0,"e0",finput,default=1d0)
   call parse_input_variable(lrsym,"LRSYM",finput,default=.true.)
   call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
-  call parse_input_variable(rebuild_sigma,"REBUILD_SIGMA",finput,default=.false.)
   call parse_input_variable(wmixing,"WMIXING",finput,default=0.5d0)
   !
   call ed_read_input(trim(finput),comm)
@@ -127,41 +126,19 @@ program ed_bhz_2d_edge
   Nb=get_bath_dimension()
   allocate(Bath_ineq(Nineq,Nb) )
   allocate(Bath_prev(Nineq,Nb) )
-  call ed_init_solver(comm,Bath_ineq)
+  call ed_init_solver(comm,Bath_ineq,Hloc_ineq)
 
-
-  if(rebuild_sigma)then
-     call ed_rebuild_sigma(Bath_ineq,Hloc_ineq,iprint=1)
-     call ed_get_sigma_matsubara_lattice(Smats_ineq,Nineq)
-     do ilat=1,Nlat
-        ineq = ilat2ineq(ilat)
-        S0(ilat,:,:,:,:)      = Smats_ineq(ineq,:,:,:,:,1)
-     enddo
-     do ilat=1,Nlat
-        Zfoo(ilat,:,:)        = select_block(ilat,S0)
-        do iorb=1,Nso
-           i = iorb + (ilat-1)*Nso
-           Zmats(i,i)  = 1.d0/( 1.d0 + abs( dimag(Zfoo(ilat,iorb,iorb))/(pi/beta) ))
-        enddo
-     enddo
-     if(master)call build_eigenbands()
-     stop
-  endif
-
-
-
-
-
+  
   !DMFT loop:
   iloop=0 ; converged=.false.
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
      if(master) call start_loop(iloop,nloop,"DMFT-loop")   
      ! solve the impurities on each inequivalent y-layer
-     call ed_solve(comm,Bath_ineq,Hloc_ineq,iprint=1)
+     call ed_solve(comm,Bath_ineq,Hloc_ineq)
      ! retrieve the self-energies
      ! store the 1st Matsubara freq. into S0, used to get H_topological = Hk + S0
-     call ed_get_sigma_matsubara_lattice(Smats_ineq,Nineq)
+     call ed_get_sigma_matsubara(Smats_ineq,Nineq)
      do ilat=1,Nlat
         ineq = ilat2ineq(ilat)
         Smats(ilat,:,:,:,:,:) = Smats_ineq(ineq,:,:,:,:,:)
@@ -176,7 +153,7 @@ program ed_bhz_2d_edge
      enddo
      !
      ! compute the local gf:
-     call dmft_gloc_matsubara(Comm,Hkr,Wtk,Gmats,Smats,iprint=4,tridiag=tridiag)
+     call dmft_gloc_matsubara(Comm,Hkr,Wtk,Gmats,Smats,tridiag=tridiag)
      do ineq=1,Nineq
         ilat = ineq2ilat(ineq)
         Gmats_ineq(ineq,:,:,:,:,:) = Gmats(ilat,:,:,:,:,:)
@@ -184,9 +161,9 @@ program ed_bhz_2d_edge
      !
      ! compute the Weiss field (only the Nineq ones)
      if(cg_scheme=='weiss')then
-        call dmft_weiss(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq,iprint=4)
+        call dmft_weiss(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
      else
-        call dmft_delta(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq,iprint=4)
+        call dmft_delta(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
      endif
      !
      ! fit baths and mix result with old baths
@@ -201,12 +178,12 @@ program ed_bhz_2d_edge
   enddo
 
 
-  call ed_get_sigma_real_lattice(Sreal_ineq,Nineq)
+  call ed_get_sigma_real(Sreal_ineq,Nineq)
   do ilat=1,Nlat
      ineq = ilat2ineq(ilat)
      Sreal(ilat,:,:,:,:,:) = Sreal_ineq(ineq,:,:,:,:,:)
   enddo
-  call dmft_gloc_realaxis(Comm,Hkr,Wtk,Greal,Sreal,iprint=4)
+  call dmft_gloc_realaxis(Comm,Hkr,Wtk,Greal,Sreal)
 
   if(master)call build_eigenbands()
 
@@ -242,22 +219,21 @@ contains
     allocate(Kxgrid(Nk))
     if(allocated(Hkr))deallocate(Hkr)
     allocate(Hkr(Nlso,Nlso,Nk))
-    kxgrid = kgrid(Nk)
-    Hkr    = TB_build_model(bhz_edge_model,Ly,Nso,kxgrid,[0d0],[0d0],pbc=.false.)
-    if(master)call write_hk_w90("Hkrfile.in",&
+	call TB_set_bk([pi2,0d0,0d0],[0d0,pi2,0d0],[0d0,0d0,pi2])
+    call TB_build_model(Hkr,bhz_edge_model,Ly,Nso,[Nk],pbc=.false.)
+    if(master)call TB_write_hk(Hkr,"Hkrfile.in",&
          No=Nlso,&
          Nd=Norb,&
          Np=0,&
          Nineq=Ly,&
-         Hk=Hkr,&
-         kxgrid=kxgrid,kygrid=[0d0],kzgrid=[0d0])
+         Nkvec=[Nk,0,0])
     if(allocated(Wtk))deallocate(Wtk)
     allocate(Wtk(Nk))
     Wtk = 1d0/Nk
     !
     !SETUP THE LOCAL PART Hloc(Ry)
     allocate(bhzHloc(Nlso,Nlso))
-    bhzHloc = sum(Hkr,dim=3)/Nk
+    bhzHloc = sum(Hkr(:,:,:),dim=3)/Nk
   end subroutine build_hkr
 
 
@@ -314,6 +290,7 @@ contains
   subroutine build_eigenbands(kpath_)
     real(8),dimension(:,:),optional    :: kpath_
     real(8),dimension(:,:),allocatable :: kpath
+    type(rgb_color),dimension(:,:),allocatable :: colors
     integer                            :: Npts
     character(len=64)                  :: file
     if(present(kpath_))then
@@ -332,10 +309,15 @@ contains
        kpath(3,:)=[ 1]*pi
        file="Eigenbands.nint"
     endif
-    call TB_solve_path(bhz_edge_model,Ly,Nso,kpath,Nkpath,&
-         colors_name=[red1,gray88,blue1,gray88,blue1,gray88,red1,gray88],&
+    allocate(colors(Ly,Nso))
+    colors = gray88
+    colors(1,:) = [red1,blue1,red1,blue1]
+    colors(Ly,:) =[blue1,red1,blue1,red1]
+    call TB_solve_model(bhz_edge_model,Ly,Nso,kpath,Nkpath,&
+         colors_name=colors,&
          points_name=[character(len=10) :: "-pi","0","pi"],&
-         file="Eigenbands.nint",pbc=.false.)
+         file="Eigenbands.nint",&
+         pbc=.false.)
     ! call solve_HkR_along_BZpath(bhz_edge_model,Ly,Nso,kpath,Nkpath,reg(file),pbc=.false.)
   end subroutine build_eigenbands
 
