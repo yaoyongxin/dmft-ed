@@ -136,7 +136,6 @@ program ed_wsm_2d_edge
      Hloc_ineq(ineq,:,:,:,:) = Hloc(ilat,:,:,:,:)
   enddo
 
-
   !Setup solver
   Nb=get_bath_dimension()
   allocate(Bath_ineq(Nineq,Nb) )
@@ -211,7 +210,7 @@ program ed_wsm_2d_edge
      ineq = ilat2ineq(ilat)
      Sreal(ilat,:,:,:,:,:) = Sreal_ineq(ineq,:,:,:,:,:)
   enddo
-  call dmft_gloc_realaxis(Comm,Hkr,Wtk,Greal,Sreal)
+  !call dmft_gloc_realaxis(Comm,Hkr,Wtk,Greal,Sreal)
 
   if(master)call build_eigenbands()
 
@@ -240,7 +239,10 @@ contains
     endif
     !
     if(allocated(Hkr))deallocate(Hkr)
+	if(allocated(Wtk))deallocate(Wtk)
     allocate(Hkr(Nlso,Nlso,Lk))
+	allocate(Wtk(Lk))
+	!
 	call TB_set_bk([pi2,0d0,0d0],[0d0,pi2,0d0],[0d0,0d0,pi2])
     call TB_build_model(Hkr,wsm_edge_model,Ly,Nso,[Nk,1,Nk],pbc=PBC)
     if(master)call TB_write_hk(Hkr,"Hkrfile.in",&
@@ -249,17 +251,17 @@ contains
          Np=0,&
          Nineq=Ly,&
          Nkvec=[Nk,1,Nk])
-    if(allocated(Wtk))deallocate(Wtk)
-    allocate(Wtk(Lk))
+    !   
     Wtk = 1d0/(Lk)
     !
     !SETUP THE LOCAL PART Hloc(Ry)
+	if(allocated(wsmHloc))deallocate(wsmHloc)
     allocate(wsmHloc(Nlso,Nlso))
     wsmHloc = sum(Hkr(:,:,:),dim=3)/Lk
+	where(abs(dreal(wsmHloc))<1.d-9)wsmHloc=0d0
+	!call TB_write_Hloc(wsmHloc)
+	!
   end subroutine build_hkr
-
-
-
 
 
   !----------------------------------------------------------------------------------------!
@@ -315,22 +317,15 @@ contains
     type(rgb_color),dimension(:,:),allocatable :: colors
     integer                            :: Npts
     character(len=64)                  :: file
-    if(present(kpath_))then
-       if(master)write(LOGfile,*)"Solve H(kx,y,kz) along a given path:"
-       Npts = size(kpath_,1)
-       allocate(kpath(Npts,size(kpath_,2)))
-       kpath=kpath_
-       file="Eigenbands_path.nint"
-    else
-       !PRINT H(kx,Ry) ALONG A -pi:pi PATH
-       if(master)write(LOGfile,*)"Solve H(kx,y,kz) along [-Z:Z]:"
-       Npts=3
-       allocate(Kpath(Npts,2))
-       kpath(1,:)=[0,-1]*pi
-       kpath(2,:)=[0,0]*pi
-       kpath(3,:)=[0,1]*pi
-       file="Eigenbands.nint"
-    endif
+	!
+    !PRINT H(kx,Ry) ALONG A -pi:pi PATH
+    if(master)write(LOGfile,*)"Solve H(kx,y,kz) along [-Z:Z]:"
+    Npts=3
+    allocate(Kpath(Npts,3))
+    kpath(1,:)=[0,0,-1]*pi
+    kpath(2,:)=[0,0,0]*pi
+    kpath(3,:)=[0,0,1]*pi
+    file="Eigenbands.nint"
     allocate(colors(Ly,Nso))
     colors = gray88
     colors(1,:) = [red1,blue1,red1,blue1]
