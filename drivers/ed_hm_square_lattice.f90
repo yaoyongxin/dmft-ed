@@ -1,10 +1,11 @@
+include "chi0_lattice.f90"
 program ed_hm_square_lattice
   USE DMFT_ED
   !
   USE SCIFOR
   USE DMFT_TOOLS
   implicit none
-  integer                                       :: iloop,Nb,Lk,Nx,Nso,ik,ip,Nlat,Nineq
+  integer                                       :: iloop,Nb,Lk,Nx,Nso,ip,ik,iq,Nlat,Nineq,ilat,jlat,iw
   logical                                       :: converged
   real(8)                                       :: wband,ts,wmixing
   !Bath:
@@ -13,19 +14,26 @@ program ed_hm_square_lattice
   complex(8),allocatable                        :: Hloc(:,:,:,:,:),Hloc_ineq(:,:,:,:,:)
   complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Gmats,Smats
   complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Greal,Sreal
+  complex(8),allocatable,dimension(:,:,:,:,:,:,:) :: Gijmats
   complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Weiss
   !
   complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Gmats_ineq,Smats_ineq
   complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Greal_ineq,Sreal_ineq
   complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Weiss_ineq
-
-  !
   character(len=16)                             :: finput
-  complex(8),allocatable                        :: Hij(:,:,:)
+  complex(8),allocatable                        :: Hij(:,:,:) 
+  !
+  interface 
+     subroutine ed_get_chi0ij(gij,nvec,e1,e2,e3)
+       complex(8),intent(in),dimension(:,:,:,:,:,:,:) :: Gij
+       integer,intent(in),dimension(:) :: nvec
+       real(8),dimension(size(Nvec)),optional :: e1,e2,e3
+     end subroutine ed_get_chi0ij
+  end interface
 
   call parse_cmd_variable(finput,"FINPUT",default='inputED.conf')
   call parse_input_variable(wmixing,"wmixing",finput,default=0.5d0,comment="Mixing bath parameter")
-  call parse_input_variable(ts,"TS",finput,default=0.25d0,comment="hopping parameter")
+  call parse_input_variable(ts,"TS",finput,default=2.0d0,comment="hopping parameter")
   call parse_input_variable(Nx,"Nx",finput,default=10,comment="Number of points for each side of the lattice")
   !
   call ed_read_input(trim(finput))
@@ -69,6 +77,23 @@ program ed_hm_square_lattice
 
   Hloc = zero
   Hloc_ineq = zero
+
+
+  Smats = zero
+  Smats_ineq = zero
+
+  !Non-local Greens function
+  if(.true.)then
+     allocate(Gijmats(Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lmats))
+     call dmft_gloc_matsubara(Hij,[1d0],Gmats,Smats)
+     call dmft_gij_matsubara(Hij,[1d0],Gijmats,Smats) 
+     ! call dmft_print_gf_matsubara(Gijmats,"Gij",iprint=4)
+
+     print*,"Going into Evaluating Chi0:"
+     call ed_get_chi0ij(Gijmats,Nvec=[Nx,Nx],e1=[1d0,0d0],e2=[0d0,1d0])
+     stop "REMOVE TRUE here to get normal behavior"
+  endif
+
 
   !setup solver
   Nb=get_bath_dimension()
@@ -128,6 +153,7 @@ program ed_hm_square_lattice
 
 
   !Get kinetic energy:
+  Smats = zero
   call dmft_kinetic_energy(Hij,[1d0],Smats)
 
 
@@ -144,7 +170,7 @@ contains
     real(8),optional                       :: ts
     real(8)                                :: ts_
     real(8),dimension(Nrow*Ncol,Nrow*Ncol) :: H0
-    integer                                :: i,jj,row,col,link(4),j
+    integer                                :: i,jj,row,col,link(4),j,iorb,jorb
     integer                                :: unit
     !
     pbc_row_=.true. ; if(present(pbc_row)) pbc_row_=pbc_row
@@ -195,6 +221,16 @@ contains
     open(unit,file='Htb_square_lattice.ed')
     do i=1,Nlat
        write(unit,"(5000(F5.2,1x))")(H0(i,j),j=1,Nlat)
+    enddo
+    close(unit)
+
+    iorb=0
+    jorb=0
+    open(unit,file='Htb_square_lattice_2nano.dat')
+    do i=1,Nlat
+       do j=1,Nlat
+          write(unit,"(I4,I4,I4,I4,F9.4,F9.4)")i-1,iorb,j-1,jorb,H0(i,j),0d0
+       enddo
     enddo
     close(unit)
   end function Htb_square_lattice
