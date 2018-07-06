@@ -2,7 +2,7 @@
 !EXTEND TO 3D
 !WRITE CORRECT WSM HAMILTONIAN
 !
-program ed_bhz_2d_edge
+program ed_wsm_2d_edge
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
@@ -13,7 +13,7 @@ program ed_bhz_2d_edge
   integer                                       :: Nlso
   integer                                       :: Nso
   integer                                       :: Nineq,Nlat
-  integer                                       :: ilat,iy,iorb,ispin,ineq,i
+  integer                                       :: ilat,iy,iorb,ispin,ineq,i,layer
   logical                                       :: converged,PBC
   !Bath:
   integer                                       :: Nb
@@ -27,7 +27,7 @@ program ed_bhz_2d_edge
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Greal
   !hamiltonian input:
   complex(8),allocatable,dimension(:,:,:)       :: Hkr
-  complex(8),allocatable,dimension(:,:)         :: bhzHloc
+  complex(8),allocatable,dimension(:,:)         :: wsmHloc
   complex(8),allocatable,dimension(:,:,:,:,:)   :: Hloc,Hloc_ineq,S0
 
   !gamma matrices:
@@ -35,9 +35,9 @@ program ed_bhz_2d_edge
   real(8),allocatable,dimension(:)              :: Wtk
   real(8),allocatable,dimension(:)              :: kxgrid,kzgrid
   real(8),dimension(:,:),allocatable            :: kpath
-  integer                                       :: Nk,Ly,Nkpath
+  integer                                       :: Nk,Lk,Ly,Nkpath
   real(8)                                       :: e0,mh,lambda,wmixing,bx,bz,BIA
-  logical                                       :: spinsym,tridiag,lrsym
+  logical                                       :: orbsym,tridiag,lrsym
   character(len=60)                             :: finput
   character(len=32)                             :: hkfile
   real(8),dimension(:,:),allocatable            :: Zmats
@@ -53,7 +53,7 @@ program ed_bhz_2d_edge
   rank = get_Rank_MPI(comm)
   master = get_Master_MPI(comm)
 
-  call parse_cmd_variable(finput,"FINPUT",default='inputED_BHZ_EDGE.conf')
+  call parse_cmd_variable(finput,"FINPUT",default='inputED_WSM_EDGE.conf')
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call parse_input_variable(nk,"NK",finput,default=100)
   call parse_input_variable(Ly,"Ly",finput,default=20)
@@ -67,7 +67,7 @@ program ed_bhz_2d_edge
   call parse_input_variable(e0,"e0",finput,default=1d0)
   call parse_input_variable(PBC,"PBC",finput,default=.false.)
   call parse_input_variable(lrsym,"LRSYM",finput,default=.true.)
-  call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
+  call parse_input_variable(orbsym,"ORBSYM",finput,default=.false.)
   call parse_input_variable(wmixing,"WMIXING",finput,default=0.5d0)
   !
   call ed_read_input(trim(finput),comm)
@@ -130,7 +130,7 @@ program ed_bhz_2d_edge
 
   !Buil the Hamiltonian on a grid or on  path
   call build_hkr(trim(hkfile))
-  Hloc = lso2nnn_reshape(bhzHloc,Nlat,Nspin,Norb)
+  Hloc = lso2nnn_reshape(wsmHloc,Nlat,Nspin,Norb)
   do ineq=1,Nineq
      ilat = ineq2ilat(ineq)
      Hloc_ineq(ineq,:,:,:,:) = Hloc(ilat,:,:,:,:)
@@ -181,10 +181,24 @@ program ed_bhz_2d_edge
         call dmft_delta(Comm,Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
      endif
      !
-     ! fit baths and mix result with old baths
+     ! fit baths
      call ed_chi2_fitgf(Comm,Bath_ineq,Weiss_ineq,Hloc_ineq,ispin=1)
+	 call ed_chi2_fitgf(Comm,Bath_ineq,Weiss_ineq,Hloc_ineq,ispin=2)
      !
-     Bath_ineq=wmixing*Bath_ineq + (1.d0-wmixing)*Bath_prev
+	 !if flag is set, symmetrize the bath
+     !
+     if(orbsym)then
+		 do layer=1,Nineq
+			 call copy_component_bath(-Bath_ineq(layer,:),1,1,Bath_ineq(layer,:),1,2,1)
+			 call copy_component_bath(-Bath_ineq(layer,:),2,1,Bath_ineq(layer,:),2,2,1)
+			 !
+			 call copy_component_bath(Bath_ineq(layer,:),1,1,Bath_ineq(layer,:),1,2,2)
+			 call copy_component_bath(Bath_ineq(layer,:),2,1,Bath_ineq(layer,:),2,2,2)
+		 enddo
+     endif
+     !
+     !MIXING the current bath with the previous:
+     if(iloop>1)Bath_ineq=wmixing*Bath_ineq + (1.d0-wmixing)*Bath_prev
      Bath_prev=Bath_ineq
      if(master)converged = check_convergence(Weiss_ineq(:,1,1,1,1,:),dmft_error,nsuccess,nloop)
      call bcast_MPI(comm,converged)
@@ -210,40 +224,38 @@ contains
 
 
   !+-----------------------------------------------------------------------------+!
-  !PURPOSE: build the BHZ Hamiltonian H(k_x,kz,R_y) on the STRIPE along Y
+  !PURPOSE: build the wsm Hamiltonian H(k_x,kz,R_y) on the STRIPE along Y
   !+-----------------------------------------------------------------------------+!
   subroutine build_hkr(file)
     character(len=*),optional          :: file
-    integer :: i,ik
+    integer 						   :: i,ik
     !
-    !SETUP THE H(kx,Ry):
+	Lk=Nk**2
+	!
+    !SETUP THE H(kx,Ry,kz):
     if(master)then
-       write(LOGfile,*)"Build H(kx,y,kz) for BHZ-stripe:"
+       write(LOGfile,*)"Build H(kx,y,kz) for wsm-stripe:"
        write(*,*)"# of kx and kz points     :",Nk
        write(*,*)"# of y-layers      :",Nlat
     endif
     !
-    if(allocated(Kxgrid))deallocate(Kxgrid)
-    allocate(Kxgrid(Nk))
-    if(allocated(Kzgrid))deallocate(Kzgrid)
-    allocate(Kzgrid(Nk))
     if(allocated(Hkr))deallocate(Hkr)
-    allocate(Hkr(Nlso,Nlso,Nk))
+    allocate(Hkr(Nlso,Nlso,Lk))
 	call TB_set_bk([pi2,0d0,0d0],[0d0,pi2,0d0],[0d0,0d0,pi2])
-    call TB_build_model(Hkr,bhz_edge_model,Ly,Nso,[Nk,Nk,0],pbc=PBC)
+    call TB_build_model(Hkr,wsm_edge_model,Ly,Nso,[Nk,1,Nk],pbc=PBC)
     if(master)call TB_write_hk(Hkr,"Hkrfile.in",&
          No=Nlso,&
          Nd=Norb,&
          Np=0,&
          Nineq=Ly,&
-         Nkvec=[Nk,Nk,0])
+         Nkvec=[Nk,1,Nk])
     if(allocated(Wtk))deallocate(Wtk)
-    allocate(Wtk(Nk))
-    Wtk = 1d0/Nk
+    allocate(Wtk(Lk))
+    Wtk = 1d0/(Lk)
     !
     !SETUP THE LOCAL PART Hloc(Ry)
-    allocate(bhzHloc(Nlso,Nlso))
-    bhzHloc = sum(Hkr(:,:,:),dim=3)/Nk
+    allocate(wsmHloc(Nlso,Nlso))
+    wsmHloc = sum(Hkr(:,:,:),dim=3)/Lk
   end subroutine build_hkr
 
 
@@ -295,7 +307,7 @@ contains
 
 
   !+-----------------------------------------------------------------------------+!
-  !PURPOSE: solve H_BHZ(k_x,R_y,kz) along the 1d -pi:pi path in the BZ.
+  !PURPOSE: solve H_wsm(k_x,R_y,kz) along the 1d -pi:pi path in the BZ.
   !+-----------------------------------------------------------------------------+!  
   subroutine build_eigenbands(kpath_)
     real(8),dimension(:,:),optional    :: kpath_
@@ -323,7 +335,7 @@ contains
     colors = gray88
     colors(1,:) = [red1,blue1,red1,blue1]
     colors(Ly,:) =[blue1,red1,blue1,red1]
-    call TB_solve_model(bhz_edge_model,Ly,Nso,kpath,Nkpath,&
+    call TB_solve_model(wsm_edge_model,Ly,Nso,kpath,Nkpath,&
          colors_name=colors,&
          points_name=[character(len=10) :: "-pi","0","pi"],&
          file="Eigenbands.nint",&
@@ -337,10 +349,10 @@ contains
 
 
   !+-----------------------------------------------------------------------------+!
-  !PURPOSE: the BHZ-edge model hamiltonian
+  !PURPOSE: the wsm-edge model hamiltonian
   !+-----------------------------------------------------------------------------+!
-  !BHZ on a stripe geometry;
-  function bhz_edge_model(kpoint,Nlat,N,pbc) result(Hrk)
+  !wsm on a stripe geometry;
+  function wsm_edge_model(kpoint,Nlat,N,pbc) result(Hrk)
     real(8),dimension(:)                :: kpoint
     real(8)                             :: kx,kz
     integer                             :: Nlat,N
@@ -349,10 +361,10 @@ contains
     integer                             :: i,Idmin,Idmax,Itmin,Itmax
     logical                             :: pbc
     kx=kpoint(1)
-	kz=kpoint(2)
+	kz=kpoint(3)
     Hrk=zero
-    Hmat=h0_rk_bhz(kx,kz,N)
-    Tmat=t0_rk_bhz(N)
+    Hmat=h0_rk_wsm(kx,kz,N)
+    Tmat=t0_rk_wsm(N)
     TmatH=conjg(transpose(Tmat))
     do i=1,Nlat
        Idmin=1+(i-1)*N
@@ -374,22 +386,22 @@ contains
        Hrk(Itmin:Itmax,1:N)=Tmat
     endif
     Hrk = matmul(Zmats,Hrk)
-  end function bhz_edge_model
+  end function wsm_edge_model
 
-  function h0_rk_bhz(kx,kz,N) result(H)
+  function h0_rk_wsm(kx,kz,N) result(H)
     real(8)                    :: kx,kz
     integer                    :: N
     complex(8),dimension(N,N)  :: H
     H = (Mh - e0*(cos(kx) + cos(kz)))*emat+&
   		lambda*(sin(kx)*soxmat + sin(kz)*sozmat)+&
         BIA*BIAmat  + bx*bxmat + bz*bzmat
-  end function h0_rk_bhz
+  end function h0_rk_wsm
 
-  function t0_rk_bhz(N) result(H)
+  function t0_rk_wsm(N) result(H)
     integer                    :: N
     complex(8),dimension(N,N)  :: H
-    H = -0.5d0*e0*emat + xi*0.5d0*lambda*soymat
-  end function T0_rk_bhz
+    H = -0.5d0*e0*emat - xi*0.5d0*lambda*soymat
+  end function T0_rk_wsm
 
 
 
@@ -432,4 +444,4 @@ contains
   end function select_block
 
 
-end program ed_bhz_2d_edge
+end program ed_wsm_2d_edge
