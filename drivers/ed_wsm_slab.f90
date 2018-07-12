@@ -1,8 +1,4 @@
-!!! TODO
-!EXTEND TO 3D
-!WRITE CORRECT WSM HAMILTONIAN
-!
-program ed_wsm_2d_edge
+program ed_wsm_slab
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
@@ -53,7 +49,7 @@ program ed_wsm_2d_edge
   rank = get_Rank_MPI(comm)
   master = get_Master_MPI(comm)
 
-  call parse_cmd_variable(finput,"FINPUT",default='inputED_WSM_EDGE.conf')
+  call parse_cmd_variable(finput,"FINPUT",default='inputED_WSM_SLAB.conf')
   call parse_input_variable(akrange,"AKRANGE",finput,default=5.d0)
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call parse_input_variable(nk,"NK",finput,default=100)
@@ -128,9 +124,6 @@ program ed_wsm_2d_edge
   allocate(Hloc_ineq(Nineq,Nspin,Nspin,Norb,Norb));Hloc_ineq=zero
 
 
-
-  if(master)call get_Akw()
-  STOP
 
   !Buil the Hamiltonian on a grid or on  path
   call build_hkr(trim(hkfile))
@@ -504,4 +497,4 @@ contains
 end subroutine get_Akw
 
 
-end program ed_wsm_2d_edge
+end program ed_wsm_slab
