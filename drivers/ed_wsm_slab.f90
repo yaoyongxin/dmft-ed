@@ -31,12 +31,12 @@ program ed_wsm_2d_edge
   complex(8),allocatable,dimension(:,:,:,:,:)   :: Hloc,Hloc_ineq,S0
 
   !gamma matrices:
-  complex(8),dimension(4,4)     				:: emat,soxmat,soymat,sozmat,bxmat,bymat,bzmat,BIAmat
+  complex(8),dimension(4,4)                     :: emat,soxmat,soymat,sozmat,bxmat,bymat,bzmat,BIAmat
   real(8),allocatable,dimension(:)              :: Wtk
   real(8),allocatable,dimension(:)              :: kxgrid,kzgrid
   real(8),dimension(:,:),allocatable            :: kpath
   integer                                       :: Nk,Lk,Ly,Nkpath
-  real(8)                                       :: e0,mh,lambda,wmixing,bx,bz,BIA
+  real(8)                                       :: e0,mh,lambda,wmixing,bx,bz,BIA,akrange
   logical                                       :: orbsym,tridiag,lrsym
   character(len=60)                             :: finput
   character(len=32)                             :: hkfile
@@ -54,6 +54,7 @@ program ed_wsm_2d_edge
   master = get_Master_MPI(comm)
 
   call parse_cmd_variable(finput,"FINPUT",default='inputED_WSM_EDGE.conf')
+  call parse_input_variable(akrange,"AKRANGE",finput,default=5.d0)
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
   call parse_input_variable(nk,"NK",finput,default=100)
   call parse_input_variable(Ly,"Ly",finput,default=20)
@@ -128,6 +129,9 @@ program ed_wsm_2d_edge
 
 
 
+  if(master)call get_Akw()
+  STOP
+
   !Buil the Hamiltonian on a grid or on  path
   call build_hkr(trim(hkfile))
   Hloc = lso2nnn_reshape(wsmHloc,Nlat,Nspin,Norb)
@@ -182,18 +186,18 @@ program ed_wsm_2d_edge
      !
      ! fit baths
      call ed_chi2_fitgf(Comm,Bath_ineq,Weiss_ineq,Hloc_ineq,ispin=1)
-	 call ed_chi2_fitgf(Comm,Bath_ineq,Weiss_ineq,Hloc_ineq,ispin=2)
+     call ed_chi2_fitgf(Comm,Bath_ineq,Weiss_ineq,Hloc_ineq,ispin=2)
      !
-	 !if flag is set, symmetrize the bath
+     !if flag is set, symmetrize the bath
      !
      if(orbsym)then
-		 do layer=1,Nineq
-			 call copy_component_bath(-Bath_ineq(layer,:),1,1,Bath_ineq(layer,:),1,2,1)
-			 call copy_component_bath(-Bath_ineq(layer,:),2,1,Bath_ineq(layer,:),2,2,1)
-			 !
-			 call copy_component_bath(Bath_ineq(layer,:),1,1,Bath_ineq(layer,:),1,2,2)
-			 call copy_component_bath(Bath_ineq(layer,:),2,1,Bath_ineq(layer,:),2,2,2)
-		 enddo
+     do layer=1,Nineq
+      call copy_component_bath(-Bath_ineq(layer,:),1,1,Bath_ineq(layer,:),1,2,1)
+      call copy_component_bath(-Bath_ineq(layer,:),2,1,Bath_ineq(layer,:),2,2,1)
+      !
+      call copy_component_bath(Bath_ineq(layer,:),1,1,Bath_ineq(layer,:),1,2,2)
+      call copy_component_bath(Bath_ineq(layer,:),2,1,Bath_ineq(layer,:),2,2,2)
+     enddo
      endif
      !
      !MIXING the current bath with the previous:
@@ -213,6 +217,7 @@ program ed_wsm_2d_edge
   !call dmft_gloc_realaxis(Comm,Hkr,Wtk,Greal,Sreal)
 
   if(master)call build_eigenbands()
+  if(master)call get_Akw()
 
 
   call finalize_MPI()
@@ -227,10 +232,10 @@ contains
   !+-----------------------------------------------------------------------------+!
   subroutine build_hkr(file)
     character(len=*),optional          :: file
-    integer 						   :: i,ik
+    integer                            :: i,ik
     !
-	Lk=Nk**2
-	!
+    Lk=Nk**2
+    !
     !SETUP THE H(kx,Ry,kz):
     if(master)then
        write(LOGfile,*)"Build H(kx,y,kz) for wsm-stripe:"
@@ -239,11 +244,11 @@ contains
     endif
     !
     if(allocated(Hkr))deallocate(Hkr)
-	if(allocated(Wtk))deallocate(Wtk)
+    if(allocated(Wtk))deallocate(Wtk)
     allocate(Hkr(Nlso,Nlso,Lk))
-	allocate(Wtk(Lk))
-	!
-	call TB_set_bk([pi2,0d0,0d0],[0d0,pi2,0d0],[0d0,0d0,pi2])
+    allocate(Wtk(Lk))
+    !
+    call TB_set_bk([pi2,0d0,0d0],[0d0,pi2,0d0],[0d0,0d0,pi2])
     call TB_build_model(Hkr,wsm_edge_model,Ly,Nso,[Nk,1,Nk],pbc=PBC)
     if(master)call TB_write_hk(Hkr,"Hkrfile.in",&
          No=Nlso,&
@@ -255,51 +260,41 @@ contains
     Wtk = 1d0/(Lk)
     !
     !SETUP THE LOCAL PART Hloc(Ry)
-	if(allocated(wsmHloc))deallocate(wsmHloc)
+    if(allocated(wsmHloc))deallocate(wsmHloc)
     allocate(wsmHloc(Nlso,Nlso))
     wsmHloc = sum(Hkr(:,:,:),dim=3)/Lk
-	where(abs(dreal(wsmHloc))<1.d-9)wsmHloc=0d0
-	!call TB_write_Hloc(wsmHloc)
-	!
+    where(abs(dreal(wsmHloc))<1.d-9)wsmHloc=0d0
+    !call TB_write_Hloc(wsmHloc)
+    !
   end subroutine build_hkr
 
 
   !----------------------------------------------------------------------------------------!
   ! purpose: read the local self-energy from disk
   !----------------------------------------------------------------------------------------!
-  subroutine read_sigma_matsubara(Self)
-    complex(8),allocatable,dimension(:,:,:,:,:,:) :: Self
-    character(len=30)                             :: suffix
-    integer                                       :: ilat,ispin,iorb
-    real(8),dimension(:),allocatable              :: wm
-    call assert_shape(Self,[Nineq,Nspin,Nspin,Norb,Norb,Lmats],"read_sigma_matsubara","Self_ineq")
-    allocate(wm(Lmats))
-    wm = pi/beta*(2*arange(1,Lmats)-1)
-    if(master)then
-       do ispin=1,Nspin
-          do iorb=1,Norb
-             suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_iw.ed"
-             call read_data("LSigma"//trim(suffix),Self(:,ispin,ispin,iorb,iorb,:),wm)
-          enddo
-       enddo
-    endif
-  end subroutine read_sigma_matsubara
 
   subroutine read_sigma_real(Self)
-    complex(8),allocatable,dimension(:,:,:,:,:,:) :: Self
+    complex(8),allocatable,dimension(:,:,:,:,:,:) :: Self,Self_ineq
     character(len=30)                             :: suffix
-    integer                                       :: ilat,ispin,iorb
+    integer                                       :: ilat,ispin,iorb,ineq
     real(8),dimension(:),allocatable              :: wr
-    call assert_shape(Self,[Nineq,Nspin,Nspin,Norb,Norb,Lreal],"read_sigma_real","Self_ineq")
+    call assert_shape(Self,[Nlat,Nspin,Nspin,Norb,Norb,Lreal],"read_sigma_real","Self_ineq")
     allocate(wr(Lreal))
+    allocate(Self_ineq(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
     wr = linspace(wini,wfin,Lreal)
     if(master)then
+    do ilat=1,Nineq
        do ispin=1,Nspin
           do iorb=1,Norb
-             suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_realw.ed"
-             call read_data("LSigma"//trim(suffix),Self(:,ispin,ispin,iorb,iorb,:),wr)
+             suffix="_l"//reg(txtfy(iorb))//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_realw_ineq"//reg(txtfy(ilat,Npad=4))//".ed"
+             call sread("impSigma"//trim(suffix),wr,Self_ineq(ilat,ispin,ispin,iorb,iorb,:))
           enddo
        enddo
+    enddo
+    do ilat=1,Nlat
+     ineq = ilat2ineq(ilat)
+     Self(ilat,:,:,:,:,:) = Self_ineq(ineq,:,:,:,:,:)
+    enddo
     endif
   end subroutine read_sigma_real
 
@@ -317,7 +312,7 @@ contains
     type(rgb_color),dimension(:,:),allocatable :: colors
     integer                            :: Npts
     character(len=64)                  :: file
-	!
+    !
     !PRINT H(kx,Ry) ALONG A -pi:pi PATH
     if(master)write(LOGfile,*)"Solve H(kx,y,kz) along [-Z:Z]:"
     Npts=3
@@ -356,7 +351,7 @@ contains
     integer                             :: i,Idmin,Idmax,Itmin,Itmax
     logical                             :: pbc
     kx=kpoint(1)
-	kz=kpoint(3)
+    kz=kpoint(3)
     Hrk=zero
     Hmat=h0_rk_wsm(kx,kz,N)
     Tmat=t0_rk_wsm(N)
@@ -388,7 +383,7 @@ contains
     integer                    :: N
     complex(8),dimension(N,N)  :: H
     H = (Mh - e0*(cos(kx) + cos(kz)))*emat+&
-  		lambda*(sin(kx)*soxmat + sin(kz)*sozmat)+&
+  lambda*(sin(kx)*soxmat + sin(kz)*sozmat)+&
         BIA*BIAmat  + bx*bxmat + bz*bzmat
   end function h0_rk_wsm
 
@@ -437,6 +432,76 @@ contains
        enddo
     enddo
   end function select_block
+
+
+ !---------------------------------------------------------------------
+  !PURPOSE: GET A(k,w)
+  !---------------------------------------------------------------------
+  subroutine get_Akw()
+    integer,parameter                                       :: Lw=250
+    integer                                                 :: ik=0
+    integer                                                 :: ilat
+    integer                                                 :: iorb,jorb
+    integer                                                 :: ispin,jspin
+    complex(8),dimension(:,:,:,:,:,:),allocatable           :: Sreal_,Sreal
+    complex(8),dimension(:,:,:),allocatable                 :: Akreal
+    complex(8),dimension(:,:,:,:,:,:,:),allocatable         :: Gkreal
+    real(8)                                                 :: wr_(Lreal),wr(Lw)
+    real(8),dimension(:,:),allocatable                      :: Kpath,Kgrid
+    character(len=30)                                       :: suffix
+  !
+  !
+    if(master)then
+  !
+    print*,"Build A(k,w) using Sigma(w) interpolated"
+    wr_ = linspace(wini,wfin,Lreal)
+    wr  = linspace(-akrange,akrange,Lw)
+    allocate(kpath(3,3))
+    kpath(1,:)=[0,0,-1]*pi
+    kpath(2,:)=[0,0,0]*pi
+    kpath(3,:)=[0,0,1]*pi
+    if(allocated(Hkr))deallocate(Hkr)
+    Lk=(size(kpath,1)-1)*Nkpath
+    allocate(Hkr(Nlso,Nlso,Lk))
+    allocate(Gkreal(Lk,Nlat,Nspin,Nspin,Norb,Norb,Lw));Gkreal=zero
+    allocate(Akreal(Lk,Nlat,Lw));Akreal=zero
+    allocate(kgrid((size(kpath,1)-1)*Nkpath,size(kpath,2)))
+    !
+    call TB_build_kgrid(kpath,Nkpath,kgrid)
+    call TB_build_model(Hkr,wsm_edge_model,Nlat,Nso,kpath,Nkpath,pbc=PBC)
+    !
+    !
+    allocate(Sreal_(Nlat,Nspin,Nspin,Norb,Norb,Lreal));Sreal_=zero
+    call read_sigma_real(Sreal_)
+    allocate(Sreal(Nlat,Nspin,Nspin,Norb,Norb,Lw));Sreal=zero
+    !
+    do ilat=1,Nlat
+      do ispin=1,Nspin
+        do iorb=1,Norb
+          call cubic_spline(wr_,Sreal_(ilat,ispin,ispin,iorb,iorb,:),wr,Sreal(ilat,ispin,ispin,iorb,iorb,:))
+        enddo
+      enddo
+    enddo
+    !
+    call start_timer
+    do ik=1,Lk
+        call dmft_gk_realaxis(Hkr(:,:,ik),1d0,Gkreal(ik,:,:,:,:,:,:),Sreal)
+        call eta(ik,Lk)
+    enddo
+    call stop_timer
+    !
+    Akreal = zero
+    do ispin=1,Nspin
+      do iorb=1,Norb
+        Akreal = Akreal -dimag(Gkreal(:,:,ispin,ispin,iorb,iorb,:))/pi/Nspin/Norb
+      enddo
+    enddo
+    do ilat=1,Nlat
+      call splot3d("Akw_nso"//reg(txtfy(ilat))//".dat",kgrid(:,3),wr,Akreal(:,ilat,:))
+    enddo
+
+    endif
+end subroutine get_Akw
 
 
 end program ed_wsm_2d_edge
