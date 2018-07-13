@@ -461,7 +461,7 @@ contains
     allocate(kgrid((size(kpath,1)-1)*Nkpath,size(kpath,2)))
     !
     S0=zero
-    Zmats=zero
+    Zmats=eye(Nlso)
     !
     call TB_build_kgrid(kpath,Nkpath,kgrid)
     call TB_build_model(Hkr,wsm_edge_model,Nlat,Nso,kpath,Nkpath,pbc=PBC)
