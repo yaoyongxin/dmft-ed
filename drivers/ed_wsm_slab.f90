@@ -460,6 +460,8 @@ contains
     allocate(Akreal(Lk,Nlat,Lw));Akreal=zero
     allocate(kgrid((size(kpath,1)-1)*Nkpath,size(kpath,2)))
     !
+    S0=zero
+    !
     call TB_build_kgrid(kpath,Nkpath,kgrid)
     call TB_build_model(Hkr,wsm_edge_model,Nlat,Nso,kpath,Nkpath,pbc=PBC)
     !
