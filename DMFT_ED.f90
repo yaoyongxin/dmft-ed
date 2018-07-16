@@ -80,7 +80,7 @@ MODULE DMFT_ED
        ed_solve
 
 
-  USE ED_CHI2FIT,  only: ed_chi2_fitgf
+  USE ED_FIT_CHI2,  only: ed_chi2_fitgf
 
 
 END MODULE DMFT_ED

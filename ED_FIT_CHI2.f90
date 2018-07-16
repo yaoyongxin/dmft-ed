@@ -1,4 +1,4 @@
-MODULE ED_CHI2FIT
+MODULE ED_FIT_CHI2
   USE SF_CONSTANTS
   USE SF_OPTIMIZE, only:fmin_cg,fmin_cgplus,fmin_cgminimize
   USE SF_LINALG,   only:eye,zeye,inv,inv_her
@@ -379,17 +379,17 @@ contains
   !*****************************************************************************
   !*****************************************************************************
   !normal ED_bath
-  include "ED_CHI2FIT/fitgf_normal_normal.f90"
-  include "ED_CHI2FIT/fitgf_normal_superc.f90"
-  include "ED_CHI2FIT/fitgf_normal_nonsu2.f90"
+  include "ED_FIT_CHI2/fitgf_normal_normal.f90"
+  include "ED_FIT_CHI2/fitgf_normal_superc.f90"
+  include "ED_FIT_CHI2/fitgf_normal_nonsu2.f90"
 
   !hybrid ED_bath
-  include "ED_CHI2FIT/fitgf_hybrid_normal.f90"  
-  include "ED_CHI2FIT/fitgf_hybrid_superc.f90"  
-  include "ED_CHI2FIT/fitgf_hybrid_nonsu2.f90"
+  include "ED_FIT_CHI2/fitgf_hybrid_normal.f90"  
+  include "ED_FIT_CHI2/fitgf_hybrid_superc.f90"  
+  include "ED_FIT_CHI2/fitgf_hybrid_nonsu2.f90"
 
   !replica ED_bath
-  include "ED_CHI2FIT/fitgf_replica.f90"
+  include "ED_FIT_CHI2/fitgf_replica.f90"
   !*****************************************************************************
   !*****************************************************************************
   !*****************************************************************************
@@ -769,4 +769,4 @@ contains
   end subroutine ed_fit_bath_sites_superc_mb_mpi
 #endif
 
-end MODULE ED_CHI2FIT
+end MODULE ED_FIT_CHI2

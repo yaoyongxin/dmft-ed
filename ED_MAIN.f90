@@ -3,12 +3,11 @@ module ED_MAIN
   USE ED_VARS_GLOBAL
   USE ED_EIGENSPACE, only: state_list,es_delete_espace
   USE ED_AUX_FUNX
-  USE ED_IO,only: ed_print_impSigma
   USE ED_SETUP
   USE ED_BATH
   USE ED_HAMILTONIAN_MATVEC
+  USE ED_GF_SHARED,only: ed_greens_functions_set_MPI,ed_greens_functions_del_MPI
   USE ED_GREENS_FUNCTIONS
-  USE ED_CHI_FUNCTIONS
   USE ED_OBSERVABLES
   USE ED_DIAG
   USE SF_IOTOOLS, only: str,reg
@@ -287,7 +286,7 @@ contains
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call buildgf_impurity()             !build the one-particle impurity Green's functions  & Self-energy
-    if(chiflag)call buildchi_impurity() !build the local susceptibilities (spin [todo charge])
+    call buildchi_impurity()            !build the local susceptibilities (spin [todo charge])
     call observables_impurity()         !obtain impurity observables as thermal averages.          
     call local_energy_impurity()        !obtain the local energy of the effective impurity problem.
     !
@@ -334,13 +333,12 @@ contains
     call ed_hamiltonian_matvec_set_MPI(MpiComm)
     call ed_diag_set_MPI(MpiComm)
     call ed_greens_functions_set_MPI(MpiComm)
-    call ed_chi_functions_set_MPI(MpiComm)
     call ed_observables_set_MPI(MpiComm)    
     !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call buildgf_impurity()             !build the one-particle impurity Green's functions  & Self-energy
-    if(chiflag)call buildchi_impurity() !build the local susceptibilities (spin [todo charge])
+    call buildchi_impurity()            !build the local susceptibilities (spin [todo charge])
     call observables_impurity()         !obtain impurity observables as thermal averages.          
     call local_energy_impurity()        !obtain the local energy of the effective impurity problem.
     !
@@ -351,7 +349,6 @@ contains
     call ed_hamiltonian_matvec_del_MPI()
     call ed_diag_del_MPI()
     call ed_greens_functions_del_MPI()
-    call ed_chi_functions_del_MPI()    
     call ed_observables_del_MPI()
     nullify(spHtimesV_cc)
   end subroutine ed_solve_single_mpi
