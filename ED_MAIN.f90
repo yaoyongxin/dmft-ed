@@ -372,13 +372,15 @@ contains
   !+-----------------------------------------------------------------------------+!
   !                          INEQUIVALENT SITES                                   !
   !+-----------------------------------------------------------------------------+!
-  subroutine ed_solve_lattice(bath,Hloc,Uloc_ii,Ust_ii,Jh_ii)
+  subroutine ed_solve_lattice(bath,Hloc,Uloc_ii,Ust_ii,Jh_ii,Jp_ii,Jx_ii)
     !inputs
     real(8)          :: bath(:,:) ![Nlat][Nb]
     complex(8)       :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     real(8),optional :: Uloc_ii(size(bath,1),Norb)
     real(8),optional :: Ust_ii(size(bath,1))
     real(8),optional :: Jh_ii(size(bath,1))
+    real(8),optional :: Jp_ii(size(bath,1))
+    real(8),optional :: Jx_ii(size(bath,1))
     ! 
     integer          :: i,j,ilat,iorb,jorb,ispin,jspin
     integer          :: Nsites
@@ -464,8 +466,10 @@ contains
        !
        !If required set the local value of U per each site
        if(present(Uloc_ii))Uloc(1:Norb) = Uloc_ii(ilat,1:Norb)
-       if(present(Ust_ii)) Ust          = Ust_ii(ilat) 
-       if(present(Jh_ii))  Jh           = Jh_ii(ilat) 
+       if(present(Ust_ii)) Ust          = Ust_ii(ilat)
+       if(present(Jh_ii))  Jh           = Jh_ii(ilat)
+       if(present(Jp_ii))  Jp           = Jp_ii(ilat)
+       if(present(Jx_ii))  Jx           = Jx_ii(ilat)
        !
        !Solve the impurity problem for the ilat-th site
        neigen_sector(:)   = neigen_sectorii(ilat,:)
@@ -504,7 +508,7 @@ contains
 
   !FALL BACK: DO A VERSION THAT DOES THE SITES IN PARALLEL USING SERIAL ED CODE
 #ifdef _MPI
-  subroutine ed_solve_lattice_mpi(MpiComm,bath,Hloc,Uloc_ii,Ust_ii,Jh_ii)
+  subroutine ed_solve_lattice_mpi(MpiComm,bath,Hloc,Uloc_ii,Ust_ii,Jh_ii,Jp_ii,Jx_ii)
     integer          :: MpiComm
     !inputs
     real(8)          :: bath(:,:) ![Nlat][Nb]
@@ -512,6 +516,8 @@ contains
     real(8),optional :: Uloc_ii(size(bath,1),Norb)
     real(8),optional :: Ust_ii(size(bath,1))
     real(8),optional :: Jh_ii(size(bath,1))
+    real(8),optional :: Jp_ii(size(bath,1))
+    real(8),optional :: Jx_ii(size(bath,1))
     !MPI  auxiliary vars
     complex(8)       :: Smats_tmp(size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
     complex(8)       :: Sreal_tmp(size(bath,1),Nspin,Nspin,Norb,Norb,Lreal)
@@ -627,8 +633,10 @@ contains
        !
        !If required set the local value of U per each site
        if(present(Uloc_ii))Uloc(1:Norb) = Uloc_ii(ilat,1:Norb)
-       if(present(Ust_ii)) Ust          = Ust_ii(ilat) 
-       if(present(Jh_ii))  Jh           = Jh_ii(ilat) 
+       if(present(Ust_ii)) Ust          = Ust_ii(ilat)
+       if(present(Jh_ii))  Jh           = Jh_ii(ilat)
+       if(present(Jp_ii))  Jp           = Jp_ii(ilat)
+       if(present(Jx_ii))  Jx           = Jx_ii(ilat)
        !
        !Solve the impurity problem for the ilat-th site
        neigen_sector(:)   = neigen_sectorii(ilat,:)
