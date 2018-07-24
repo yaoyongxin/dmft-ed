@@ -76,6 +76,7 @@ program ed_LVO_hetero
   complex(8),allocatable,dimension(:,:,:,:,:)         :: Nmatrix_nn
   complex(8),allocatable,dimension(:,:,:,:,:,:)       :: Gloc
   !variable interaction
+  real(8)                                             :: Ufactor
   real(8)   ,allocatable,dimension(:,:)               :: Ulocvec
   real(8)   ,allocatable,dimension(:)                 :: Ustvec,Jhvec,Jpvec,Jxvec
 
@@ -169,37 +170,16 @@ program ed_LVO_hetero
      allocate(Jxvec(Nlayer))       ;Jxvec=0d0
      allocate(Jpvec(Nlayer))       ;Jpvec=0d0
      !
-     if(fullfree)then
-        Ulocvec(1,:)=Uloc/4.d0;Ulocvec(2,:)=Uloc/4.d0
-        Ustvec(1)=Ust/4.d0;Ustvec(2)=Ust/4.d0
-        Jhvec(1)=Jh/4.d0;Jxvec(1)=Jx/4.d0;Jpvec(1)=Jp/4.d0
-        Jhvec(2)=Jh/4.d0;Jxvec(2)=Jx/4.d0;Jpvec(2)=Jp/4.d0
-        do i=3,Nlayer-2
-           Ulocvec(i,:)=Uloc
-           Ustvec(i)=Ust
-           Jhvec(i)=Jh
-           Jxvec(i)=Jx
-           Jpvec(i)=Jp
-        enddo
-        Ulocvec(Nlayer-1,:)=Uloc/4.d0;Ulocvec(Nlayer,:)=Uloc/4.d0
-        Ustvec(Nlayer-1)=Ust/4.d0;Ustvec(Nlayer)=Ust/4.d0
-        Jhvec(Nlayer-1)=Jh/4.d0;Jxvec(Nlayer-1)=Jx/4.d0;Jpvec(Nlayer-1)=Jp/4.d0
-        Jhvec(Nlayer)=Jh/4.d0;Jxvec(Nlayer)=Jx/4.d0;Jpvec(Nlayer)=Jp/4.d0
-     else
-        Ulocvec(1,:)=Uloc/4.d0
-        Ustvec(1)=Ust/4.d0
-        Jhvec(1)=Jh/4.d0;Jxvec(1)=Jx/4.d0;Jpvec(1)=Jp/4.d0
-        do i=2,Nlayer-1
-           Ulocvec(i,:)=Uloc
-           Ustvec(i)=Ust
-           Jhvec(i)=Jh
-           Jxvec(i)=Jx
-           Jpvec(i)=Jp
-        enddo
-        Ulocvec(Nlayer,:)=Uloc/4.d0
-        Ustvec(Nlayer)=Ust/4.d0
-        Jhvec(Nlayer)=Jh/4.d0;Jxvec(Nlayer)=Jx/4.d0;Jpvec(Nlayer)=Jp/4.d0
-     endif
+     do ilayer=1,Nlayer
+        Ufactor=1.d0
+        if((.not.fullfree).and.(i>=Nlayer-1))Ufactor=4.d0
+        if((fullfree).and.(i>=Nlayer-3))Ufactor=4.d0
+        Ulocvec(ilayer,:)=Uloc/Ufactor
+        Ustvec(ilayer)=Ust/Ufactor
+        Jhvec(ilayer)=Jh/Ufactor
+        Jxvec(ilayer)=Jx/Ufactor
+        Jpvec(ilayer)=Jp/Ufactor
+     enddo
   endif
   !
   NlNsNo=Nlat*Nspin*Norb
@@ -725,18 +705,20 @@ contains
           R2 = [ 0.d0, 1.d0, 0.d0 ]*10.51752790
           R3 = [ 0.d0, 0.d0, 1.d0 ]*44.03664083
           !
-          Ruc(1,:)  =  0.499403768*R1-0.000108637*R2+0.084242439*R3
-          Ruc(2,:)  =  0.000595626*R1+0.499891331*R2+0.084242420*R3
-          Ruc(3,:)  =  0.496494806*R1-0.084242420*R2+0.254912948*R3
-          Ruc(4,:)  =  0.003504539*R1+0.494964789*R2+0.254912914*R3
-          Ruc(5,:)  =  0.507963153*R1-0.003156586*R2+0.425011256*R3
-          Ruc(6,:)  = -0.007963690*R1+0.496843623*R2+0.425011219*R3
-          Ruc(7,:)  =  0.502258115*R1+0.000860225*R2+0.589244281*R3
-          Ruc(8,:)  = -0.002258455*R1+0.500860229*R2+0.589244274*R3
-          Ruc(9,:)  =  0.497507421*R1+0.006573189*R2+0.754327285*R3
-          Ruc(10,:) =  0.002492352*R1+0.506573162*R2+0.754327267*R3
-          Ruc(11,:) =  0.512167869*R1+0.005752773*R2+0.919307364*R3
-          Ruc(12,:) = -0.012168019*R1+0.505752882*R2+0.919307361*R3
+          ! Vanadium
+          Ruc(1,:)  =  0.507963153*R1-0.003156586*R2+0.425011256*R3
+          Ruc(2,:)  = -0.007963690*R1+0.496843623*R2+0.425011219*R3
+          Ruc(3,:)  =  0.502258115*R1+0.000860225*R2+0.589244281*R3
+          Ruc(4,:)  = -0.002258455*R1+0.500860229*R2+0.589244274*R3
+          Ruc(5,:)  =  0.497507421*R1+0.006573189*R2+0.754327285*R3
+          Ruc(6,:)  =  0.002492352*R1+0.506573162*R2+0.754327267*R3
+          Ruc(7,:)  =  0.512167869*R1+0.005752773*R2+0.919307364*R3
+          Ruc(8,:)  = -0.012168019*R1+0.505752882*R2+0.919307361*R3
+          ! Titanium
+          Ruc(9,:)  =  0.499403768*R1-0.000108637*R2+0.084242439*R3
+          Ruc(10,:) =  0.000595626*R1+0.499891331*R2+0.084242420*R3
+          Ruc(11,:) =  0.496494806*R1-0.084242420*R2+0.254912948*R3
+          Ruc(12,:) =  0.003504539*R1+0.494964789*R2+0.254912914*R3
           !
           allocate(Nkvec(3));Nkvec=0;Nkvec=[Nk,Nk,Nk]
           Lk=Nk*Nk*Nk
@@ -846,6 +828,7 @@ contains
     else
        Hloc_lso=Hloc
     endif
+    where(abs((Hloc_lso))<1.d-8)Hloc_lso=zero
     Hloc_nnn=lso2nnn_reshape(Hloc_lso,Nlat,Nspin,Norb)
     call TB_write_Hloc(Hloc_lso,reg(fileHloc//".used"))
     call TB_write_Hloc(U,reg("rotation.used"))
@@ -987,13 +970,17 @@ contains
              !
           elseif(geometry=="hetero") then
              !
-          if(hetero_kind=="LVOSTO")then
+             if(hetero_kind=="LVOSTO")then
                 !
                 fileDR=reg("dipole_LVOSTO.dat")
                 !
              elseif(hetero_kind=="LVOvac")then
                 !
                 fileDR=reg("dipole_LVOvac.dat")
+                !
+             elseif(hetero_kind=="LVOSTO_Ti")then
+                !
+                fileDR=reg("dipole_LVOSTO_Ti.dat")
                 !
              endif
              !
@@ -1800,15 +1787,17 @@ contains
              correction=0d0
              do iorb=1,Norb
                 do ispin=1,Nspin
-                   Grad_nn(1,ispin,ispin,iorb,iorb)=Eloc_L
-                   Grad_nn(2,ispin,ispin,iorb,iorb)=Eloc_L
-                   do ilayer=2,Nlayer-1
-                      if(ilayer==3)correction=0.15
+                   ! Gradient on Vanadium
+                   do ilayer=1,(Nlat/2-2)
+                      if(ilayer==2)correction=0.15
                       Grad_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=potential*(ilayer-1-1) + correction
                       Grad_nn(2*ilayer,ispin,ispin,iorb,iorb)  =potential*(ilayer-1-1) + correction
                    enddo
-                   Grad_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=Eloc_R
-                   Grad_nn(2*ilayer,ispin,ispin,iorb,iorb)=Eloc_R
+                   ! Gradient on Titanium
+                   Grad_nn(9,ispin,ispin,iorb,iorb)=Eloc_R
+                   Grad_nn(10,ispin,ispin,iorb,iorb)=Eloc_R
+                   Grad_nn(11,ispin,ispin,iorb,iorb)=Eloc_L
+                   Grad_nn(12,ispin,ispin,iorb,iorb)=Eloc_L
                 enddo
              enddo
              !
