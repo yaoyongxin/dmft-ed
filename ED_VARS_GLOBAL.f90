@@ -95,7 +95,7 @@ MODULE ED_VARS_GLOBAL
   !Variables for DIAGONALIZATION
   !PRIVATE
   !=========================================================  
-  type(sparse_matrix_ll)                             :: spH0
+  type(sparse_matrix_csr)                            :: spH0
   procedure(cc_sparse_HxV),pointer                   :: spHtimesV_cc=>null()
 
 
@@ -114,7 +114,7 @@ MODULE ED_VARS_GLOBAL
   real(8)                                            :: zeta_function
 
 
-  
+
   !Impurity Green's function and Self-Energies: (Nspin,Nspin,Norb,Norb,:)
   !PRIVATE (now public but accessible thru routine)
   !=========================================================

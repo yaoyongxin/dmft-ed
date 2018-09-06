@@ -271,7 +271,7 @@ contains
     !
 #ifdef _MPI
     if(MpiStatus)then
-       call sp_set_mpi_ll(MpiComm,spH0,mpiIstart,mpiIend,mpiIshift)
+       call sp_set_mpi_matrix(MpiComm,spH0,mpiIstart,mpiIend,mpiIshift)
        call sp_init_matrix(MpiComm,spH0,Dim)
     else
        call sp_init_matrix(spH0,Dim)
@@ -349,17 +349,13 @@ contains
     integer                         :: Nloc
     complex(8),dimension(Nloc)      :: v
     complex(8),dimension(Nloc)      :: Hv
-    integer                         :: i
-    type(sparse_element_ll),pointer :: c
+    integer                         :: i,j
     Hv=zero
     do i=1,Nloc
-       c => spH0%row(i)%root%next       
-       matmul: do while(associated(c))
-          Hv(i) = Hv(i) + c%cval*v(c%col)
-          c => c%next
+       matmul: do j=1,spH0%row(i)%Size
+          Hv(i) = Hv(i) + spH0%row(i)%vals(j)*v(spH0%row(i)%cols(j))
        end do matmul
     end do
-    nullify(c)
   end subroutine spMatVec_cc
 
 
@@ -368,11 +364,11 @@ contains
     integer                             :: Nloc
     complex(8),dimension(Nloc)          :: v
     complex(8),dimension(Nloc)          :: Hv
-    integer                             :: i
-    integer                             :: N
+    integer                             :: i,j
+    integer                             :: N,MpiShift
     complex(8),dimension(:),allocatable :: vin
-    integer,allocatable,dimension(:)    :: SendCounts,Displs
-    type(sparse_element_ll),pointer     :: c
+    integer,allocatable,dimension(:)    :: Counts,Offset
+    !
     !
     if(MpiComm==MPI_UNDEFINED)stop "spHtimesV_mpi_cc ERRROR: MpiComm = MPI_UNDEFINED"
     if(.not.MpiStatus)stop "spMatVec_mpi_cc ERROR: MpiStatus = F"
@@ -383,30 +379,36 @@ contains
     N = 0
     call AllReduce_MPI(MpiComm,Nloc,N)
     !
-    MpiQ = N/MpiSize
-    MpiR = 0
-    if(MpiRank==(MpiSize-1))MpiR=mod(N,MpiSize)
+    !Evaluate the local contribution: Hv_loc = Hloc*v
+    MpiShift = spH0%Ishift
+    Hv=0d0
+    do i=1,Nloc
+       local: do j=1,spH0%loc(i)%Size
+          Hv(i) = Hv(i) + spH0%loc(i)%vals(j)*v(spH0%loc(i)%cols(j)-MpiShift)
+       end do local
+    end do
     !
-    allocate(SendCounts(0:MpiSize-1),displs(0:MpiSize-1))
-    SendCounts(0:)        = mpiQ
-    SendCounts(MpiSize-1) = mpiQ+mod(N,MpiSize)
-    forall(i=0:MpiSize-1)Displs(i)=i*mpiQ
-
+    allocate(Counts(0:MpiSize-1)) ; Counts(0:)=0
+    allocate(Offset(0:MpiSize-1)) ; Offset(0:)=0
+    !
+    Counts(0:)        = N/MpiSize
+    Counts(MpiSize-1) = N/MpiSize+mod(N,MpiSize)
+    !
+    do i=1,MpiSize-1
+       Offset(i) = Counts(i-1) + Offset(i-1)
+    enddo
+    !
     allocate(vin(N)) ; vin = zero
     call MPI_Allgatherv(&
          v(1:Nloc),Nloc,MPI_Double_Complex,&
-         vin      ,SendCounts,Displs,MPI_Double_Complex,&
+         vin      ,Counts,Offset,MPI_Double_Complex,&
          MpiComm,MpiIerr)
     !
-    Hv=zero
     do i=1,Nloc                 !==spH0%Nrow
-       c => spH0%row(i)%root%next       
-       matmul: do while(associated(c))
-          Hv(i) = Hv(i) + c%cval*vin(c%col)
-          c => c%next
+       matmul: do j=1,spH0%row(i)%Size
+          Hv(i) = Hv(i) + spH0%row(i)%vals(j)*vin(spH0%row(i)%cols(j))
        end do matmul
     end do
-    nullify(c)
     !
   end subroutine spMatVec_mpi_cc
 #endif
@@ -508,7 +510,7 @@ contains
     complex(8),dimension(Nloc)             :: Hv
     integer                                :: N
     complex(8),dimension(:),allocatable    :: vin
-    integer,allocatable,dimension(:)       :: SendCounts,Displs
+    integer,allocatable,dimension(:)       :: Counts,Offset
     integer                                :: isector
     integer,dimension(Nlevels)             :: ib
     integer,dimension(Ns)                  :: ibup,ibdw
@@ -555,15 +557,21 @@ contains
     N=0
     call AllReduce_MPI(MpiComm,Nloc,N)
     !
-    allocate(SendCounts(0:MpiSize-1),displs(0:MpiSize-1))
-    SendCounts(0:)        = mpiQ
-    SendCounts(MpiSize-1) = mpiQ+mod(N,MpiSize)
-    forall(i=0:MpiSize-1)Displs(i)=i*mpiQ
+    !Reconstruct Vin and get the displacements for AllGatherV call
+    allocate(Counts(0:MpiSize-1)) ; Counts(0:)=0
+    allocate(Offset(0:MpiSize-1)) ; Offset(0:)=0
+    !
+    Counts(0:)        = N/MpiSize
+    Counts(MpiSize-1) = N/MpiSize+mod(N,MpiSize)
+    !
+    do i=1,MpiSize-1
+       Offset(i) = Counts(i-1) + Offset(i-1)
+    enddo
     !
     allocate(vin(N)); vin  = zero
     call MPI_Allgatherv(&
          v(1:Nloc),Nloc,MPI_Double_Complex,&
-         vin,SendCounts,Displs,MPI_Double_Complex,&
+         vin,Counts,Offset,MPI_Double_Complex,&
          MpiComm,MpiIerr)
     !
     Hv=zero
