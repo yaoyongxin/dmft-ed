@@ -37,11 +37,6 @@ program ed_ah
 
   Nso=1
 
-  !setup solver
-  Nb=get_bath_dimension()
-  allocate(bath(Nb))
-  allocate(bathold(Nb))
-  call ed_init_solver(bath)
 
 
   !Allocate Weiss Field:
@@ -65,6 +60,13 @@ program ed_ah
        Nkvec=[Nx,Nx])
 
 
+  !setup solver
+  Nb=get_bath_dimension()
+  allocate(bath(Nb))
+  allocate(bathold(Nb))
+  call ed_init_solver(bath,Hloc)
+
+
   !DMFT loop
   iloop=0;converged=.false.
   do while(.not.converged.AND.iloop<nloop)
@@ -80,13 +82,12 @@ program ed_ah
 
 
      !Compute the local gfs:
-     call dmft_gloc_matsubara_superc(Hk,Wt,Gmats,Smats,iprint=1)
+     call dmft_gloc_matsubara(Hk,Wt,Gmats,Smats)
 
-     if(cg_scheme=='weiss')then
-        call dmft_weiss_superc(Gmats,Smats,Delta,Hloc,iprint=1)
-     else
-        call dmft_delta_superc(Gmats,Smats,Delta,Hloc,iprint=1)
-     endif
+     call dmft_self_consistency(&
+          Gmats(1,:,:,:,:,:),Gmats(2,:,:,:,:,:),&
+          Smats(1,:,:,:,:,:),Smats(2,:,:,:,:,:),&
+          Delta,Hloc,trim(cg_scheme))
 
      !Perform the SELF-CONSISTENCY by fitting the new bath
      call ed_chi2_fitgf(delta,bath,ispin=1)
@@ -107,8 +108,13 @@ program ed_ah
   enddo
 
   !Compute the local gfs:
-  call dmft_gloc_realaxis_superc(Hk,Wt,Greal,Sreal,iprint=1)
+  call dmft_gloc_realaxis(Hk,Wt,Greal,Sreal)
 
+  call dmft_print_gf_matsubara(Gmats(1,:,:,:,:,:),"Gloc",iprint=1)
+  call dmft_print_gf_matsubara(Gmats(2,:,:,:,:,:),"Floc",iprint=1)
+  call dmft_print_gf_realaxis(Greal(1,:,:,:,:,:),"Gloc",iprint=1)
+  call dmft_print_gf_realaxis(Greal(2,:,:,:,:,:),"Floc",iprint=1)
+  
   !Compute the Kinetic Energy:
   call dmft_kinetic_energy(Hk(1,:,:,:),Wt,Smats(1,:,:,:,:,:),Smats(2,:,:,:,:,:))
 

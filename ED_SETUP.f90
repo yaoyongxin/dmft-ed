@@ -11,29 +11,36 @@ MODULE ED_SETUP
   implicit none
   private
 
-  interface print_state_vector
-     module procedure print_state_vector_ivec
-     module procedure print_state_vector_ivec_ud
-     module procedure print_state_vector_int
-  end interface print_state_vector
-
   public :: get_Nsectors
+  !
   public :: setup_ed_dimensions
   public :: init_ed_structure
+  !
   public :: setup_pointers_normal
   public :: setup_pointers_superc
   public :: setup_pointers_nonsu2
+  !
   public :: build_sector
   public :: build_sector_2
   public :: delete_sector
+  !
   public :: bdecomp
   public :: bjoin
-  public :: flip_state
-  public :: print_state_vector
+  !
   public :: c,cdg
+  !
   public :: binary_search
+  !
+  public :: flip_state
   public :: twin_sector_order
   public :: get_twin_sector
+  !
+#ifdef _MPI
+  public :: scatter_vector_MPI
+  public :: gather_vector_MPI
+  public :: allgather_vector_MPI
+#endif
+
 
 
 
@@ -835,7 +842,7 @@ contains
           do ibath=0,Nbath
              do iorb=1,Norb
                 twoLz = twoLz + 2 * Lzdiag(iorb) * ivec(iorb+Norb*ibath)  &
-                              + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
+                     + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
              enddo
           enddo
           twoSz = (sum(ivec) - sum(jvec))
@@ -924,7 +931,7 @@ contains
                 do ibath=0,Nbath
                    do iorb=1,Norb
                       twoLz_ = twoLz_ + 2 * Lzdiag(iorb) * ivec(iorb+Norb*ibath)  &
-                                      + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
+                           + 2 * Lzdiag(iorb) * jvec(iorb+Norb*ibath)
                    enddo
                 enddo
                 twoSz_ = (sum(ivec) - sum(jvec))
@@ -972,68 +979,68 @@ contains
     integer                   :: ivec(Ns),jvec(Ns)
 
 
-       stride=0.d0
-       nt  = getN(isector)
-       dim = getDim(isector)
+    stride=0.d0
+    nt  = getN(isector)
+    dim = getDim(isector)
 
-       write(123,*)
-       write(123,'(A20,I5)') "sector N",nt
-       write(123,'(A20,I5)') "sector dim(N)",dim
-       write(123,*)
+    write(123,*)
+    write(123,'(A20,I5)') "sector N",nt
+    write(123,'(A20,I5)') "sector dim(N)",dim
+    write(123,*)
 
-       write(124,*)
-       write(124,'(A20,I5)') "sector N",nt
-       write(124,'(A20,I5)') "sector dim(N)",dim
+    write(124,*)
+    write(124,'(A20,I5)') "sector N",nt
+    write(124,'(A20,I5)') "sector dim(N)",dim
 
-       if(allocated(Jz))deallocate(Jz);allocate(Jz(dim));Jz=0.d0
+    if(allocated(Jz))deallocate(Jz);allocate(Jz(dim));Jz=0.d0
 
-       dim=0
-       !mi guardo tutti i possibili valori di nup,ndw 
-       !anche quelli con la densità diversa da quella del settore
-       do idw=0,2**Ns-1
-          jvec = bdecomp(idw,Ns)
-          do iup=0,2**Ns-1
-             ivec = bdecomp(iup,Ns)
-             !ivec e jvec sono la decomposizione in vettore
-             !qui controllo la densità che ho ottenuto con lo specifico vettore
-             nt_  = sum(ivec) + sum(jvec)
-             Lz_tot=0.d0;Sz_tot=0.d0
-             do ibath=0,Nbath
-                Lz_tot = Lz_tot + 1.d0 * ivec(1+Norb*ibath) + 1.d0 * jvec(1+Norb*ibath)
-                Lz_tot = Lz_tot - 1.d0 * ivec(2+Norb*ibath) - 1.d0 * jvec(2+Norb*ibath)
-             enddo
-             Sz_tot = 0.5*(sum(ivec) - sum(jvec))
-
-             !se la densità è quella del settore metto lo stato in rappresentazione decimale dentro la mappa
-             if(nt_ == nt)then
-                dim=dim+1
-                Jz(dim)=(Lz_tot+Sz_tot)
-                !write(123,'(3I3,4X,3I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
-                !write(123,'(6I3,4X,6I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
-                write(123,'(9I3,4X,9I3,4X,3(1F5.2,4X),9I5)')ivec,jvec,Lz_tot,Sz_tot,Jz(dim),dim
-             endif
+    dim=0
+    !mi guardo tutti i possibili valori di nup,ndw 
+    !anche quelli con la densità diversa da quella del settore
+    do idw=0,2**Ns-1
+       jvec = bdecomp(idw,Ns)
+       do iup=0,2**Ns-1
+          ivec = bdecomp(iup,Ns)
+          !ivec e jvec sono la decomposizione in vettore
+          !qui controllo la densità che ho ottenuto con lo specifico vettore
+          nt_  = sum(ivec) + sum(jvec)
+          Lz_tot=0.d0;Sz_tot=0.d0
+          do ibath=0,Nbath
+             Lz_tot = Lz_tot + 1.d0 * ivec(1+Norb*ibath) + 1.d0 * jvec(1+Norb*ibath)
+             Lz_tot = Lz_tot - 1.d0 * ivec(2+Norb*ibath) - 1.d0 * jvec(2+Norb*ibath)
           enddo
+          Sz_tot = 0.5*(sum(ivec) - sum(jvec))
+
+          !se la densità è quella del settore metto lo stato in rappresentazione decimale dentro la mappa
+          if(nt_ == nt)then
+             dim=dim+1
+             Jz(dim)=(Lz_tot+Sz_tot)
+             !write(123,'(3I3,4X,3I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
+             !write(123,'(6I3,4X,6I3,4X,3(1F5.2,4X))')ivec,jvec,Lz_tot,Sz_tot,Jz(dim)
+             write(123,'(9I3,4X,9I3,4X,3(1F5.2,4X),9I5)')ivec,jvec,Lz_tot,Sz_tot,Jz(dim),dim
+          endif
        enddo
-       !
-       ! algorithm
-       if(nt==0.or.nt==2*Ns)then
-          jzv=0
-       else
-          shift=0.
-          if(nt<=Nbath+1)shift=Nbath-nt+1
-          if(nt>=2*Ns-Nbath)shift=Nbath-2*Ns+nt+1
-          jzv = 5/2. +(5/2.*Nbath) -(1/2.)*abs(nt-Ns)-shift
-       endif
-       !
-       write(124,*)
-       write(124,*)"-----------------------------"
-       write(124,'(2(A20,3X,1F5.2),30F5.2)')"maxval(Jz)",maxval(Jz),"algorithm",Jzv
-       write(124,*)
-       write(124,'(2(A20,3X,1F5.2))')"minval(Jz)",minval(Jz)
-       write(124,*)
-       write(124,'(2(A20,3X,1I5))')"degeneracy",int(2.d0*maxval(Jz))+1
-       write(124,*)"-----------------------------"
-       write(124,*)
+    enddo
+    !
+    ! algorithm
+    if(nt==0.or.nt==2*Ns)then
+       jzv=0
+    else
+       shift=0.
+       if(nt<=Nbath+1)shift=Nbath-nt+1
+       if(nt>=2*Ns-Nbath)shift=Nbath-2*Ns+nt+1
+       jzv = 5/2. +(5/2.*Nbath) -(1/2.)*abs(nt-Ns)-shift
+    endif
+    !
+    write(124,*)
+    write(124,*)"-----------------------------"
+    write(124,'(2(A20,3X,1F5.2),30F5.2)')"maxval(Jz)",maxval(Jz),"algorithm",Jzv
+    write(124,*)
+    write(124,'(2(A20,3X,1F5.2))')"minval(Jz)",minval(Jz)
+    write(124,*)
+    write(124,'(2(A20,3X,1I5))')"degeneracy",int(2.d0*maxval(Jz))+1
+    write(124,*)"-----------------------------"
+    write(124,*)
   end subroutine build_sector_2
 
   subroutine delete_sector(isector,Hup)!,Hdw)
@@ -1356,67 +1363,124 @@ contains
 
 
 
+#ifdef _MPI
+  !! Scatter V into the arrays Vloc on each thread: sum_threads(size(Vloc)) must be equal to size(v)
+  subroutine scatter_vector_MPI(MpiComm,v,vloc)
+    integer                          :: MpiComm
+    complex(8),dimension(:)          :: v    !size[N]
+    complex(8),dimension(:)          :: vloc !size[Nloc]
+    integer                          :: i,irank,Nloc,N
+    integer,dimension(:),allocatable :: Counts,Offset
+    integer                          :: MpiSize,MpiIerr
+    logical                          :: MpiMaster
+    !
+    if( MpiComm == MPI_UNDEFINED ) stop "scatter_vector_MPI error: MpiComm == MPI_UNDEFINED"
+    !
+    MpiSize   = get_size_MPI(MpiComm)
+    MpiMaster = get_master_MPI(MpiComm)
+    !
+    Nloc = size(Vloc)
+    N = 0
+    call AllReduce_MPI(MpiComm,Nloc,N)
+    if(MpiMaster.AND.N /= size(V)) stop "scatter_vector_MPI error: size(V) != Mpi_Allreduce(Nloc)"
+    !
+    allocate(Counts(0:MpiSize-1)) ; Counts=0
+    allocate(Offset(0:MpiSize-1)) ; Offset=0
+    !
+    !Get Counts;
+    call MPI_AllGather(Nloc,1,MPI_INTEGER,Counts,1,MPI_INTEGER,MpiComm,MpiIerr)
+    !
+    !Get Offset:
+    Offset(0)=0
+    do i=1,MpiSize-1
+       Offset(i) = Offset(i-1) + Counts(i-1)
+    enddo
+    !
+    Vloc=0
+    call MPI_Scatterv(V,Counts,Offset,MPI_DOUBLE_COMPLEX,Vloc,Nloc,MPI_DOUBLE_COMPLEX,0,MpiComm,MpiIerr)
+    !
+    return
+  end subroutine scatter_vector_MPI
 
-  !+------------------------------------------------------------------+
-  !PURPOSE  : print a state vector |{up}>|{dw}>
-  !+------------------------------------------------------------------+
-  subroutine print_state_vector_ivec(ivec,unit)
-    integer,intent(in) :: ivec(:)
-    integer,optional   :: unit
-    integer            :: unit_
-    integer            :: i,j,Ntot
-    character(len=2)   :: fbt
-    character(len=16)  :: fmt
-    unit_=6;if(present(unit))unit_=unit
-    Ntot = size(ivec)
-    write(fbt,'(I2.2)')Ntot
-    fmt="(B"//adjustl(trim(fbt))//"."//adjustl(trim(fbt))//")"
-    i= bjoin(ivec,Ntot)
-    write(unit_,"(I9,1x,A1)",advance="no")i,"|"
-    write(unit_,"(10I1)",advance="no")(ivec(j),j=1,Ntot)
-    write(unit_,"(A4)",advance="no")"> - "
-    write(unit_,fmt,advance="yes")i
-  end subroutine print_state_vector_ivec
-  !
-  subroutine  print_state_vector_ivec_ud(ivec,jvec,unit)
-    integer,intent(in) :: ivec(:),jvec(size(ivec))
-    integer,optional   :: unit
-    integer            :: unit_
-    integer            :: i,j,iup,idw,Ntot
-    character(len=2)   :: fbt
-    character(len=20)  :: fmt
-    unit_=6;if(present(unit))unit_=unit
-    Ntot = size(ivec)
-    write(fbt,'(I2.2)')Ntot
-    fmt="(B"//adjustl(trim(fbt))//"."//adjustl(trim(fbt))//",1x,B"//adjustl(trim(fbt))//"."//adjustl(trim(fbt))//")"
-    iup = bjoin(ivec,Ntot)
-    idw = bjoin(jvec,Ntot)
-    i = bjoin([ivec,jvec],2*Ntot)
-    write(unit_,"(I9,1x,I4,1x,A1)",advance="no")i,iup,"|"
-    write(unit_,"(10I1)",advance="no")(ivec(j),j=1,Ntot)
-    write(unit_,"(A1,I4,A2)",advance="no")">",idw," |"
-    write(unit_,"(10I1)",advance="no")(jvec(j),j=1,Ntot)
-    write(unit_,"(A4)",advance="no")"> - "
-    write(unit_,fmt,advance="yes")ibits(i,0,Ntot),ibits(i,Ntot,2*Ntot)
-  end subroutine print_state_vector_ivec_ud
-  !
-  subroutine print_state_vector_int(i,Ntot,unit)
-    integer,intent(in) :: i
-    integer,intent(in) :: Ntot
-    integer,optional   :: unit
-    integer            :: unit_
-    integer            :: j
-    integer            :: ivec(Ntot)
-    character(len=2)   :: fbt
-    character(len=16)  :: fmt
-    unit_=6;if(present(unit))unit_=unit
-    write(fbt,'(I2.2)')Ntot
-    fmt="(B"//adjustl(trim(fbt))//"."//adjustl(trim(fbt))//")"
-    ivec = bdecomp(i,Ntot)
-    write(unit_,"(I9,1x,A1)",advance="no")i,"|"
-    write(unit_,"(10I1)",advance="no")(ivec(j),j=1,Ntot)
-    write(unit_,"(A4)",advance="no")"> - "
-    write(unit_,fmt,advance="yes")i
-  end subroutine print_state_vector_int
+
+  !! AllGather Vloc on each thread into the array V: sum_threads(size(Vloc)) must be equal to size(v)
+  subroutine gather_vector_MPI(MpiComm,vloc,v)
+    integer                          :: MpiComm
+    complex(8),dimension(:)          :: vloc !size[Nloc]
+    complex(8),dimension(:)          :: v    !size[N]
+    integer                          :: i,irank,Nloc,N
+    integer,dimension(:),allocatable :: Counts,Offset
+    integer                          :: MpiSize,MpiIerr
+    logical                          :: MpiMaster
+    !
+    if( MpiComm == MPI_UNDEFINED ) stop "gather_vector_MPI error: MpiComm == MPI_UNDEFINED"
+    !
+    MpiSize   = get_size_MPI(MpiComm)
+    MpiMaster = get_master_MPI(MpiComm)
+    !
+    Nloc = size(Vloc)
+    N = 0
+    call AllReduce_MPI(MpiComm,Nloc,N)
+    if(MpiMaster.AND.N /= size(V)) stop "gather_vector_MPI error: size(V) != Mpi_Allreduce(Nloc)"
+    !
+    allocate(Counts(0:MpiSize-1)) ; Counts=0
+    allocate(Offset(0:MpiSize-1)) ; Offset=0
+    !
+    !Get Counts;
+    call MPI_AllGather(Nloc,1,MPI_INTEGER,Counts,1,MPI_INTEGER,MpiComm,MpiIerr)
+    !
+    !Get Offset:
+    Offset(0)=0
+    do i=1,MpiSize-1
+       Offset(i) = Offset(i-1) + Counts(i-1)
+    enddo
+    !
+    call MPI_Gatherv(Vloc,Nloc,MPI_DOUBLE_COMPLEX,V,Counts,Offset,MPI_DOUBLE_COMPLEX,0,MpiComm,MpiIerr)
+    !
+    return
+  end subroutine gather_vector_MPI
+
+
+  !! AllGather Vloc on each thread into the array V: sum_threads(size(Vloc)) must be equal to size(v)
+  subroutine allgather_vector_MPI(MpiComm,vloc,v)
+    integer                          :: MpiComm
+    complex(8),dimension(:)          :: vloc !size[Nloc]
+    complex(8),dimension(:)          :: v    !size[N]
+    integer                          :: i,irank,Nloc,N
+    integer,dimension(:),allocatable :: Counts,Offset
+    integer                          :: MpiSize,MpiIerr
+    logical                          :: MpiMaster
+    !
+    if( MpiComm == MPI_UNDEFINED ) stop "gather_vector_MPI error: MpiComm == MPI_UNDEFINED"
+    !
+    MpiSize   = get_size_MPI(MpiComm)
+    MpiMaster = get_master_MPI(MpiComm)
+    !
+    Nloc = size(Vloc)
+    N = 0
+    call AllReduce_MPI(MpiComm,Nloc,N)
+    if(MpiMaster.AND.N /= size(V)) stop "gather_vector_MPI error: size(V) != Mpi_Allreduce(Nloc)"
+    !
+    allocate(Counts(0:MpiSize-1)) ; Counts=0
+    allocate(Offset(0:MpiSize-1)) ; Offset=0
+    !
+    !Get Counts;
+    call MPI_AllGather(Nloc,1,MPI_INTEGER,Counts,1,MPI_INTEGER,MpiComm,MpiIerr)
+    !
+    !Get Offset:
+    Offset(0)=0
+    do i=1,MpiSize-1
+       Offset(i) = Offset(i-1) + Counts(i-1)
+    enddo
+    !
+    call MPI_AllGatherv(Vloc,Nloc,MPI_DOUBLE_COMPLEX,V,Counts,Offset,MPI_DOUBLE_COMPLEX,MpiComm,MpiIerr)
+    !
+    return
+  end subroutine Allgather_vector_MPI
+#endif
+
+
+
+
 
 end MODULE ED_SETUP

@@ -7,9 +7,14 @@
      htmp = htmp + impHloc(Nspin,Nspin,iorb,iorb)*ndw(iorb)
   enddo
   !
-  hv(impi) = hv(impi) + htmp*vin(i)
+  select case(MpiStatus)
+  case (.true.)
+     call sp_insert_element(MpiComm,spH0,htmp,i,i)
+  case (.false.)
+     call sp_insert_element(spH0,htmp,i,i)
+  end select
   !
-  
+
   !Off-diagonal elements, i.e. non-local part
   !1. same spin:
   do iorb=1,Norb
@@ -28,13 +33,18 @@
            j = binary_search(H%map,k2)
            htmp = impHloc(1,1,iorb,jorb)*sg1*sg2
            !
-           hv(impi) = hv(impi) + htmp*vin(j)
+           select case(MpiStatus)
+           case (.true.)
+              call sp_insert_element(MpiComm,spH0,htmp,i,j)
+           case (.false.)
+              call sp_insert_element(spH0,htmp,i,j)
+           end select
            !
         endif
         !DW
         Jcondition = &
              (impHloc(Nspin,Nspin,iorb,jorb)/=zero) .AND. &
-             (ib(jorb+Ns)==1)                  .AND. &
+             (ib(jorb+Ns)==1)                       .AND. &
              (ib(iorb+Ns)==0)
         if (Jcondition) then
            call c(jorb+Ns,m,k1,sg1)
@@ -42,7 +52,12 @@
            j = binary_search(H%map,k2)
            htmp = impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2
            !
-           hv(impi) = hv(impi) + htmp*vin(j)
+           select case(MpiStatus)
+           case (.true.)
+              call sp_insert_element(MpiComm,spH0,htmp,i,j)
+           case (.false.)
+              call sp_insert_element(spH0,htmp,i,j)
+           end select
            !
         endif
      enddo
@@ -52,9 +67,9 @@
   if(ed_mode=="nonsu2")then
      do ispin=1,Nspin
         jspin = 3-ispin !ispin=1,jspin=2, ispin=2,jspin=1
-     !
-     do iorb=1,Norb
-        do jorb=1,Norb           
+        !
+        do iorb=1,Norb
+           do jorb=1,Norb
               alfa = iorb + (ispin-1)*Ns
               beta = jorb + (jspin-1)*Ns
               Jcondition=&
@@ -66,7 +81,12 @@
                  j = binary_search(H%map,k2)
                  htmp = impHloc(ispin,jspin,iorb,jorb)*sg1*sg2
                  !
-                 hv(impi) = hv(impi) + htmp*vin(j)
+                 select case(MpiStatus)
+                 case (.true.)
+                    call sp_insert_element(MpiComm,spH0,htmp,i,j)
+                 case (.false.)
+                    call sp_insert_element(spH0,htmp,i,j)
+                 end select
                  !
               endif
               !

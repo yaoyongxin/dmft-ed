@@ -10,16 +10,15 @@ MODULE ED_GREENS_FUNCTIONS
   implicit none
   private 
 
-
-
   public :: buildGf_impurity
   public :: buildChi_impurity
-
-
 
 contains
 
 
+  !+------------------------------------------------------------------+
+  ! GF CALCULATIONS
+  !+------------------------------------------------------------------+
   subroutine buildGF_impurity()
     !
     call allocate_grids()
@@ -53,7 +52,7 @@ contains
        call build_sigma_nonsu2()
     end select
     !
-    if(MPI_MASTER)then
+    if(MPIMASTER)then
        if(ed_print_Sigma)call ed_print_impSigma()
        if(ed_print_G)call ed_print_impG()
        if(ed_print_G0)call ed_print_impG0()
@@ -71,7 +70,6 @@ contains
   ! SUSCEPTIBILITY CALCULATIONS
   !+------------------------------------------------------------------+
   subroutine buildChi_impurity()
-    integer :: i
     !
     call allocate_grids
     !
@@ -101,7 +99,7 @@ contains
     if(chipair_flag)call build_chi_pair()
     !
     !PRINTING:
-    if(MPI_MASTER.and.any([chispin_flag,chidens_flag,chipair_flag]))call ed_print_impChi()
+    if(MPIMASTER.and.any([chispin_flag,chidens_flag,chipair_flag]))call ed_print_impChi()
     !
     !
     call deallocate_grids

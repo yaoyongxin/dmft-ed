@@ -8,7 +8,7 @@ program hm_2bands_dos
   !Bath:
   real(8),allocatable                         :: Bath(:),Bath_prev(:)
   !
-  real(8)                                     :: Wratio,Wband(2)
+  real(8)                                     :: Wratio,Wband(2),dens(2)
   complex(8),allocatable                      :: Hloc(:,:,:,:),zeta(:,:)
   real(8),dimension(:,:),allocatable          :: Dbands
   real(8),dimension(:,:),allocatable          :: Ebands
@@ -93,6 +93,7 @@ program hm_2bands_dos
      call ed_get_sigma_matsubara(Smats)
      call ed_get_sigma_real(Sreal)
      call ed_get_gimp_matsubara(Gimp)
+     call ed_get_dens(dens)
      !
      ! compute the local gf:
      call dmft_gloc_matsubara(Ebands,Dbands,H0,Gmats,Smats)
@@ -131,6 +132,8 @@ program hm_2bands_dos
         Weiss_prev=Weiss
      endif
 
+     if(nread/=0.d0) call search_chemical_potential(xmu,sum(dens),converged)
+     
      !Check convergence (if required change chemical potential)
      converged1 = check_convergence(Weiss(1,1,1,1,:),dmft_error,nsuccess,nloop,reset=.false.,index=1,total=2)
      converged2 = check_convergence(Weiss(1,1,2,2,:),dmft_error,nsuccess,nloop,reset=.false.,index=2,total=2)

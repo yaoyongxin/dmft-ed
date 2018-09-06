@@ -74,7 +74,7 @@ contains
   subroutine observables_impurity()
     integer,dimension(Nlevels)      :: ib
     integer                         :: i,j
-    integer                         :: izero
+    integer                         :: istate
     integer                         :: isector,jsector
     integer                         :: idim,jdim
     integer                         :: isz,jsz
@@ -115,110 +115,126 @@ contains
     s2tot   = 0.d0
     !
     numstates=state_list%size
-    do izero=1,numstates
-       isector = es_return_sector(state_list,izero)
-       Ei      = es_return_energy(state_list,izero)
-       idim    = getdim(isector)
+    do istate=1,numstates
+       isector = es_return_sector(state_list,istate)
+       Ei      = es_return_energy(state_list,istate)
        !
-       gscvec  => es_return_cvector(state_list,izero)
-       norm=sqrt(dot_product(gscvec,gscvec))
-       if(abs(norm-1.d0)>1.d-9)stop "GS is not normalized"
+#ifdef _MPI
+       if(MpiStatus)then
+          gscvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          gscvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       gscvec => es_return_cvector(state_list,istate)
+#endif
        !
        peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
        peso = peso/zeta_function
        !
-       call build_sector(isector,H)
+       idim    = getdim(isector)
        !
-       !pdens=0d0
-       do i=1,idim
-          m=H%map(i)
-          ib = bdecomp(m,2*Ns)
+       if(Mpi_Master)then
+          call build_sector(isector,H)
           !
-          gs_weight=peso*abs(gscvec(i))**2
-          !
-          !Get operators:
-          do iorb=1,Norb
-             nup(iorb)= dble(ib(iorb))
-             ndw(iorb)= dble(ib(iorb+Ns))
-             sz(iorb) = (nup(iorb) - ndw(iorb))/2.d0
-             nt(iorb) =  nup(iorb) + ndw(iorb)
-          enddo
-          !
-          !pdens     = pdens      +  nt(1)*gs_weight*zeta_function
-          !Evaluate averages of observables:
-          do iorb=1,Norb
-             dens(iorb)     = dens(iorb)      +  nt(iorb)*gs_weight
-             dens_up(iorb)  = dens_up(iorb)   +  nup(iorb)*gs_weight
-             dens_dw(iorb)  = dens_dw(iorb)   +  ndw(iorb)*gs_weight
-             docc(iorb)     = docc(iorb)      +  nup(iorb)*ndw(iorb)*gs_weight
-             magz(iorb)     = magz(iorb)      +  (nup(iorb)-ndw(iorb))*gs_weight
-             sz2(iorb,iorb) = sz2(iorb,iorb)  +  (sz(iorb)*sz(iorb))*gs_weight
-             n2(iorb,iorb)  = n2(iorb,iorb)   +  (nt(iorb)*nt(iorb))*gs_weight
-             do jorb=iorb+1,Norb
-                sz2(iorb,jorb) = sz2(iorb,jorb)  +  (sz(iorb)*sz(jorb))*gs_weight
-                sz2(jorb,iorb) = sz2(jorb,iorb)  +  (sz(jorb)*sz(iorb))*gs_weight
-                n2(iorb,jorb)  = n2(iorb,jorb)   +  (nt(iorb)*nt(jorb))*gs_weight
-                n2(jorb,iorb)  = n2(jorb,iorb)   +  (nt(jorb)*nt(iorb))*gs_weight
+          do i=1,idim
+             m=H%map(i)
+             ib = bdecomp(m,2*Ns)
+             !
+             gs_weight=peso*abs(gscvec(i))**2
+             !
+             !Get operators:
+             do iorb=1,Norb
+                nup(iorb)= dble(ib(iorb))
+                ndw(iorb)= dble(ib(iorb+Ns))
+                sz(iorb) = (nup(iorb) - ndw(iorb))/2.d0
+                nt(iorb) =  nup(iorb) + ndw(iorb)
              enddo
+             !
+             !Evaluate averages of observables:
+             do iorb=1,Norb
+                dens(iorb)     = dens(iorb)      +  nt(iorb)*gs_weight
+                dens_up(iorb)  = dens_up(iorb)   +  nup(iorb)*gs_weight
+                dens_dw(iorb)  = dens_dw(iorb)   +  ndw(iorb)*gs_weight
+                docc(iorb)     = docc(iorb)      +  nup(iorb)*ndw(iorb)*gs_weight
+                magz(iorb)     = magz(iorb)      +  (nup(iorb)-ndw(iorb))*gs_weight
+                sz2(iorb,iorb) = sz2(iorb,iorb)  +  (sz(iorb)*sz(iorb))*gs_weight
+                n2(iorb,iorb)  = n2(iorb,iorb)   +  (nt(iorb)*nt(iorb))*gs_weight
+                do jorb=iorb+1,Norb
+                   sz2(iorb,jorb) = sz2(iorb,jorb)  +  (sz(iorb)*sz(jorb))*gs_weight
+                   sz2(jorb,iorb) = sz2(jorb,iorb)  +  (sz(jorb)*sz(iorb))*gs_weight
+                   n2(iorb,jorb)  = n2(iorb,jorb)   +  (nt(iorb)*nt(jorb))*gs_weight
+                   n2(jorb,iorb)  = n2(jorb,iorb)   +  (nt(jorb)*nt(iorb))*gs_weight
+                enddo
+             enddo
+             s2tot = s2tot  + (sum(sz))**2*gs_weight
           enddo
-          s2tot = s2tot  + (sum(sz))**2*gs_weight
-       enddo
-       if(associated(gscvec))nullify(gscvec)
-       deallocate(H%map)
+          if(associated(gscvec))nullify(gscvec)
+          call delete_sector(isector,H)
+       endif
     enddo
     !
     !SUPERCONDUCTING ORDER PARAMETER
     if(ed_mode=="superc")then
        do ispin=1,Nspin
           do iorb=1,Norb
-             do izero=1,state_list%size
+             do istate=1,state_list%size
                 !
-                isector = es_return_sector(state_list,izero)
-                Ei      = es_return_energy(state_list,izero)
-                idim    = getdim(isector)
-                gscvec  => es_return_cvector(state_list,izero)
-                norm=sqrt(dot_product(gscvec,gscvec))
-                if(abs(norm-1.d0)>1.d-9)stop "GS is not normalized"
+                isector = es_return_sector(state_list,istate)
+                Ei      = es_return_energy(state_list,istate)
+#ifdef _MPI
+                if(MpiStatus)then
+                   gscvec => es_return_cvector(MpiComm,state_list,istate)
+                else
+                   gscvec => es_return_cvector(state_list,istate)
+                endif
+#else
+                gscvec => es_return_cvector(state_list,istate)
+#endif
                 !
                 peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
                 peso = peso/zeta_function
                 !
-                call build_sector(isector,H)
-                !GET <(C_UP + CDG_DW)(CDG_UP + C_DW)> = 
-                !<C_UP*CDG_UP> + <CDG_DW*C_DW> + <C_UP*C_DW> + <CDG_DW*CDG_UP> = 
-                !<N_UP> + < 1 - N_DW> + 2*<PHI>
-                isz = getsz(isector)
-                if(isz<Ns)then
-                   jsz     = isz+1
-                   jsector = getsector(jsz,1)
-                   jdim    = getdim(jsector)
-                   allocate(vvinit(jdim))
-                   call build_sector(jsector,HJ)
-                   vvinit=zero
-                   do i=1,idim
-                      m=H%map(i)
-                      ib = bdecomp(m,2*Ns)
-                      if(ib(iorb)==0)then
-                         call cdg(iorb,m,r,sgn)
-                         j=binary_search(HJ%map,r)
-                         vvinit(j) = sgn*gscvec(i)
-                      endif
-                   enddo
-                   do i=1,idim
-                      m=H%map(i)
-                      ib = bdecomp(m,2*Ns)
-                      if(ib(iorb+Ns)==1)then
-                         call c(iorb+Ns,m,r,sgn)
-                         j=binary_search(HJ%map,r)
-                         vvinit(j) = vvinit(j) + sgn*gscvec(i)
-                      endif
-                   enddo
-                   deallocate(HJ%map)
-                   phisc(iorb) = phisc(iorb) + dot_product(vvinit,vvinit)*peso
-                   deallocate(vvinit)
+                idim    = getdim(isector)
+                !
+                if(Mpi_Master)then
+                   call build_sector(isector,H)
+                   !GET <(C_UP + CDG_DW)(CDG_UP + C_DW)> = 
+                   !<C_UP*CDG_UP> + <CDG_DW*C_DW> + <C_UP*C_DW> + <CDG_DW*CDG_UP> = 
+                   !<N_UP> + < 1 - N_DW> + 2*<PHI>
+                   isz = getsz(isector)
+                   if(isz<Ns)then
+                      jsz     = isz+1
+                      jsector = getsector(jsz,1)
+                      jdim    = getdim(jsector)
+                      !
+                      allocate(vvinit(jdim));vvinit=zero
+                      call build_sector(jsector,HJ)
+                      do i=1,idim
+                         m=H%map(i)
+                         ib = bdecomp(m,2*Ns)
+                         if(ib(iorb)==0)then
+                            call cdg(iorb,m,r,sgn)
+                            j=binary_search(HJ%map,r)
+                            vvinit(j) = sgn*gscvec(i)
+                         endif
+                      enddo
+                      do i=1,idim
+                         m=H%map(i)
+                         ib = bdecomp(m,2*Ns)
+                         if(ib(iorb+Ns)==1)then
+                            call c(iorb+Ns,m,r,sgn)
+                            j=binary_search(HJ%map,r)
+                            vvinit(j) = vvinit(j) + sgn*gscvec(i)
+                         endif
+                      enddo
+                      call delete_sector(jsector,HJ)
+                      phisc(iorb) = phisc(iorb) + dot_product(vvinit,vvinit)*peso
+                   endif
+                   call delete_sector(isector,H)
                 endif
                 if(associated(gscvec)) nullify(gscvec)
-                deallocate(H%map)
+                if(allocated(vvinit))deallocate(vvinit)
                 !
              enddo
              phisc(iorb) = 0.5d0*(phisc(iorb) - dens_up(iorb) - (1.d0-dens_dw(iorb)))
@@ -227,59 +243,74 @@ contains
     end if
     !
     !IMPURITY DENSITY MATRIX
-    if(allocated(imp_density_matrix)) deallocate(imp_density_matrix);allocate(imp_density_matrix(Nspin,Nspin,Norb,Norb))
+    if(allocated(imp_density_matrix))deallocate(imp_density_matrix)
+    allocate(imp_density_matrix(Nspin,Nspin,Norb,Norb))
     imp_density_matrix=zero
-    do izero=1,state_list%size
+    do istate=1,state_list%size
        !
-       isector = es_return_sector(state_list,izero)
-       Ei      = es_return_energy(state_list,izero)
-       idim    = getdim(isector)
-       gscvec  => es_return_cvector(state_list,izero)
-       norm=sqrt(dot_product(gscvec,gscvec))
-       if(abs(norm-1.d0)>1.d-9)stop "GS is not normalized"
+       isector = es_return_sector(state_list,istate)
+       Ei      = es_return_energy(state_list,istate)
+#ifdef _MPI
+       if(MpiStatus)then
+          gscvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          gscvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       gscvec => es_return_cvector(state_list,istate)
+#endif
        !
        peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
        peso = peso/zeta_function
        !
-       call build_sector(isector,H)
-       !Diagonal densities
-       do ispin=1,Nspin
-          do iorb=1,Norb
-             isite=impIndex(iorb,ispin)
-             do m=1,idim
-                i=H%map(m)
-                ib = bdecomp(i,2*Ns)
-                imp_density_matrix(ispin,ispin,iorb,iorb) = imp_density_matrix(ispin,ispin,iorb,iorb) + &
-                     peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
+       idim  = getdim(isector)
+       if(Mpi_Master)then
+          call build_sector(isector,H)
+          !
+          !Diagonal densities
+          do ispin=1,Nspin
+             do iorb=1,Norb
+                isite=impIndex(iorb,ispin)
+                do m=1,idim
+                   i=H%map(m)
+                   ib = bdecomp(i,2*Ns)
+                   imp_density_matrix(ispin,ispin,iorb,iorb) = imp_density_matrix(ispin,ispin,iorb,iorb) + &
+                        peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
+                enddo
              enddo
           enddo
-       enddo
-       !off-diagonal
-       do ispin=1,Nspin
-          do jspin=1,Nspin
-             do iorb=1,Norb
-                do jorb=1,Norb
-                   if((ed_mode=="normal").and.(ispin/=jspin))cycle
-                   if((bath_type=="normal").and.(iorb/=jorb))cycle
-                   if(bath_type=="replica".and.Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
-                   isite=impIndex(iorb,ispin)
-                   jsite=impIndex(jorb,jspin)
-                   do m=1,idim
-                      i=H%map(m)
-                      ib = bdecomp(i,2*Ns)
-                      if((ib(jsite)==1).and.(ib(isite)==0))then
-                         call c(jsite,i,r,sgn1)
-                         call cdg(isite,r,k,sgn2)
-                         j=binary_search(H%map,k)
-                         imp_density_matrix(ispin,jspin,iorb,jorb) = imp_density_matrix(ispin,jspin,iorb,jorb) + &
-                              peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
+          !off-diagonal
+          do ispin=1,Nspin
+             do jspin=1,Nspin
+                do iorb=1,Norb
+                   do jorb=1,Norb
+                      if((ed_mode=="normal").and.(ispin/=jspin))cycle
+                      if((bath_type=="normal").and.(iorb/=jorb))cycle
+                      if(bath_type=="replica".and.Jz_basis)then
+                         if((.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
                       endif
+                      isite=impIndex(iorb,ispin)
+                      jsite=impIndex(jorb,jspin)
+                      do m=1,idim
+                         i=H%map(m)
+                         ib = bdecomp(i,2*Ns)
+                         if((ib(jsite)==1).and.(ib(isite)==0))then
+                            call c(jsite,i,r,sgn1)
+                            call cdg(isite,r,k,sgn2)
+                            j=binary_search(H%map,k)
+                            imp_density_matrix(ispin,jspin,iorb,jorb) = imp_density_matrix(ispin,jspin,iorb,jorb) + &
+                                 peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
+                         endif
+                      enddo
                    enddo
                 enddo
              enddo
           enddo
-       enddo
-       deallocate(H%map)
+          !
+          if(associated(gscvec))nullify(gscvec)
+          call delete_sector(isector,H)
+       endif
+       !
     enddo
     !
     !
@@ -287,60 +318,71 @@ contains
     if(bath_type=="replica")then
        if(allocated(bth_density_matrix)) deallocate(bth_density_matrix);allocate(bth_density_matrix(Nspin,Nspin,Norb,Norb,Nbath))
        bth_density_matrix=zero
-       do izero=1,state_list%size
+       do istate=1,state_list%size
           !
-          isector = es_return_sector(state_list,izero)
-          Ei      = es_return_energy(state_list,izero)
-          idim    = getdim(isector)
-          gscvec  => es_return_cvector(state_list,izero)
-          norm=sqrt(dot_product(gscvec,gscvec))
-          if(abs(norm-1.d0)>1.d-9)stop "GS is not normalized"
+          isector = es_return_sector(state_list,istate)
+          Ei      = es_return_energy(state_list,istate)
+#ifdef _MPI
+          if(MpiStatus)then
+             gscvec => es_return_cvector(MpiComm,state_list,istate)
+          else
+             gscvec => es_return_cvector(state_list,istate)
+          endif
+#else
+          gscvec => es_return_cvector(state_list,istate)
+#endif
           !
           peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
           peso = peso/zeta_function
           !
-          call build_sector(isector,H)
-          !Diagonal densities
-          do ibath=1,Nbath
-             do ispin=1,Nspin
-                do iorb=1,Norb
-                   isite = iorb + ibath*Norb + (ispin-1)*Ns
-                   do m=1,idim
-                      i=H%map(m)
-                      ib = bdecomp(i,2*Ns)
-                      bth_density_matrix(ispin,ispin,iorb,iorb,ibath) = bth_density_matrix(ispin,ispin,iorb,iorb,ibath) + &
-                           peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
+          idim  = getdim(isector)
+          !
+          if(Mpi_Master)then             
+             call build_sector(isector,H)
+             !
+             !Diagonal densities
+             do ibath=1,Nbath
+                do ispin=1,Nspin
+                   do iorb=1,Norb
+                      isite = iorb + ibath*Norb + (ispin-1)*Ns
+                      do m=1,idim
+                         i=H%map(m)
+                         ib = bdecomp(i,2*Ns)
+                         bth_density_matrix(ispin,ispin,iorb,iorb,ibath) = bth_density_matrix(ispin,ispin,iorb,iorb,ibath) + &
+                              peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
+                      enddo
                    enddo
                 enddo
-             enddo
-             !off-diagonal
-             do ispin=1,Nspin
-                do jspin=1,Nspin
-                   do iorb=1,Norb
-                      do jorb=1,Norb
-                         if((ed_mode=="normal").and.(ispin/=jspin))cycle
-                         if((bath_type=="normal").and.(iorb/=jorb))cycle
-                         if(Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
-                         isite = iorb + ibath*Norb + (ispin-1)*Ns
-                         jsite = jorb + ibath*Norb + (jspin-1)*Ns
-                         do m=1,idim
-                            i=H%map(m)
-                            ib = bdecomp(i,2*Ns)
-                            if((ib(jsite)==1).and.(ib(isite)==0))then
-                               call c(jsite,i,r,sgn1)
-                               call cdg(isite,r,k,sgn2)
-                               j=binary_search(H%map,k)
-                               bth_density_matrix(ispin,jspin,iorb,jorb,ibath) = bth_density_matrix(ispin,jspin,iorb,jorb,ibath) + &
-                                    peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
-                            endif
+                !off-diagonal
+                do ispin=1,Nspin
+                   do jspin=1,Nspin
+                      do iorb=1,Norb
+                         do jorb=1,Norb
+                            if((ed_mode=="normal").and.(ispin/=jspin))cycle
+                            if((bath_type=="normal").and.(iorb/=jorb))cycle
+                            if(Jz_basis.and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
+                            isite = iorb + ibath*Norb + (ispin-1)*Ns
+                            jsite = jorb + ibath*Norb + (jspin-1)*Ns
+                            do m=1,idim
+                               i=H%map(m)
+                               ib = bdecomp(i,2*Ns)
+                               if((ib(jsite)==1).and.(ib(isite)==0))then
+                                  call c(jsite,i,r,sgn1)
+                                  call cdg(isite,r,k,sgn2)
+                                  j=binary_search(H%map,k)
+                                  bth_density_matrix(ispin,jspin,iorb,jorb,ibath) = bth_density_matrix(ispin,jspin,iorb,jorb,ibath) + &
+                                       peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
+                               endif
+                            enddo
                          enddo
                       enddo
                    enddo
                 enddo
              enddo
-          enddo
-          !
-          deallocate(H%map)
+             !
+             if(associated(gscvec))nullify(gscvec)
+             call delete_sector(isector,H)
+          endif
        enddo
     endif
     !
@@ -367,6 +409,19 @@ contains
        ed_docc(iorb)   =docc(iorb)
        ed_phisc(iorb)  =phisc(iorb)
     enddo
+#ifdef _MPI
+    if(MpiStatus)then
+       call Bcast_MPI(MpiComm,ed_dens_up)
+       call Bcast_MPI(MpiComm,ed_dens_dw)
+       call Bcast_MPI(MpiComm,ed_dens)
+       call Bcast_MPI(MpiComm,ed_docc)
+       call Bcast_MPI(MpiComm,ed_phisc)
+       if(allocated(imp_density_matrix))call Bcast_MPI(MpiComm,imp_density_matrix)
+       if(bath_type=="replica")then
+          call Bcast_MPI(MpiComm,bth_density_matrix)
+       endif
+    endif
+#endif
     !
     deallocate(dens,docc,phisc,dens_up,dens_dw,magz,sz2,n2)
     deallocate(simp,zimp)    
@@ -374,15 +429,17 @@ contains
 
 
 
+  
+
+
 
   !+-------------------------------------------------------------------+
   !PURPOSE  : Get internal energy from the Impurity problem.
   !+-------------------------------------------------------------------+
-  subroutine local_energy_impurity(MpiComm)
-    integer,optional                :: MpiComm
+  subroutine local_energy_impurity()
     integer,dimension(Nlevels)      :: ib
     integer                         :: i,j
-    integer                         :: izero
+    integer                         :: istate
     integer                         :: isector
     integer                         :: idim
     integer                         :: iorb,jorb,ispin
@@ -416,183 +473,205 @@ contains
     enddo
     !
     numstates=state_list%size
-    do izero=1,numstates
-       isector = es_return_sector(state_list,izero)
-       Ei      = es_return_energy(state_list,izero)
-       idim    = getdim(isector)
+    do istate=1,numstates
+       isector = es_return_sector(state_list,istate)
+       Ei      = es_return_energy(state_list,istate)
+#ifdef _MPI
+       if(MpiStatus)then
+          gscvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          gscvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       gscvec => es_return_cvector(state_list,istate)
+#endif
        !
-       gscvec  => es_return_cvector(state_list,izero)
-       norm=sqrt(dot_product(gscvec,gscvec))
-       if(abs(norm-1.d0)>1.d-9)stop "GS is not normalized"
+       idim  = getdim(isector)
        !
        peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
        peso = peso/zeta_function
        !
-       call build_sector(isector,H)
-       !
-       do i=1,idim
-          m=H%map(i)
-          ib = bdecomp(m,2*Ns)
+       if(Mpi_Master)then
           !
-          gs_weight=peso*abs(gscvec(i))**2
+          call build_sector(isector,H)
           !
-          !Get operators:
-          do iorb=1,Norb
-             nup(iorb)= dble(ib(iorb))
-             ndw(iorb)= dble(ib(iorb+Ns))
-          enddo
-          !
-          !start evaluating the Tr(H_loc) to estimate potential energy
-          !
-          !LOCAL ENERGY
-          ed_Eknot = ed_Eknot + dot_product(eloc(1,:),nup)*gs_weight + dot_product(eloc(Nspin,:),ndw)*gs_weight
-          !==> HYBRIDIZATION TERMS I: same or different orbitals, same spins.
-          do iorb=1,Norb
-             do jorb=1,Norb
-                !SPIN UP
-                if((ib(iorb)==0).AND.(ib(jorb)==1))then
-                   call c(jorb,m,k1,sg1)
-                   call cdg(iorb,k1,k2,sg2)
-                   j=binary_search(H%map,k2)
-                   if(Jz_basis.and.j==0)cycle
-                   !WARNING: note that the previous line, and all the other hereafter, are equivalent to:
-                   !if(Jz_basis.and.(.not.dmft_bath%mask(1,1,iorb,jorb,1)).and.(.not.dmft_bath%mask(1,1,iorb,jorb,2)))cycle
-                   ed_Eknot = ed_Eknot + impHloc(1,1,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
-                endif
-                !SPIN DW
-                if((ib(iorb+Ns)==0).AND.(ib(jorb+Ns)==1))then
-                   call c(jorb+Ns,m,k1,sg1)
-                   call cdg(iorb+Ns,k1,k2,sg2)
-                   j=binary_search(H%map,k2)
-                   if(Jz_basis.and.j==0)cycle
-                   ed_Eknot = ed_Eknot + impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
-                endif
+          do i=1,idim
+             m=H%map(i)
+             ib = bdecomp(m,2*Ns)
+             !
+             gs_weight=peso*abs(gscvec(i))**2
+             !
+             !Get operators:
+             do iorb=1,Norb
+                nup(iorb)= dble(ib(iorb))
+                ndw(iorb)= dble(ib(iorb+Ns))
              enddo
-          enddo
-          !==> HYBRIDIZATION TERMS II: same or different orbitals, opposite spins.
-          if(ed_mode=="nonsu2")then
+             !
+             !start evaluating the Tr(H_loc) to estimate potential energy
+             !
+             !LOCAL ENERGY
+             ed_Eknot = ed_Eknot + dot_product(eloc(1,:),nup)*gs_weight + dot_product(eloc(Nspin,:),ndw)*gs_weight
+             !==> HYBRIDIZATION TERMS I: same or different orbitals, same spins.
              do iorb=1,Norb
                 do jorb=1,Norb
-                   !UP-DW
-                   if((impHloc(1,Nspin,iorb,jorb)/=zero).AND.(ib(iorb)==0).AND.(ib(jorb+Ns)==1))then
-                      call c(jorb+Ns,m,k1,sg1)
+                   !SPIN UP
+                   if((ib(iorb)==0).AND.(ib(jorb)==1))then
+                      call c(jorb,m,k1,sg1)
                       call cdg(iorb,k1,k2,sg2)
                       j=binary_search(H%map,k2)
                       if(Jz_basis.and.j==0)cycle
-                      ed_Eknot = ed_Eknot + impHloc(1,Nspin,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
+                      !WARNING: note that the previous line, and all the other hereafter, are equivalent to:
+                      !if(Jz_basis.and.(.not.dmft_bath%mask(1,1,iorb,jorb,1)).and.(.not.dmft_bath%mask(1,1,iorb,jorb,2)))cycle
+                      ed_Eknot = ed_Eknot + impHloc(1,1,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
                    endif
-                   !DW-UP
-                   if((impHloc(Nspin,1,iorb,jorb)/=zero).AND.(ib(iorb+Ns)==0).AND.(ib(jorb)==1))then
-                      call c(jorb,m,k1,sg1)
+                   !SPIN DW
+                   if((ib(iorb+Ns)==0).AND.(ib(jorb+Ns)==1))then
+                      call c(jorb+Ns,m,k1,sg1)
                       call cdg(iorb+Ns,k1,k2,sg2)
                       j=binary_search(H%map,k2)
                       if(Jz_basis.and.j==0)cycle
-                      ed_Eknot = ed_Eknot + impHloc(Nspin,1,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
+                      ed_Eknot = ed_Eknot + impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
                    endif
                 enddo
              enddo
-          endif
-          !
-          !DENSITY-DENSITY INTERACTION: SAME ORBITAL, OPPOSITE SPINS
-          !Euloc=\sum=i U_i*(n_u*n_d)_i
-          !ed_Epot = ed_Epot + dot_product(uloc,nup*ndw)*gs_weight
-          do iorb=1,Norb
-             ed_Epot = ed_Epot + Uloc(iorb)*nup(iorb)*ndw(iorb)*gs_weight
-          enddo
-          !
-          !DENSITY-DENSITY INTERACTION: DIFFERENT ORBITALS, OPPOSITE SPINS
-          !Eust=\sum_ij Ust*(n_up_i*n_dn_j + n_up_j*n_dn_i)
-          !    "="\sum_ij (Uloc - 2*Jh)*(n_up_i*n_dn_j + n_up_j*n_dn_i)
-          if(Norb>1)then
-             do iorb=1,Norb
-                do jorb=iorb+1,Norb
-                   ed_Epot = ed_Epot + Ust*(nup(iorb)*ndw(jorb) + nup(jorb)*ndw(iorb))*gs_weight
-                   ed_Dust = ed_Dust + (nup(iorb)*ndw(jorb) + nup(jorb)*ndw(iorb))*gs_weight
-                enddo
-             enddo
-          endif
-          !
-          !DENSITY-DENSITY INTERACTION: DIFFERENT ORBITALS, PARALLEL SPINS
-          !Eund = \sum_ij Und*(n_up_i*n_up_j + n_dn_i*n_dn_j)
-          !    "="\sum_ij (Ust-Jh)*(n_up_i*n_up_j + n_dn_i*n_dn_j)
-          !    "="\sum_ij (Uloc-3*Jh)*(n_up_i*n_up_j + n_dn_i*n_dn_j)
-          if(Norb>1)then
-             do iorb=1,Norb
-                do jorb=iorb+1,Norb
-                   ed_Epot = ed_Epot + (Ust-Jh)*(nup(iorb)*nup(jorb) + ndw(iorb)*ndw(jorb))*gs_weight
-                   ed_Dund = ed_Dund + (nup(iorb)*nup(jorb) + ndw(iorb)*ndw(jorb))*gs_weight
-                enddo
-             enddo
-          endif
-          !
-          !SPIN-EXCHANGE (S-E) TERMS
-          !S-E: Jh *( c^+_iorb_up c^+_jorb_dw c_iorb_dw c_jorb_up )  (i.ne.j) 
-          if(Norb>1.AND.Jhflag)then
-             do iorb=1,Norb
-                do jorb=1,Norb
-                   Jcondition=((iorb/=jorb).AND.&
-                        (ib(jorb)==1)      .AND.&
-                        (ib(iorb+Ns)==1)   .AND.&
-                        (ib(jorb+Ns)==0)   .AND.&
-                        (ib(iorb)==0))
-                   if(Jcondition)then
-                      call c(jorb,m,k1,sg1)
-                      call c(iorb+Ns,k1,k2,sg2)
-                      call cdg(jorb+Ns,k2,k3,sg3)
-                      call cdg(iorb,k3,k4,sg4)
-                      j=binary_search(H%map,k4)
-                      if(Jz_basis.and.j==0)cycle
-                      ed_Epot = ed_Epot + Jx*sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
-                      ed_Dse  = ed_Dse  + sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
-                   endif
-                enddo
-             enddo
-          endif
-          !
-          !PAIR-HOPPING (P-H) TERMS
-          !P-H: J c^+_iorb_up c^+_iorb_dw   c_jorb_dw   c_jorb_up  (i.ne.j) 
-          !P-H: J c^+_{iorb}  c^+_{iorb+Ns} c_{jorb+Ns} c_{jorb}
-          if(Norb>1.AND.Jhflag)then
-             do iorb=1,Norb
-                do jorb=1,Norb
-                   Jcondition=((iorb/=jorb).AND.&
-                        (ib(jorb)==1)      .AND.&
-                        (ib(jorb+Ns)==1)   .AND.&
-                        (ib(iorb+Ns)==0)   .AND.&
-                        (ib(iorb)==0))
-                   if(Jcondition)then
-                      call c(jorb,m,k1,sg1)
-                      call c(jorb+Ns,k1,k2,sg2)
-                      call cdg(iorb+Ns,k2,k3,sg3)
-                      call cdg(iorb,k3,k4,sg4)
-                      j=binary_search(H%map,k4)
-                      if(Jz_basis.and.j==0)cycle
-                      ed_Epot = ed_Epot + Jp*sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
-                      ed_Dph  = ed_Dph  + sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
-                   endif
-                enddo
-             enddo
-          endif
-          !
-          !HARTREE-TERMS CONTRIBUTION:
-          if(hfmode)then
-             !ed_Ehartree=ed_Ehartree - 0.5d0*dot_product(uloc,nup+ndw)*gs_weight + 0.25d0*sum(uloc)*gs_weight
-             do iorb=1,Norb
-                ed_Ehartree=ed_Ehartree - 0.5d0*uloc(iorb)*(nup(iorb)+ndw(iorb))*gs_weight + 0.25d0*uloc(iorb)*gs_weight
-             enddo
-             if(Norb>1)then
+             !==> HYBRIDIZATION TERMS II: same or different orbitals, opposite spins.
+             if(ed_mode=="nonsu2")then
                 do iorb=1,Norb
-                   do jorb=iorb+1,Norb
-                      ed_Ehartree=ed_Ehartree - 0.5d0*Ust*(nup(iorb)+ndw(iorb)+nup(jorb)+ndw(jorb))*gs_weight + 0.25d0*Ust*gs_weight
-                      ed_Ehartree=ed_Ehartree - 0.5d0*(Ust-Jh)*(nup(iorb)+ndw(iorb)+nup(jorb)+ndw(jorb))*gs_weight + 0.25d0*(Ust-Jh)*gs_weight
+                   do jorb=1,Norb
+                      !UP-DW
+                      if((impHloc(1,Nspin,iorb,jorb)/=zero).AND.(ib(iorb)==0).AND.(ib(jorb+Ns)==1))then
+                         call c(jorb+Ns,m,k1,sg1)
+                         call cdg(iorb,k1,k2,sg2)
+                         j=binary_search(H%map,k2)
+                         if(Jz_basis.and.j==0)cycle
+                         ed_Eknot = ed_Eknot + impHloc(1,Nspin,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
+                      endif
+                      !DW-UP
+                      if((impHloc(Nspin,1,iorb,jorb)/=zero).AND.(ib(iorb+Ns)==0).AND.(ib(jorb)==1))then
+                         call c(jorb,m,k1,sg1)
+                         call cdg(iorb+Ns,k1,k2,sg2)
+                         j=binary_search(H%map,k2)
+                         if(Jz_basis.and.j==0)cycle
+                         ed_Eknot = ed_Eknot + impHloc(Nspin,1,iorb,jorb)*sg1*sg2*gscvec(i)*conjg(gscvec(j))
+                      endif
                    enddo
                 enddo
              endif
-          endif
-       enddo
-       if(associated(gscvec))nullify(gscvec)
-       deallocate(H%map)
+             !
+             !DENSITY-DENSITY INTERACTION: SAME ORBITAL, OPPOSITE SPINS
+             !Euloc=\sum=i U_i*(n_u*n_d)_i
+             !ed_Epot = ed_Epot + dot_product(uloc,nup*ndw)*gs_weight
+             do iorb=1,Norb
+                ed_Epot = ed_Epot + Uloc(iorb)*nup(iorb)*ndw(iorb)*gs_weight
+             enddo
+             !
+             !DENSITY-DENSITY INTERACTION: DIFFERENT ORBITALS, OPPOSITE SPINS
+             !Eust=\sum_ij Ust*(n_up_i*n_dn_j + n_up_j*n_dn_i)
+             !    "="\sum_ij (Uloc - 2*Jh)*(n_up_i*n_dn_j + n_up_j*n_dn_i)
+             if(Norb>1)then
+                do iorb=1,Norb
+                   do jorb=iorb+1,Norb
+                      ed_Epot = ed_Epot + Ust*(nup(iorb)*ndw(jorb) + nup(jorb)*ndw(iorb))*gs_weight
+                      ed_Dust = ed_Dust + (nup(iorb)*ndw(jorb) + nup(jorb)*ndw(iorb))*gs_weight
+                   enddo
+                enddo
+             endif
+             !
+             !DENSITY-DENSITY INTERACTION: DIFFERENT ORBITALS, PARALLEL SPINS
+             !Eund = \sum_ij Und*(n_up_i*n_up_j + n_dn_i*n_dn_j)
+             !    "="\sum_ij (Ust-Jh)*(n_up_i*n_up_j + n_dn_i*n_dn_j)
+             !    "="\sum_ij (Uloc-3*Jh)*(n_up_i*n_up_j + n_dn_i*n_dn_j)
+             if(Norb>1)then
+                do iorb=1,Norb
+                   do jorb=iorb+1,Norb
+                      ed_Epot = ed_Epot + (Ust-Jh)*(nup(iorb)*nup(jorb) + ndw(iorb)*ndw(jorb))*gs_weight
+                      ed_Dund = ed_Dund + (nup(iorb)*nup(jorb) + ndw(iorb)*ndw(jorb))*gs_weight
+                   enddo
+                enddo
+             endif
+             !
+             !SPIN-EXCHANGE (S-E) TERMS
+             !S-E: Jh *( c^+_iorb_up c^+_jorb_dw c_iorb_dw c_jorb_up )  (i.ne.j) 
+             if(Norb>1.AND.Jhflag)then
+                do iorb=1,Norb
+                   do jorb=1,Norb
+                      Jcondition=((iorb/=jorb).AND.&
+                           (ib(jorb)==1)      .AND.&
+                           (ib(iorb+Ns)==1)   .AND.&
+                           (ib(jorb+Ns)==0)   .AND.&
+                           (ib(iorb)==0))
+                      if(Jcondition)then
+                         call c(jorb,m,k1,sg1)
+                         call c(iorb+Ns,k1,k2,sg2)
+                         call cdg(jorb+Ns,k2,k3,sg3)
+                         call cdg(iorb,k3,k4,sg4)
+                         j=binary_search(H%map,k4)
+                         if(Jz_basis.and.j==0)cycle
+                         ed_Epot = ed_Epot + Jx*sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
+                         ed_Dse  = ed_Dse  + sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
+                      endif
+                   enddo
+                enddo
+             endif
+             !
+             !PAIR-HOPPING (P-H) TERMS
+             !P-H: J c^+_iorb_up c^+_iorb_dw   c_jorb_dw   c_jorb_up  (i.ne.j) 
+             !P-H: J c^+_{iorb}  c^+_{iorb+Ns} c_{jorb+Ns} c_{jorb}
+             if(Norb>1.AND.Jhflag)then
+                do iorb=1,Norb
+                   do jorb=1,Norb
+                      Jcondition=((iorb/=jorb).AND.&
+                           (ib(jorb)==1)      .AND.&
+                           (ib(jorb+Ns)==1)   .AND.&
+                           (ib(iorb+Ns)==0)   .AND.&
+                           (ib(iorb)==0))
+                      if(Jcondition)then
+                         call c(jorb,m,k1,sg1)
+                         call c(jorb+Ns,k1,k2,sg2)
+                         call cdg(iorb+Ns,k2,k3,sg3)
+                         call cdg(iorb,k3,k4,sg4)
+                         j=binary_search(H%map,k4)
+                         if(Jz_basis.and.j==0)cycle
+                         ed_Epot = ed_Epot + Jp*sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
+                         ed_Dph  = ed_Dph  + sg1*sg2*sg3*sg4*gscvec(i)*conjg(gscvec(j))!gs_weight
+                      endif
+                   enddo
+                enddo
+             endif
+             !
+             !HARTREE-TERMS CONTRIBUTION:
+             if(hfmode)then
+                !ed_Ehartree=ed_Ehartree - 0.5d0*dot_product(uloc,nup+ndw)*gs_weight + 0.25d0*sum(uloc)*gs_weight
+                do iorb=1,Norb
+                   ed_Ehartree=ed_Ehartree - 0.5d0*uloc(iorb)*(nup(iorb)+ndw(iorb))*gs_weight + 0.25d0*uloc(iorb)*gs_weight
+                enddo
+                if(Norb>1)then
+                   do iorb=1,Norb
+                      do jorb=iorb+1,Norb
+                         ed_Ehartree=ed_Ehartree - 0.5d0*Ust*(nup(iorb)+ndw(iorb)+nup(jorb)+ndw(jorb))*gs_weight + 0.25d0*Ust*gs_weight
+                         ed_Ehartree=ed_Ehartree - 0.5d0*(Ust-Jh)*(nup(iorb)+ndw(iorb)+nup(jorb)+ndw(jorb))*gs_weight + 0.25d0*(Ust-Jh)*gs_weight
+                      enddo
+                   enddo
+                endif
+             endif
+          enddo
+          if(associated(gscvec))nullify(gscvec)
+          call delete_sector(isector,H)
+       endif
     enddo
+    !
+#ifdef _MPI
+    if(MpiStatus)then
+       call Bcast_MPI(MpiComm,ed_Epot)
+       call Bcast_MPI(MpiComm,ed_Eknot)
+       call Bcast_MPI(MpiComm,ed_Ehartree)
+       call Bcast_MPI(MpiComm,ed_Dust)
+       call Bcast_MPI(MpiComm,ed_Dund)
+       call Bcast_MPI(MpiComm,ed_Dse)
+       call Bcast_MPI(MpiComm,ed_Dph)
+    endif
+#endif
+    !
     ed_Epot = ed_Epot + ed_Ehartree
     !
     if(ed_verbose==3)then

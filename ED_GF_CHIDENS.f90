@@ -23,9 +23,9 @@ contains
     write(LOGfile,"(A)")"Get impurity dens Chi:"
     do iorb=1,Norb
        write(LOGfile,"(A)")"Get Chi_dens_diag_l"//reg(txtfy(iorb))
-       if(MPI_MASTER)call start_timer()
+       if(MPIMASTER)call start_timer()
        call lanc_ed_build_densChi_diag_c(iorb)
-       if(MPI_MASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(LOGfile)
     enddo
     !
     !
@@ -33,9 +33,9 @@ contains
        do iorb=1,Norb
           do jorb=iorb+1,Norb
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
-             if(MPI_MASTER)call start_timer()
+             if(MPIMASTER)call start_timer()
              call lanc_ed_build_densChi_offdiag_c(iorb,jorb)
-             if(MPI_MASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(LOGfile)
           end do
        end do
        do iorb=1,Norb
@@ -47,16 +47,16 @@ contains
        do iorb=1,Norb
           do jorb=1,Norb
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
-             if(MPI_MASTER)call start_timer()
+             if(MPIMASTER)call start_timer()
              call lanc_ed_build_densChi_mix_c(iorb,jorb)
-             if(MPI_MASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(LOGfile)
           end do
        end do
        !
        write(LOGfile,"(A)")"Get Chi_dens_tot"
-       if(MPI_MASTER)call start_timer()
+       if(MPIMASTER)call start_timer()
        call lanc_ed_build_densChi_tot_c()
-       if(MPI_MASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(LOGfile)
     endif
     !
     denschi_tau = Denschi_tau/zeta_function
@@ -65,62 +65,94 @@ contains
     !
   end subroutine build_chi_dens
 
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
+
+
   !+------------------------------------------------------------------+
   !PURPOSE  : Evaluate the Charge-Charge susceptibility \Chi_dens for  
   ! the orbital diagonal case: \chi_dens_aa = <N_a(\tau)N_a(0)>
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_densChi_diag_c(iorb)
-    integer                :: iorb,isite,isector,izero
+    integer                :: iorb,isite,isector,istate
     integer                :: numstates
-    integer                :: nlanc,idim
+    integer                :: nlanc,idim,vecDim
     integer                :: iup0,idw0,isign
     integer                :: ib(Nlevels)
     integer                :: m,i,j,r
-    real(8)                :: norm0,sgn
+    real(8)                :: norm2,sgn
     complex(8)             :: cnorm2
     real(8),allocatable    :: alfa_(:),beta_(:)
-    complex(8),allocatable :: vvinit(:)
+    complex(8),allocatable :: vvinit(:),vvloc(:)
     integer                :: Nitermax
     type(sector_map)       :: HI    !map of the Sector S to Hilbert space H
     !
     !
     !
-    do izero=1,state_list%size
-       isector    =  es_return_sector(state_list,izero)
-       idim       =  getdim(isector)
-       state_e    =  es_return_energy(state_list,izero)
-       state_cvec => es_return_cvector(state_list,izero)
-       norm0=sqrt(dot_product(state_cvec,state_cvec))
-       if(abs(norm0-1.d0)>1.d-9)stop "GS is not normalized"
-       allocate(vvinit(idim))
-       if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply N:',getnup(isector),getndw(isector)
-       call build_sector(isector,HI)
-       vvinit=zero
-       do m=1,idim                     !loop over |gs> components m
-          i=HI%map(m)
-          ib = bdecomp(i,2*Ns)
-          sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
-          vvinit(m) = sgn*state_cvec(m)   !build the cdg_up|gs> state
-       enddo
-       deallocate(HI%map)
-       norm0=dot_product(vvinit,vvinit)
-       vvinit=vvinit/sqrt(norm0)
+    do istate=1,state_list%size
+       isector    =  es_return_sector(state_list,istate)
+       state_e    =  es_return_energy(state_list,istate)
+#ifdef _MPI
+       if(MpiStatus)then
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          state_cvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       state_cvec => es_return_cvector(state_list,istate)
+#endif
        !
-       call setup_Hv_sector(isector)
-       if(ed_sparse_H)call ed_buildH_c()
+       idim       =  getdim(isector)
+       !
+       if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply N:',getnup(isector),getndw(isector)
+       !
+       if(MpiMaster)then
+          allocate(vvinit(idim)); vvinit=0.d0
+          !
+          call build_sector(isector,HI)
+          do m=1,idim                     !loop over |gs> components m
+             i=HI%map(m)
+             ib = bdecomp(i,2*Ns)
+             sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
+             vvinit(m) = sgn*state_cvec(m)   !build the cdg_up|gs> state
+          enddo
+          call delete_sector(isector,HI)
+          norm2=dot_product(vvinit,vvinit)
+          vvinit=vvinit/sqrt(norm2)
+       endif
        !
        nlanc=min(idim,lanc_nGFiter)
        allocate(alfa_(nlanc),beta_(nlanc))
-#ifdef _MPI
+       !
+       call build_Hv_sector(isector)
+#ifdef _MP
        if(MpiStatus)then
-          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
+          call Bcast_MPI(MpiComm,norm2)
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(vvloc(vecDim))
+          call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
        else
           call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
        endif
 #else
        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
 #endif
-       cnorm2=one*norm0
+       cnorm2=one*norm2
        isign=1
        call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,iorb)
        isign=-1
@@ -128,68 +160,99 @@ contains
        !
        call delete_Hv_sector()
        !
-       deallocate(vvinit,alfa_,beta_)
-       if(spH0%status)call sp_delete_matrix(spH0)
+       deallocate(alfa_,beta_)
+       if(allocated(vvinit))deallocate(vvinit)          
+       if(allocated(vvloc))deallocate(vvloc)
        nullify(state_cvec)
     enddo
     return
   end subroutine lanc_ed_build_densChi_diag_c
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
 
   !+------------------------------------------------------------------+
   !PURPOSE  : Evaluate the TOTAL Charge-Charge susceptibility \Chi_dens  
   ! \chi_dens_tot = <N(\tau)N(0)>, N=sum_a N_a
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_densChi_tot_c()
-    integer                :: iorb,isite,isector,izero
+    integer                :: iorb,isite,isector,istate
     integer                :: numstates
-    integer                :: nlanc,idim
+    integer                :: nlanc,idim,vecDim
     integer                :: iup0,idw0,isign
     integer                :: ib(Nlevels)
     integer                :: m,i,j,r
     complex(8)             :: cnorm2
-    real(8)                :: norm0,sgn
+    real(8)                :: norm2,sgn
     real(8),allocatable    :: alfa_(:),beta_(:)
-    complex(8),allocatable :: vvinit(:)
+    complex(8),allocatable :: vvinit(:),vvloc(:)
     integer                :: Nitermax
     type(sector_map)       :: HI    !map of the Sector S to Hilbert space H
     !    
     !
-    do izero=1,state_list%size
-       isector    =  es_return_sector(state_list,izero)
-       idim       =  getdim(isector)
-       state_e    =  es_return_energy(state_list,izero)
-       state_cvec => es_return_cvector(state_list,izero)
-       norm0=sqrt(dot_product(state_cvec,state_cvec))
-       if(abs(norm0-1.d0)>1.d-9)stop "GS is not normalized"
-       allocate(vvinit(idim))
-       if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply N:',getnup(isector),getndw(isector)
-       call build_sector(isector,HI)
-       vvinit=zero
-       do m=1,idim
-          i=HI%map(m)
-          ib = bdecomp(i,2*Ns)
-          sgn = sum(dble(ib(1:Norb)))+sum(dble(ib(Ns+1:Ns+Norb)))
-          vvinit(m) = sgn*state_cvec(m) 
-       enddo
-       deallocate(HI%map)
-       norm0=dot_product(vvinit,vvinit)
-       vvinit=vvinit/sqrt(norm0)
+    do istate=1,state_list%size
+       isector    =  es_return_sector(state_list,istate)
+       state_e    =  es_return_energy(state_list,istate)
+#ifdef _MPI
+       if(MpiStatus)then
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          state_cvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       state_cvec => es_return_cvector(state_list,istate)
+#endif
        !
-       call setup_Hv_sector(isector)
-       if(ed_sparse_H)call ed_buildH_c()
+       idim       =  getdim(isector)
+       !
+       if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply N:',getnup(isector),getndw(isector)
+       !
+       if(MpiMaster)then
+          allocate(vvinit(idim)); vvinit=0.d0
+          !
+          call build_sector(isector,HI)
+          do m=1,idim
+             i=HI%map(m)
+             ib = bdecomp(i,2*Ns)
+             sgn = sum(dble(ib(1:Norb)))+sum(dble(ib(Ns+1:Ns+Norb)))
+             vvinit(m) = sgn*state_cvec(m) 
+          enddo
+          call delete_sector(isector,HI)
+          norm2=dot_product(vvinit,vvinit)
+          vvinit=vvinit/sqrt(norm2)
+       endif
        !
        nlanc=min(idim,lanc_nGFiter)
        allocate(alfa_(nlanc),beta_(nlanc))
-#ifdef _MPI
+       !
+       call build_Hv_sector(isector)
+#ifdef _MP
        if(MpiStatus)then
-          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
+          call Bcast_MPI(MpiComm,norm2)
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(vvloc(vecDim))
+          call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
        else
           call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
        endif
 #else
        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
 #endif
-       cnorm2=one*norm0
+       cnorm2=one*norm2
        isign=1
        call add_to_lanczos_densChi_tot(cnorm2,state_e,alfa_,beta_,isign)
        isign=-1
@@ -197,75 +260,105 @@ contains
        !
        call delete_Hv_sector()
        !
-       deallocate(vvinit,alfa_,beta_)
-       if(spH0%status)call sp_delete_matrix(spH0)
+       deallocate(alfa_,beta_)
+       if(allocated(vvinit))deallocate(vvinit)          
+       if(allocated(vvloc))deallocate(vvloc)
        nullify(state_cvec)
     enddo
     return
   end subroutine lanc_ed_build_densChi_tot_c
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
 
   !+------------------------------------------------------------------+
   !PURPOSE  : Evaluate the Charge-Charge susceptibility \Chi_dens for
   ! the orbital off-diagonal case: \chi_dens_ab = <N_a(\tau)N_b(0)>
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_densChi_offdiag_c(iorb,jorb)
-    integer                :: iorb,jorb,isite,isector,izero,isign
+    integer                :: iorb,jorb,isite,isector,istate,isign
     integer                :: numstates
     integer                :: nlanc,idim
     integer                :: iup0,idw0
     integer                :: ib(Nlevels)
     integer                :: m,i,j,r
     complex(8)             :: cnorm2
-    real(8)                :: norm0,sgn
+    real(8)                :: norm2,sgn
     real(8),allocatable    :: alfa_(:),beta_(:)
-    complex(8),allocatable :: vvinit(:)
-    complex(8),allocatable :: cvinit(:)
+    complex(8),allocatable :: vvinit(:),vvloc(:)
     integer                :: Nitermax
     type(sector_map)       :: HI    !map of the Sector S to Hilbert space H
     !
     !
-    do izero=1,state_list%size
+    do istate=1,state_list%size
        ! properties of the ground states
-       isector     =  es_return_sector(state_list,izero)
-       idim        = getdim(isector)
-       state_e     =  es_return_energy(state_list,izero)
-       state_cvec  => es_return_cvector(state_list,izero)
-       norm0=sqrt(dot_product(state_cvec,state_cvec))
-       if(abs(norm0-1.d0)>1.d-9)stop "GS is not normalized"
-       allocate(vvinit(idim),cvinit(idim))
-       call build_sector(isector,HI)
+       isector     =  es_return_sector(state_list,istate)
+       state_e     =  es_return_energy(state_list,istate)
+#ifdef _MPI
+       if(MpiStatus)then
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          state_cvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       state_cvec => es_return_cvector(state_list,istate)
+#endif
        !
-       !build the (N_iorb+N_jorb)|gs> state
+       idim       =  getdim(isector)
+       !
        if(ed_verbose==3)write(LOGfile,"(A)")'Apply N_iorb + N_jorb:'
-       vvinit=zero
-       do m=1,idim                     !loop over |gs> components m
-          i=HI%map(m)
-          ib = bdecomp(i,2*Ns)
-          sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
-          vvinit(m) = sgn*state_cvec(m)   
+
+       !build the (N_iorb+N_jorb)|gs> state
+       if(MpiMaster)then
+          allocate(vvinit(idim)); vvinit=zero
           !
-          sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
-          vvinit(m) = vvinit(m) + sgn*state_cvec(m)   
-          !
-       enddo
-       norm0=dot_product(vvinit,vvinit)
-       vvinit=vvinit/sqrt(norm0)
-       !
-       call setup_Hv_sector(isector)
-       if(ed_sparse_H)call ed_buildH_c()
+          call build_sector(isector,HI)
+          do m=1,idim                     !loop over |gs> components m
+             i=HI%map(m)
+             ib = bdecomp(i,2*Ns)
+             sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
+             vvinit(m) = sgn*state_cvec(m)   
+             !
+             sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
+             vvinit(m) = vvinit(m) + sgn*state_cvec(m)   
+             !
+          enddo
+          call delete_sector(isector,HI)
+          norm2=dot_product(vvinit,vvinit)
+          vvinit=vvinit/sqrt(norm2)
+       endif
        !
        nlanc=min(idim,lanc_nGFiter)
        allocate(alfa_(nlanc),beta_(nlanc))
-#ifdef _MPI
+       !
+       call build_Hv_sector(isector)
+#ifdef _MP
        if(MpiStatus)then
-          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
+          call Bcast_MPI(MpiComm,norm2)
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(vvloc(vecDim))
+          call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
        else
           call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
        endif
 #else
        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
 #endif
-       cnorm2=one*norm0
+       cnorm2=one*norm2
        !particle and holes excitations all at once
        isign=1                    !<---
        call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,jorb)
@@ -277,35 +370,44 @@ contains
        !
        !build the (N_iorb - xi*N_jorb)|gs> state
        if(ed_verbose==3)write(LOGfile,"(A)")'Apply N_iorb + xi*N_jorb:'
-       cvinit=zero
-       do m=1,idim
-          i=HI%map(m)
-          ib = bdecomp(i,2*Ns)
-          sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
-          cvinit(m) = sgn*state_cvec(m)   
-          !
-          sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
-          cvinit(m) = cvinit(m) - xi*sgn*state_cvec(m)   
-          !
-       enddo
-       norm0=dot_product(cvinit,cvinit)
-       cvinit=cvinit/sqrt(norm0)
        !
-       call setup_Hv_sector(isector)
-       if(ed_sparse_H)call ed_buildH_c()
+       if(MpiMaster)then
+          vvinit=zero
+          !
+          call build_sector(isector,HI)
+          do m=1,idim
+             i=HI%map(m)
+             ib = bdecomp(i,2*Ns)
+             sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
+             vvinit(m) = sgn*state_cvec(m)   
+             !
+             sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
+             vvinit(m) = vvinit(m) - xi*sgn*state_cvec(m)   
+             !
+          enddo
+          call delete_sector(isector,HI)
+          norm2=dot_product(vvinit,vvinit)
+          vvinit=vvinit/sqrt(norm2)
+       endif
        !
        nlanc=min(idim,lanc_nGFiter)
        allocate(alfa_(nlanc),beta_(nlanc))
-#ifdef _MPI
+       !
+       call build_Hv_sector(isector)
+#ifdef _MP
        if(MpiStatus)then
-          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,cvinit,alfa_,beta_)
+          call Bcast_MPI(MpiComm,norm2)
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(vvloc(vecDim))
+          call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
        else
-          call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+          call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
        endif
 #else
-       call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+       call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
 #endif     
-       cnorm2=xi*norm0
+       cnorm2=xi*norm2
        isign=1
        call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,jorb)
        !
@@ -314,127 +416,166 @@ contains
        !
        !build the (N_iorb + xi*N_jorb)|gs> state
        if(ed_verbose==3)write(LOGfile,"(A)")'Apply N_iorb + xi*N_jorb:'
-       cvinit=zero
-       do m=1,idim
-          i=HI%map(m)
-          ib = bdecomp(i,2*Ns)
-          sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
-          cvinit(m) = sgn*state_cvec(m)   
-          !
-          sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
-          cvinit(m) = cvinit(m) + xi*sgn*state_cvec(m)   
-          !
-       enddo
-       norm0=dot_product(cvinit,cvinit)
-       cvinit=cvinit/sqrt(norm0)
        !
-       call setup_Hv_sector(isector)
-       if(ed_sparse_H)call ed_buildH_c()
+       if(MpiMaster)then
+          vvinit=zero
+          !
+          call build_sector(isector,HI)
+          do m=1,idim
+             i=HI%map(m)
+             ib = bdecomp(i,2*Ns)
+             sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
+             vvinit(m) = sgn*state_cvec(m)   
+             !
+             sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
+             vvinit(m) = vvinit(m) + xi*sgn*state_cvec(m)   
+             !
+          enddo
+          call delete_sector(isector,HI)
+          norm2=dot_product(vvinit,vvinit)
+          vvinit=vvinit/sqrt(norm2)
+       endif
        !
        nlanc=min(idim,lanc_nGFiter)
        allocate(alfa_(nlanc),beta_(nlanc))
-#ifdef _MPI
+       !
+       call build_Hv_sector(isector)
+#ifdef _MP
        if(MpiStatus)then
-          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,cvinit,alfa_,beta_)
+          call Bcast_MPI(MpiComm,norm2)
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(vvloc(vecDim))
+          call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
        else
-          call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+          call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
        endif
 #else
-       call sp_lanc_tridiag(spHtimesV_cc,cvinit,alfa_,beta_)
+       call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
 #endif
-       cnorm2=xi*norm0
+       cnorm2=xi*norm2
        isign=-1
        call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,jorb)
        !
        call delete_Hv_sector()
        !
-       deallocate(cvinit,vvinit,alfa_,beta_)
-       deallocate(HI%map)
-       if(spH0%status)call sp_delete_matrix(spH0)
+       deallocate(alfa_,beta_)
+       if(allocated(vvinit))deallocate(vvinit)          
+       if(allocated(vvloc))deallocate(vvloc)
        nullify(state_cvec)
     enddo
     return
   end subroutine lanc_ed_build_densChi_offdiag_c
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
 
   !+------------------------------------------------------------------+
   !PURPOSE  : Evaluate the inter-orbital charge susceptibility \Chi_mix 
   ! \chi_mix = <C^+_a(\tau)N_a(0)>
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_densChi_mix_c(iorb,jorb)
-    integer             :: iorb,jorb,ispin
-    complex(8),allocatable :: vvinit(:),vvinit_tmp(:)
-    real(8),allocatable :: alfa_(:),beta_(:)
-    integer             :: isite,jsite,istate
-    integer             :: isector,jsector,ksector
-    integer             :: idim,jdim,kdim
-    type(sector_map)    :: HI,HJ,HK
-    integer             :: ib(Nlevels)
-    integer             :: m,i,j,r,numstates
-    real(8)             :: sgn,norm2,norm0
-    complex(8)          :: cnorm2
-    integer             :: Nitermax,Nlanc
+    integer                :: iorb,jorb,ispin
+    complex(8),allocatable :: vvinit(:),vvinit_tmp(:),vvloc(:)
+    real(8),allocatable    :: alfa_(:),beta_(:)
+    integer                :: isite,jsite,istate,vecDim
+    integer                :: isector,jsector,ksector
+    integer                :: idim,jdim,kdim
+    type(sector_map)       :: HI,HJ,HK
+    integer                :: ib(Nlevels)
+    integer                :: m,i,j,r,numstates
+    real(8)                :: sgn,norm2
+    complex(8)             :: cnorm2
+    integer                :: Nitermax,Nlanc
     !
     !   
     !
     do istate=1,state_list%size
        isector     =  es_return_sector(state_list,istate)
-       idim        = getdim(isector)
        state_e     =  es_return_energy(state_list,istate)
-       state_cvec  => es_return_cvector(state_list,istate)
-       norm0=sqrt(dot_product(state_cvec,state_cvec))
-       if(abs(norm0-1.d0)>1.d-9)stop "GS is not normalized"
-       idim  = getdim(isector)
+#ifdef _MPI
+       if(MpiStatus)then
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          state_cvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       state_cvec => es_return_cvector(state_list,istate)
+#endif
+       !
+       idim       =  getdim(isector)
+       !
        call build_sector(isector,HI)
        !
        !+- Apply Sum_ispin c^dg_{jorb,ispin} c_{iorb,ispin} -+!
        do ispin=1,Nspin
-          isite=impIndex(iorb,ispin)
-          jsector = getCsector(ispin,isector)
-          if(jsector/=0)then
-             jdim  = getdim(jsector)
-             allocate(vvinit_tmp(jdim))
-             call build_sector(jsector,HJ)
-             vvinit_tmp=zero
-             do m=1,idim
-                i=HI%map(m)
-                ib = bdecomp(i,2*Ns)
-                if(ib(isite)==1)then
-                   call c(isite,i,r,sgn)
-                   j=binary_search(HJ%map,r)
-                   vvinit_tmp(j) = sgn*state_cvec(m)
-                end if
-             enddo
+          !
+          if(MpiMaster)then
+             isite=impIndex(iorb,ispin)
+             jsector = getCsector(ispin,isector)
+             if(jsector/=0)then
+                jdim  = getdim(jsector)
+                allocate(vvinit_tmp(jdim)) ;  vvinit_tmp=zero
+                call build_sector(jsector,HJ)
+                do m=1,idim
+                   i=HI%map(m)
+                   ib = bdecomp(i,2*Ns)
+                   if(ib(isite)==1)then
+                      call c(isite,i,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit_tmp(j) = sgn*state_cvec(m)
+                   end if
+                enddo
+             endif
+             !
+             jsite = impIndex(jorb,ispin)
+             ksector = getCDGsector(ispin,jsector)
+             if(ksector/=0) then       
+                kdim  = getdim(ksector)
+                allocate(vvinit(kdim)) ;  vvinit=zero
+                call build_sector(ksector,HK)
+                do m=1,jdim
+                   i=HJ%map(m)
+                   ib = bdecomp(i,2*Ns)
+                   if(ib(jsite)==0)then
+                      call cdg(jsite,i,r,sgn)
+                      j=binary_search(HK%map,r)
+                      vvinit(j) = sgn*vvinit_tmp(m)
+                   endif
+                enddo
+             end if
+             deallocate(vvinit_tmp)
+             !
+             call delete_sector(jsector,HJ)
+             call delete_sector(ksector,HK)
+             norm2=dot_product(vvinit,vvinit)
+             vvinit=vvinit/sqrt(norm2)
           endif
-          jsite = impIndex(jorb,ispin)
-          ksector = getCDGsector(ispin,jsector)
-          if(ksector/=0) then       
-             kdim  = getdim(ksector)
-             allocate(vvinit(kdim)) !<==== ACTHUNG! 
-             call build_sector(ksector,HK)
-             vvinit=zero              !<==== ACTHUNG! 
-             do m=1,jdim
-                i=HJ%map(m)
-                ib = bdecomp(i,2*Ns)
-                if(ib(jsite)==0)then
-                   call cdg(jsite,i,r,sgn)
-                   j=binary_search(HK%map,r)
-                   vvinit(j) = sgn*vvinit_tmp(m)
-                endif
-             enddo
-          end if
-          deallocate(HJ%map,HK%map,vvinit_tmp)
-          !
-          norm2=dot_product(vvinit,vvinit)
-          vvinit=vvinit/sqrt(norm2)
-          !
-          call setup_Hv_sector(ksector)
-          if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(kdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
+          !
+          call build_Hv_sector(ksector)
 #ifdef _MPI
           if(MpiStatus)then
-             call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
+             call Bcast_MPI(MpiComm,norm2)
+             vecDim = vecDim_Hv_sector(ksector)
+             allocate(vvloc(vecDim))
+             call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+             call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
           else
              call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
           endif
@@ -446,59 +587,68 @@ contains
           !
           call delete_Hv_sector()
           !
-          deallocate(vvinit,alfa_,beta_)
+          deallocate(alfa_,beta_)
+          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvloc))deallocate(vvloc)
        enddo
        !
        !
        !+- Apply Sum_ispin c^dg_{iorb,ispin} c_{jorb,ispin} -+!
        do ispin=1,Nspin
-          jsite=impIndex(jorb,ispin)
-          jsector = getCsector(ispin,isector)
-          if(jsector/=0)then
-             jdim  = getdim(jsector)
-             allocate(vvinit_tmp(jdim))
-             call build_sector(jsector,HJ)
-             vvinit_tmp=zero
-             do m=1,idim
-                i=HI%map(m)
-                ib = bdecomp(i,2*Ns)
-                if(ib(jsite)==1)then
-                   call c(jsite,i,r,sgn)
-                   j=binary_search(HJ%map,r)
-                   vvinit_tmp(j) = sgn*state_cvec(m)
-                endif
-             enddo
+          !
+          if(MpiMaster)then
+             jsite=impIndex(jorb,ispin)
+             jsector = getCsector(ispin,isector)
+             if(jsector/=0)then
+                jdim  = getdim(jsector)
+                allocate(vvinit_tmp(jdim)) ; vvinit_tmp=zero
+                call build_sector(jsector,HJ)             
+                do m=1,idim
+                   i=HI%map(m)
+                   ib = bdecomp(i,2*Ns)
+                   if(ib(jsite)==1)then
+                      call c(jsite,i,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit_tmp(j) = sgn*state_cvec(m)
+                   endif
+                enddo
+             endif
+             !
+             isite = impIndex(iorb,ispin)
+             ksector = getCDGsector(ispin,jsector)
+             if(ksector/=0) then       
+                kdim  = getdim(ksector)
+                allocate(vvinit(kdim)) ; vvinit=zero
+                call build_sector(ksector,HK)             
+                do m=1,jdim
+                   i=HJ%map(m)
+                   ib = bdecomp(i,2*Ns)
+                   if(ib(isite)==0)then
+                      call cdg(isite,i,r,sgn)
+                      j=binary_search(HK%map,r)
+                      vvinit(j) = sgn*vvinit_tmp(m)
+                   endif
+                enddo
+             end if
+             deallocate(vvinit_tmp)
+             !
+             call delete_sector(jsector,HJ)
+             call delete_sector(ksector,HK)
+             norm2=dot_product(vvinit,vvinit)
+             vvinit=vvinit/sqrt(norm2)
           endif
-          isite = impIndex(iorb,ispin)
-          ksector = getCDGsector(ispin,jsector)
-          if(ksector/=0) then       
-             kdim  = getdim(ksector)
-             allocate(vvinit(kdim))
-             call build_sector(ksector,HK)
-             vvinit=zero
-             do m=1,jdim
-                i=HJ%map(m)
-                ib = bdecomp(i,2*Ns)
-                if(ib(isite)==0)then
-                   call cdg(isite,i,r,sgn)
-                   j=binary_search(HK%map,r)
-                   vvinit(j) = sgn*vvinit_tmp(m)
-                endif
-             enddo
-          end if
-          deallocate(HJ%map,HK%map,vvinit_tmp)
-          !
-          norm2=dot_product(vvinit,vvinit)
-          vvinit=vvinit/sqrt(norm2)
-          !
-          call setup_Hv_sector(ksector)
-          if(ed_sparse_H)call ed_buildH_c()
           !
           nlanc=min(kdim,lanc_nGFiter)
           allocate(alfa_(nlanc),beta_(nlanc))
+          !
+          call build_Hv_sector(ksector)
 #ifdef _MPI
           if(MpiStatus)then
-             call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
+             call Bcast_MPI(MpiComm,norm2)
+             vecDim = vecDim_Hv_sector(ksector)
+             allocate(vvloc(vecDim))
+             call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+             call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
           else
              call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
           endif
@@ -510,15 +660,34 @@ contains
           !
           call delete_Hv_sector()
           !
-          deallocate(vvinit,alfa_,beta_)
+          deallocate(alfa_,beta_)
+          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvloc))deallocate(vvloc)
        enddo
        !
        nullify(state_cvec)
-       deallocate(HI%map)
+       call delete_sector(isector,HI)
        !
     enddo
     return
   end subroutine lanc_ed_build_densChi_mix_c
+
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
 
   subroutine add_to_lanczos_densChi(vnorm2,Ei,alanc,blanc,isign,iorb,jorb)
     integer                                    :: iorb,jorb,isign
@@ -595,6 +764,23 @@ contains
     end select
   end subroutine add_to_lanczos_densChi
 
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
+
   subroutine add_to_lanczos_densChi_mix(vnorm2,Ei,alanc,blanc,isign,iorb,jorb)
     integer                                    :: iorb,jorb,isign
     complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2  
@@ -670,6 +856,23 @@ contains
     end select
   end subroutine add_to_lanczos_densChi_mix
 
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
+
   subroutine add_to_lanczos_densChi_tot(vnorm2,Ei,alanc,blanc,isign)
     complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2  
     real(8)                                    :: Ei,Ej,Egs,de
@@ -743,6 +946,23 @@ contains
        stop "add_to_lanczos_densChi_tot: isign not in {-1,1}"
     end select
   end subroutine add_to_lanczos_densChi_tot
+
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
 
 
 

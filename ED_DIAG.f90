@@ -93,7 +93,7 @@ contains
   subroutine ed_diag_c
     integer                :: nup,ndw,isector,dim
     integer                :: isect,izero,sz,nt
-    integer                :: i,j,iter,unit
+    integer                :: i,j,iter,unit,vecDim
     integer                :: Nitermax,Neigen,Nblock
     real(8)                :: oldzero,enemin,Ei,Jz
     real(8),allocatable    :: eig_values(:)
@@ -115,7 +115,7 @@ contains
     sector: do isector=1,Nsectors
        if(.not.twin_mask(isector))cycle sector !cycle loop if this sector should not be investigated
        !DEBUG>>
-       if(Jz_basis.and.Jz_max.and.abs(gettwoJz(isector))>int(2.*Jz_max_value))cycle
+       if(Jz_basis.and.Jz_max.and.abs(gettwoJz(isector))>int(2*Jz_max_value))cycle
        !>>DEBUG
        iter=iter+1
        Tflag    = twin_mask(isector).AND.ed_twin
@@ -127,17 +127,19 @@ contains
        case("nonsu2")
           Tflag = Tflag.AND.(getn(isector)/=Ns)
        end select
+       !
        Dim      = getdim(isector)
+       !
        Neigen   = min(dim,neigen_sector(isector))
        Nitermax = min(dim,lanc_niter)
-       Nblock   = min(dim,lanc_ncv_factor*max(Neigen,lanc_nstates_sector) + lanc_ncv_add)!min(dim,5*Neigen+10)
+       Nblock   = min(dim,lanc_ncv_factor*max(Neigen,lanc_nstates_sector) + lanc_ncv_add)
        !
        lanc_solve  = .true.
        if(Neigen==dim)lanc_solve=.false.
        if(dim<=max(lanc_dim_threshold,MPI_SIZE))lanc_solve=.false.
        !
        if(MPI_MASTER)then
-          if(ed_verbose==3)then
+          if(ed_verbose>=3)then
              select case(ed_mode)
              case default
                 nup  = getnup(isector)
@@ -166,42 +168,57 @@ contains
           endif
        endif
        !
+       if(allocated(eig_values))deallocate(eig_values)
+       if(allocated(eig_basis))deallocate(eig_basis)
        if(lanc_solve)then
-          if(allocated(eig_values))deallocate(eig_values)
-          if(allocated(eig_basis))deallocate(eig_basis)
-          allocate(eig_values(Neigen),eig_basis(Dim,Neigen))
-          eig_values=0d0 ; eig_basis=zero
+          allocate(eig_values(Neigen))
+          eig_values=0d0
           !
-          call setup_Hv_sector(isector)
-          if(ed_sparse_H)call ed_buildH_c()
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(eig_basis(vecDim,Neigen))
+          eig_basis=zero
+          !
+          ! call setup_Hv_sector(isector)
+          ! if(ed_sparse_H)call ed_buildH_c()
+          call build_Hv_sector(isector)
           !
 #ifdef _MPI
           if(MpiStatus)then
-             call sp_eigh(MpiComm,spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,tol=lanc_tolerance)
+             call sp_eigh(MpiComm,spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,&
+                  tol=lanc_tolerance,&
+                  iverbose=(ed_verbose>3))
           else
-             call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,tol=lanc_tolerance)
+             call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,&
+                  tol=lanc_tolerance,&
+                  iverbose=(ed_verbose>3))
           endif
 #else
-          call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,tol=lanc_tolerance)
+          call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,&
+               tol=lanc_tolerance,&
+               iverbose=(ed_verbose>3))
 #endif
           call delete_Hv_sector()
        else
-          if(allocated(eig_values))deallocate(eig_values)
-          if(allocated(eig_basis))deallocate(eig_basis)
-          allocate(eig_values(Dim),eig_basis(Dim,dim))
-          eig_values=0d0 ; eig_basis=zero
-          call setup_Hv_sector(isector)
-          call ed_buildH_c(eig_basis)
-          call delete_Hv_sector()
+          allocate(eig_values(Dim))
+          eig_values=0d0
+          !
+          vecDim = Dim
+          allocate(eig_basis(Dim,Dim))
+          eig_basis=0d0
+          !
+          ! call setup_Hv_sector(isector)
+          ! call ed_buildH_c(eig_basis)
+          call build_Hv_sector(isector,eig_basis)
           call eigh(eig_basis,eig_values,'V','U')
           if(dim==1)eig_basis(dim,dim)=one
+          !
+          call delete_Hv_sector()
        endif
-       !print *,eig_values
-       if(spH0%status)call sp_delete_matrix(spH0)
+       !
        !
        if(finiteT)then
           do i=1,Neigen
-             call es_add_state(state_list,eig_values(i),eig_basis(1:dim,i),isector,twin=Tflag,size=lanc_nstates_total)
+             call es_add_state(state_list,eig_values(i),eig_basis(:,i),isector,twin=Tflag,size=lanc_nstates_total)
           enddo
        else
           do i=1,Neigen
@@ -209,10 +226,10 @@ contains
              if (enemin < oldzero-10.d0*gs_threshold)then
                 oldzero=enemin
                 call es_free_espace(state_list)
-                call es_add_state(state_list,enemin,eig_basis(1:dim,i),isector,twin=Tflag)
+                call es_add_state(state_list,enemin,eig_basis(:,i),isector,twin=Tflag)
              elseif(abs(enemin-oldzero) <= gs_threshold)then
                 oldzero=min(oldzero,enemin)
-                call es_add_state(state_list,enemin,eig_basis(1:dim,i),isector,twin=Tflag)
+                call es_add_state(state_list,enemin,eig_basis(:,i),isector,twin=Tflag)
              endif
           enddo
        endif

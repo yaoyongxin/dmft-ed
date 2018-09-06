@@ -38,7 +38,12 @@
      endif
   endif
   !
-  call sp_insert_element(spH0,htmp,impi,i)
+  select case(MpiStatus)
+  case (.true.)
+     call sp_insert_element(MpiComm,spH0,htmp,i,i)
+  case (.false.)
+     call sp_insert_element(spH0,htmp,i,i)
+  end select
   !
 
 
@@ -62,14 +67,20 @@
               j=binary_search(H%map,k4)
               htmp = one*Jx*sg1*sg2*sg3*sg4
               !
-              if(j/=0)call sp_insert_element(spH0,htmp,impi,j)
+              if(j==0)cycle
+              select case(MpiStatus)
+              case (.true.)
+                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
+              case (.false.)
+                 call sp_insert_element(spH0,htmp,i,j)
+              end select
               !
            endif
         enddo
      enddo
   endif
 
-  
+
   ! PAIR-HOPPING (P-H) TERMS
   !    P-H: J c^+_iorb_up c^+_iorb_dw   c_jorb_dw   c_jorb_up  (i.ne.j) 
   !    P-H: J c^+_{iorb}  c^+_{iorb+Ns} c_{jorb+Ns} c_{jorb}
@@ -90,7 +101,13 @@
               j=binary_search(H%map,k4)
               htmp = one*Jp*sg1*sg2*sg3*sg4
               !
-              if(j/=0)call sp_insert_element(spH0,htmp,impi,j)
+              if(j==0)cycle
+              select case(MpiStatus)
+              case (.true.)
+                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
+              case (.false.)
+                 call sp_insert_element(spH0,htmp,i,j)
+              end select
               !
            endif
         enddo

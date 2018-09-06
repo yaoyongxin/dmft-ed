@@ -22,66 +22,101 @@ contains
     write(LOGfile,"(A)")"Get impurity pair Chi:"
     do iorb=1,Norb
        write(LOGfile,"(A)")"Get Chi_pair_l"//reg(txtfy(iorb))
-       if(MPI_MASTER)call start_timer()
+       if(MPIMASTER)call start_timer()
        call lanc_ed_build_pairChi_c(iorb)
-       if(MPI_MASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(LOGfile)
     enddo
     pairChi_tau = PairChi_tau/zeta_function
     pairChi_w   = pairChi_w/zeta_function
     pairChi_iv  = pairChi_iv/zeta_function
   end subroutine build_chi_pair
 
+
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
+
+
+
+
   !+------------------------------------------------------------------+
   !PURPOSE  : Evaluate the Pair susceptibility \Chi_pair for a 
   ! single orbital: \chi = <Phi_a(\tau)Phi_a(0)>
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_pairChi_c(iorb)
-    integer                          :: iorb,isite,isector,izero
+    integer                          :: iorb,isite,isector,istate
     integer                          :: numstates
-    integer                          :: nlanc,idim
+    integer                          :: nlanc,idim,vecDim
     integer                          :: iup0,idw0,isign
     integer                          :: ib(Nlevels)
     integer                          :: m,i,i1,i2,j,r
-    real(8)                          :: norm0,sgn,sgn1,sgn2
+    real(8)                          :: norm2,sgn,sgn1,sgn2
     real(8),allocatable              :: alfa_(:),beta_(:)
-    complex(8),allocatable           :: vvinit(:)
+    complex(8),allocatable           :: vvinit(:),vvloc(:)
     integer                          :: Nitermax
     type(sector_map) :: HI    !map of the Sector S to Hilbert space H
     !
     !
-    do izero=1,state_list%size
-       isector    =  es_return_sector(state_list,izero)
-       idim       =  getdim(isector)
-       state_e    =  es_return_energy(state_list,izero)
-       state_cvec => es_return_cvector(state_list,izero)
-       norm0=sqrt(dot_product(state_cvec,state_cvec))
-       if(abs(norm0-1.d0)>1.d-9)stop "GS is not normalized"
-       call build_sector(isector,HI)
+    do istate=1,state_list%size
+       isector    =  es_return_sector(state_list,istate)
+       state_e    =  es_return_energy(state_list,istate)
+#ifdef _MPI
+       if(MpiStatus)then
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          state_cvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       state_cvec => es_return_cvector(state_list,istate)
+#endif
+       !
+       idim      =  getdim(isector)
        !
        !Build the C_{iorb,up}C_{iorb,dw}|eigvec> 
        if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply C_{iorb,up}C_{iorb,dw}:',getsz(isector)
-       allocate(vvinit(idim))
-       vvinit=0.d0
-       do m=1,idim
-          i=HI%map(m)
-          ib = bdecomp(i,2*Ns)
-          if(ib(iorb+Ns)==0.OR.ib(iorb)==0)cycle
-          call c(iorb+Ns,i,i1,sgn1)
-          call c(iorb,i1,i2,sgn2)
-          j = binary_search(HI%map,i2)
-          vvinit(j) = sgn1*sgn2*state_cvec(m)
-       enddo
-       norm0=sqrt(dot_product(vvinit,vvinit))
-       vvinit=vvinit/norm0
        !
-       call setup_Hv_sector(isector)
-       if(ed_sparse_H)call ed_buildH_c()
+       if(MpiMaster)then
+          allocate(vvinit(idim)) ; vvinit=0.d0
+          !
+          call build_sector(isector,HI)   
+          do m=1,idim
+             i=HI%map(m)
+             ib = bdecomp(i,2*Ns)
+             if(ib(iorb+Ns)==0.OR.ib(iorb)==0)cycle
+             call c(iorb+Ns,i,i1,sgn1)
+             call c(iorb,i1,i2,sgn2)
+             j = binary_search(HI%map,i2)
+             vvinit(j) = sgn1*sgn2*state_cvec(m)
+          enddo
+          call delete_sector(isector,HI)
+          norm2=sqrt(dot_product(vvinit,vvinit))
+          vvinit=vvinit/norm2
+       endif
        !
        nlanc=min(idim,lanc_nGFiter)
        allocate(alfa_(nlanc),beta_(nlanc))
+       !
+       call build_Hv_sector(isector)
 #ifdef _MPI
        if(MpiStatus)then
-          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
+          call Bcast_MPI(MpiComm,norm2)
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(vvloc(vecDim))
+          call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
        else
           call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
        endif
@@ -89,37 +124,45 @@ contains
        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
 #endif
        isign=-1 !<== ACTHUNG!!!! check this is the correct value of isign
-       call add_to_lanczos_pairChi(norm0,state_e,alfa_,beta_,isign,iorb)
-       !
+       call add_to_lanczos_pairChi(norm2,state_e,alfa_,beta_,isign,iorb)
        call delete_Hv_sector()
        !
-       if(spH0%status)call sp_delete_matrix(spH0)
-       deallocate(vvinit,alfa_,beta_)
+       deallocate(alfa_,beta_)
+       if(allocated(vvinit))deallocate(vvinit)
+       if(allocated(vvloc))deallocate(vvloc)
        !
        !Build the CDG_{iorb,dw}CDG_{iorb,up}|eigvec> 
        if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply CDG_{iorb,dw}CDG_{iorb,up}:',getsz(isector)
-       allocate(vvinit(idim))
-       vvinit=0.d0
-       do m=1,idim
-          i=HI%map(m)
-          ib = bdecomp(i,2*Ns)
-          if(ib(iorb+Ns)==1.OR.ib(iorb)==1)cycle
-          call cdg(iorb,i,i1,sgn1)
-          call cdg(iorb+Ns,i1,i2,sgn2)
-          j = binary_search(HI%map,i2)
-          vvinit(j) = sgn1*sgn2*state_cvec(m)
-       enddo
-       norm0=sqrt(dot_product(vvinit,vvinit))
-       vvinit=vvinit/norm0
        !
-       call setup_Hv_sector(isector)
-       if(ed_sparse_H)call ed_buildH_c()
+       if(MpiMaster)then
+          allocate(vvinit(idim)) ; vvinit=0.d0
+          !
+          call build_sector(isector,HI)     
+          do m=1,idim
+             i=HI%map(m)
+             ib = bdecomp(i,2*Ns)
+             if(ib(iorb+Ns)==1.OR.ib(iorb)==1)cycle
+             call cdg(iorb,i,i1,sgn1)
+             call cdg(iorb+Ns,i1,i2,sgn2)
+             j = binary_search(HI%map,i2)
+             vvinit(j) = sgn1*sgn2*state_cvec(m)
+          enddo
+          call delete_sector(isector,HI)
+          norm2=sqrt(dot_product(vvinit,vvinit))
+          vvinit=vvinit/norm2
+       endif
        !
        nlanc=min(idim,lanc_nGFiter)
        allocate(alfa_(nlanc),beta_(nlanc))
+       !
+       call build_Hv_sector(isector)
 #ifdef _MPI
        if(MpiStatus)then
-          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvinit,alfa_,beta_)
+          call Bcast_MPI(MpiComm,norm2)
+          vecDim = vecDim_Hv_sector(isector)
+          allocate(vvloc(vecDim))
+          call scatter_vector_MPI(MpiComm,vvinit,vvloc)
+          call sp_lanc_tridiag(MpiComm,spHtimesV_cc,vvloc,alfa_,beta_)
        else
           call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
        endif
@@ -127,17 +170,35 @@ contains
        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
 #endif
        isign=1 !<== ACTHUNG!!!! check this is the correct value of isign
-       call add_to_lanczos_pairChi(norm0,state_e,alfa_,beta_,isign,iorb)
-       !
+       call add_to_lanczos_pairChi(norm2,state_e,alfa_,beta_,isign,iorb)
        call delete_Hv_sector()
        !
-       if(spH0%status)call sp_delete_matrix(spH0)
-       deallocate(vvinit,alfa_,beta_)
-       deallocate(HI%map)
+       deallocate(alfa_,beta_)
+       if(allocated(vvinit))deallocate(vvinit)
+       if(allocated(vvloc))deallocate(vvloc)
        nullify(state_cvec)
     enddo
     return
   end subroutine lanc_ed_build_pairChi_c
+
+
+
+
+
+
+
+
+
+  !################################################################
+  !################################################################
+  !################################################################
+  !################################################################
+
+
+
+
+
+
 
   subroutine add_to_lanczos_pairChi(vnorm,Ei,alanc,blanc,isign,iorb)
     real(8)                                    :: vnorm,Ei,Ej,Egs,pesoF,pesoAB,pesoBZ,de,peso
@@ -212,24 +273,6 @@ contains
        stop "add_to_lanczos_pairChi: isign not in {-1,1}"
     end select
   end subroutine add_to_lanczos_pairChi
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

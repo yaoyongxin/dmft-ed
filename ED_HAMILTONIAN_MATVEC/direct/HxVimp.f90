@@ -7,7 +7,7 @@
      htmp = htmp + impHloc(Nspin,Nspin,iorb,iorb)*ndw(iorb)
   enddo
   !
-  call sp_insert_element(spH0,htmp,impi,i)
+  hv(impi) = hv(impi) + htmp*vin(i)
   !
 
   !Off-diagonal elements, i.e. non-local part
@@ -28,13 +28,13 @@
            j = binary_search(H%map,k2)
            htmp = impHloc(1,1,iorb,jorb)*sg1*sg2
            !
-           call sp_insert_element(spH0,htmp,impi,j)
+           hv(impi) = hv(impi) + htmp*vin(j)
            !
         endif
         !DW
         Jcondition = &
              (impHloc(Nspin,Nspin,iorb,jorb)/=zero) .AND. &
-             (ib(jorb+Ns)==1)                       .AND. &
+             (ib(jorb+Ns)==1)                  .AND. &
              (ib(iorb+Ns)==0)
         if (Jcondition) then
            call c(jorb+Ns,m,k1,sg1)
@@ -42,7 +42,7 @@
            j = binary_search(H%map,k2)
            htmp = impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2
            !
-           call sp_insert_element(spH0,htmp,impi,j)
+           hv(impi) = hv(impi) + htmp*vin(j)
            !
         endif
      enddo
@@ -54,7 +54,7 @@
         jspin = 3-ispin !ispin=1,jspin=2, ispin=2,jspin=1
         !
         do iorb=1,Norb
-           do jorb=1,Norb
+           do jorb=1,Norb           
               alfa = iorb + (ispin-1)*Ns
               beta = jorb + (jspin-1)*Ns
               Jcondition=&
@@ -66,7 +66,7 @@
                  j = binary_search(H%map,k2)
                  htmp = impHloc(ispin,jspin,iorb,jorb)*sg1*sg2
                  !
-                 call sp_insert_element(spH0,htmp,impi,j)
+                 hv(impi) = hv(impi) + htmp*vin(j)
                  !
               endif
               !

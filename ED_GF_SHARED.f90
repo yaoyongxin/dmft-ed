@@ -31,12 +31,6 @@ MODULE ED_GF_SHARED
   !=========================================================
   real(8),dimension(:),allocatable            :: wm,tau,wr,vm
 
-  !Auxiliary functions GF
-  !=========================================================
-  complex(8),allocatable,dimension(:,:,:,:,:) :: impDeltamats,impDeltareal
-  complex(8),allocatable,dimension(:,:,:,:,:) :: invimpG0mats,invimpG0real
-  complex(8),allocatable,dimension(:,:,:,:,:) :: invimpGmats,invimpGreal
-
   !AUX GF
   !=========================================================
   complex(8),allocatable,dimension(:,:)       :: auxGmats,auxGreal
@@ -48,13 +42,14 @@ MODULE ED_GF_SHARED
   integer                                     :: MpiComm=0
 #endif
   logical                                     :: MpiStatus=.false.  
-  integer                                     :: MPI_RANK=0
-  integer                                     :: MPI_SIZE=1
-  logical                                     :: MPI_MASTER=.true.
-  integer                                     :: mpi_ierr
+  integer                                     :: MpiRank=0
+  integer                                     :: MpiSize=1
+  logical                                     :: MpiMaster=.true.
+  integer                                     :: MpiIerr
 
 
 contains
+
 
 
   subroutine ed_greens_functions_set_MPI(comm)
@@ -62,22 +57,23 @@ contains
     integer :: comm
     MpiComm  = comm
     MpiStatus = .true.
-    MPI_RANK = get_Rank_MPI(MpiComm)
-    MPI_SIZE = get_Size_MPI(MpiComm)
-    MPI_MASTER=get_Master_MPI(MpiComm)
+    MPIRANK = get_Rank_MPI(MpiComm)
+    MPISIZE = get_Size_MPI(MpiComm)
+    MPIMASTER=get_Master_MPI(MpiComm)
 #else
     integer,optional :: comm
 #endif
   end subroutine ed_greens_functions_set_MPI
 
 
+
   subroutine ed_greens_functions_del_MPI()
 #ifdef _MPI
     MpiComm  = MPI_UNDEFINED
     MpiStatus = .false.
-    MPI_RANK=0
-    MPI_SIZE=1
-    MPI_MASTER=.true.
+    MPIRANK=0
+    MPISIZE=1
+    MPIMASTER=.true.
 #endif
   end subroutine ed_greens_functions_del_MPI
 

@@ -95,8 +95,7 @@ MODULE ED_VARS_GLOBAL
   !Variables for DIAGONALIZATION
   !PRIVATE
   !=========================================================  
-  type(sparse_matrix)                                :: spH0
-  type(sparse_matrix)                                :: spH0up,spH0dw
+  type(sparse_matrix_ll)                             :: spH0
   procedure(cc_sparse_HxV),pointer                   :: spHtimesV_cc=>null()
 
 

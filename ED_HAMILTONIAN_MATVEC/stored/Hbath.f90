@@ -10,7 +10,12 @@
         enddo
      enddo
      !
-     call sp_insert_element(spH0,htmp,impi,i)
+     select case(MpiStatus)
+     case (.true.)
+        call sp_insert_element(MpiComm,spH0,htmp,i,i)
+     case (.false.)
+        call sp_insert_element(spH0,htmp,i,i)
+     end select
      !
   else
      !
@@ -25,7 +30,12 @@
         enddo
      enddo
      !
-     call sp_insert_element(spH0,htmp,impi,i)
+     select case(MpiStatus)
+     case (.true.)
+        call sp_insert_element(MpiComm,spH0,htmp,i,i)
+     case (.false.)
+        call sp_insert_element(spH0,htmp,i,i)
+     end select
      !
      !off-diagonal elements
      !
@@ -49,7 +59,12 @@
                  j = binary_search(H%map,k2)
                  htmp = dmft_bath%h(1,1,iorb,jorb,kp)*sg1*sg2
                  !
-                 call sp_insert_element(spH0,htmp,impi,j)
+                 select case(MpiStatus)
+                 case (.true.)
+                    call sp_insert_element(MpiComm,spH0,htmp,i,j)
+                 case (.false.)
+                    call sp_insert_element(spH0,htmp,i,j)
+                 end select
                  !
               endif
               !DW
@@ -65,7 +80,12 @@
                  j = binary_search(H%map,k2)
                  htmp = dmft_bath%h(Nspin,Nspin,iorb,jorb,kp)*sg1*sg2
                  !
-                 call sp_insert_element(spH0,htmp,impi,j)
+                 select case(MpiStatus)
+                 case (.true.)
+                    call sp_insert_element(MpiComm,spH0,htmp,i,j)
+                 case (.false.)
+                    call sp_insert_element(spH0,htmp,i,j)
+                 end select
                  !
               endif
            enddo
@@ -91,7 +111,12 @@
                        j = binary_search(H%map,k2)
                        htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*sg1*sg2
                        !
-                       call sp_insert_element(spH0,htmp,impi,j)
+                       select case(MpiStatus)
+                       case (.true.)
+                          call sp_insert_element(MpiComm,spH0,htmp,i,j)
+                       case (.false.)
+                          call sp_insert_element(spH0,htmp,i,j)
+                       end select
                        !
                     endif
                  enddo
@@ -115,7 +140,12 @@
               j=binary_search(H%map,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2
               !
-              call sp_insert_element(spH0,htmp,impi,j)
+              select case(MpiStatus)
+              case (.true.)
+                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
+              case (.false.)
+                 call sp_insert_element(spH0,htmp,i,j)
+              end select
               !
            endif
            !\Delta_l cdg_{\up,ms} cdg_{\dw,ms}
@@ -125,7 +155,12 @@
               j=binary_search(H%map,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2 !
               !
-              call sp_insert_element(spH0,htmp,impi,j)
+              select case(MpiStatus)
+              case (.true.)
+                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
+              case (.false.)
+                 call sp_insert_element(spH0,htmp,i,j)
+              end select
               !
            endif
         enddo
