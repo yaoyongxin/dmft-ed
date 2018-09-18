@@ -1,8 +1,21 @@
-program ed_nano
+program ed_nano_adiabatic
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
   implicit none
+
+  abstract  interface
+     subroutine drive_template(Vijt,Uijt,Hij0,Hijt,time_step,N)
+        integer                   :: N
+        real(8)                   :: time_step
+        complex(8),dimension(N,N) :: Vijt !drive
+        complex(8),dimension(N,N) :: Uijt !drive time derivative
+        complex(8),dimension(N,N) :: Hij0 !time-independent Hamiltonian
+        complex(8),dimension(N,N) :: Hijt !time-  dependent Hamiltonian
+     end subroutine drive_template
+  end interface  
+
+
 
   integer                                         :: iloop
   logical                                         :: converged
@@ -19,24 +32,39 @@ program ed_nano
   real(8), allocatable,dimension(:)               :: dens,dens_ineq
   real(8), allocatable,dimension(:)               :: docc,docc_ineq
   !hamiltonian input:
-  complex(8),allocatable                          :: Hij(:,:,:) ![Nlat*Nspin*Norb][Nlat*Nspin*Norb][Nk==1]
+  complex(8),allocatable                          :: Hij(:,:,:) ![Nlso][Nlso][Nk]
+  complex(8),allocatable                          :: Hij_static(:,:,:) ![Nlso][Nlso][Nk]
   complex(8),allocatable                          :: nanoHloc(:,:),Hloc(:,:,:,:,:),Hloc_ineq(:,:,:,:,:)
-  integer                                         :: Nk,Nlso,Nineq,Nlat
+  integer                                         :: Nk,Nlso,Nlo,Nineq,Nlat
   integer,dimension(:),allocatable                :: lat2ineq,ineq2lat
   integer,dimension(:),allocatable                :: sb_field_sign
   !
   real(8)                                         :: wmixing,Eout(2)
+  !
   !input files:
   character(len=32)                               :: finput
   character(len=32)                               :: nfile,hijfile
   !
   logical                                         :: phsym
   logical                                         :: leads
-  logical                                         :: kinetic,trans,jbias,jrkky,chi0ij
+  !
   !non-local Green's function:
-  complex(8),allocatable,dimension(:,:,:,:,:,:,:) :: Gijmats,Gijreal
+  complex(8),allocatable,dimension(:,:,:,:,:,:,:) :: Gijreal
+  !
   !hybridization function to environment
-  complex(8),dimension(:,:,:),allocatable         :: Hyb_mats,Hyb_real ![Nlat*Nspin*Norb][Nlat*Nspin*Norb][Lmats/Lreal]
+  complex(8),dimension(:,:,:),allocatable         :: Hyb_mats ![Nlso][Nlso][Lmats]
+  complex(8),dimension(:,:,:),allocatable         :: Hyb_real ![Nlso][Nlso][Lreal]
+  !
+  !drive time/frequency variables
+  integer                                         :: itime,Ltime
+  real(8),dimension(:),allocatable                :: time ![Ltime]
+  complex(8),dimension(:,:),allocatable           :: Vij,Uij ![Nlso][Nlso]
+  !
+  procedure(drive_template),pointer               :: drive_model
+  character(len=32)                               :: drive
+  !
+  integer                                         :: unit
+  logical                                         :: exist,noint,igetgf
 
 
   call parse_cmd_variable(finput,"FINPUT",default='inputED_NANO.conf')
@@ -46,11 +74,31 @@ program ed_nano
   call parse_input_variable(phsym,"phsym",finput,default=.false.)
   ! parse environment & transport flags
   call parse_input_variable(leads,"leads",finput,default=.false.)
-  call parse_input_variable(trans,"trans",finput,default=.false.)
-  call parse_input_variable(jbias,"jbias",finput,default=.false.)
-  call parse_input_variable(jrkky,"jrkky",finput,default=.false.)
-  call parse_input_variable(chi0ij,"chi0ij",finput,default=.false.)
-  call parse_input_variable(kinetic,"kinetic",finput,default=.false.)
+  ! parse time variable
+  call parse_input_variable(Ltime,"LTIME",finput,default=100)
+  !
+  call parse_input_variable(noint,"NOINT",finput,default=.true.)
+  call parse_input_variable(igetgf,"IGETGF",finput,default=.false.)
+
+  ! parse drive model
+  call parse_input_variable(drive,"DRIVE",finput,default='default')
+   
+
+  select case(trim(drive))
+     case ('gate')
+        drive_model => gate
+     case ('flux')
+        drive_model => flux
+     case default
+        write(*,*) "error: select a drive"
+        stop
+  end select
+
+
+
+
+
+
   ! read input
   call ed_read_input(trim(finput))
 
@@ -65,6 +113,8 @@ program ed_nano
 
   ! set input structure hamiltonian
   call build_Hij([nfile,hijfile])
+  ! store static hamiltonian
+  Hij_static=Hij
 
   ! allocate weiss field:
   allocate(Weiss_ineq(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
@@ -78,6 +128,7 @@ program ed_nano
   allocate(Gmats_ineq(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
   allocate(Greal(Nlat,Nspin,Nspin,Norb,Norb,Lreal))
   allocate(Greal_ineq(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
+  allocate(Gijreal(Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lreal))
   ! allocate Hloc
   allocate(Hloc(Nlat,Nspin,Nspin,Norb,Norb))
   allocate(Hloc_ineq(Nineq,Nspin,Nspin,Norb,Norb))
@@ -96,235 +147,220 @@ program ed_nano
   call set_gf_suffix(".ed")
 
 
-  ! postprocessing options
-  ! evaluates the kinetic energy
-  if(kinetic)then
-     !
-     ! allocate hybridization matrix
-     if(leads)then
-        call set_hyb()
-        call dmft_set_Gamma_matsubara(hyb_mats) !needed for dmft_kinetic_energy (change!)
-     endif
-     !
-     ! read converged self-energy
-     call read_sigma_mats(Smats_ineq)
-     do ilat=1,Nlat
-        ineq = lat2ineq(ilat)
-        Smats(ilat,:,:,:,:,:) = Smats_ineq(ineq,:,:,:,:,:)
-     enddo
-     !
-     print*,size(Smats,1)
-     print*,size(Smats,4),size(Smats,5)
-     print*,size(Smats,6)
-     call dmft_kinetic_energy(Hij,[1d0],Smats)
-     stop
-  endif
-
-
-  ! computes conductance on the real-axis
-  if(trans)then
-     !
-     ! allocate hybridization matrix
-     if(leads)then
-        call set_hyb()
-        call dmft_set_Gamma_realaxis(hyb_real) !needed for dmft_gij_realaxis
-     endif
-     !
-     ! read converged self-energy
-     call read_sigma_real(Sreal_ineq)
-     do ilat=1,Nlat
-        ineq = lat2ineq(ilat)
-        Sreal(ilat,:,:,:,:,:) = Sreal_ineq(ineq,:,:,:,:,:)
-     enddo
-     !
-     allocate(Gijreal(Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lreal))
-     !
-     call dmft_gloc_realaxis(Hij,[1d0],Greal,Sreal)
-     call dmft_print_gf_realaxis(Greal,"LG",iprint=1)
-     call dmft_gij_realaxis(Hij,[1d0],Gijreal,Sreal)
-     !call dmft_print_gij_realaxis(Gijreal,"Gij",iprint=2)
-     !
-     ! extract the linear response (zero-bias) transmission function
-     ! i.e. the conductance in units of the quantum G0 [e^2/h]
-     ! and the corresponding bias-driven current (if jbias=T)
-     call ed_transport(Gijreal)
-     !
-     deallocate(Gijreal)
-     stop
-  endif
-
-
-
-  ! compute effective non-local exchange
-  if(jrkky)then
-     !
-     ! allocate hybridization matrix
-     if(leads)then
-        call set_hyb()
-        call dmft_set_Gamma_realaxis(hyb_real) !needed for dmft_gij_realaxis
-     endif
-     !
-     ! read converged self-energy
-     call read_sigma_real(Sreal_ineq)
-     do ilat=1,Nlat
-        ineq = lat2ineq(ilat)
-        Sreal(ilat,:,:,:,:,:) = Sreal_ineq(ineq,:,:,:,:,:)
-     enddo
-     !
-     allocate(Gijreal(Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lreal))
-     call dmft_gloc_realaxis(Hij,[1d0],Greal,Sreal)
-     call dmft_print_gf_realaxis(Greal,"LG",iprint=1)
-     call dmft_gij_realaxis(Hij,[1d0],Gijreal,Sreal)
-     !
-     ! compute effective exchange
-     call ed_get_jeff(Gijreal,Sreal)
-     !
-     deallocate(Gijreal,Sreal)
-     stop
-  endif
-
-
-
-  ! compute effective non-local exchange
-  if(chi0ij)then
-     !
-     ! allocate hybridization matrix
-     if(leads)then
-        call set_hyb()
-        call dmft_set_Gamma_realaxis(hyb_real) !needed for dmft_gij_realaxis
-     endif
-     !
-     ! read converged self-energy
-     call read_sigma_real(Sreal_ineq)
-     do ilat=1,Nlat
-        ineq = lat2ineq(ilat)
-        Sreal(ilat,:,:,:,:,:) = Sreal_ineq(ineq,:,:,:,:,:)
-     enddo
-     !
-     allocate(Gijreal(Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lreal))
-     call dmft_gloc_realaxis(Hij,[1d0],Greal,Sreal)
-     call dmft_print_gf_realaxis(Greal,"LG",iprint=1)
-     call dmft_gij_realaxis(Hij,[1d0],Gijreal,Sreal)
-     !
-     ! compute bare static non-local susceptibility
-     call ed_get_chi0ij(Gijreal)
-     !
-     deallocate(Gijreal,Sreal)
-     stop
-  endif
-
-
-  !-----------------------------------------------------------------------------
-
-
-
   ! allocate hybridization matrix
   if(leads)then
      call set_hyb()
   endif
 
 
+  ! allocate effective time [0:pi2] 
+  allocate(time(Ltime))
+  if(Ltime==1)then
+     time=0.d0
+  else
+     time = linspace(0.d0,pi2,Ltime)
+  endif
+  ! write interval
+  !do itime=1,Ltime
+  !   write(*,*)itime,time(itime)
+  !enddo
+
+
+  ! allocate drive
+  allocate(Vij(Nlso,Nlso),Uij(Nlso,Nlso))
+
+
   ! setup solver
   Nb=get_bath_dimension()
   allocate(Bath_ineq(Nineq,Nb))
   allocate(Bath_prev(Nineq,Nb))
-  ! set Hloc for each inequivalent site
-  do ineq=1,Nineq
-     ilat = ineq2lat(ineq)
-     Hloc_ineq(ineq,:,:,:,:) = Hloc(ilat,:,:,:,:)
-  enddo
 
-  ! init solver
-  call ed_init_solver(Bath_ineq,Hloc_ineq)
+
+
+  Sreal=zero
+  !call dmft_gij_realaxis(Hij,[1d0],Gijreal,Sreal)
+  !call dmft_print_gij_realaxis(Gijreal,"Gij_static",iprint=2)
+
+
+  !start time loop
+  do itime=1,Ltime
+
+     ! set drive & its derivative, overwrite Hij to include drive
+     call set_drive(drive_model,Vij,Uij,Hij_static,Hij,time(itime))
+
+     
+     ! extract nanoHloc and reshape to get Hloc at the actual time
+     nanoHloc = extract_Hloc(Hij,Nlat,Nspin,Norb)
+     Hloc = lso2nnn_reshape(nanoHloc,Nlat,Nspin,Norb)
+     !
+     ! set Hloc for each inequivalent site
+     do ineq=1,Nineq
+        ilat = ineq2lat(ineq)
+        Hloc_ineq(ineq,:,:,:,:) = Hloc(ilat,:,:,:,:)
+     enddo
   
-  ! break SU(2) symmetry for magnetic solutions
-  do ineq=1,Nineq
-     ilat = ineq2lat(ineq)
-     if(Nspin>1) call break_symmetry_bath(Bath_ineq(ineq,:),sb_field,dble(sb_field_sign(ineq)))
-  enddo
-
-  ! dmft loop
-  iloop=0 ; converged=.false.
-  do while(.not.converged.AND.iloop<nloop) 
-     iloop=iloop+1
-     call start_loop(iloop,nloop,"DMFT-loop")   
-     bath_prev=bath_ineq
-
-     ! solve impurities on each inequivalent site:
-     call ed_solve(bath_ineq,Hloc_ineq)
-
-     ! retrieve self-energies and occupations(Nineq,Norb=1)
-     call ed_get_sigma_matsubara(Smats_ineq,Nineq)
-     call ed_get_sigma_real(Sreal_ineq,Nineq)
-     call ed_get_dens(dens_ineq,Nineq,iorb=1)
-     call ed_get_docc(docc_ineq,Nineq,iorb=1)
-
-     ! spread self-energies and occupation to all lattice sites
-     do ilat=1,Nlat
-        ineq = lat2ineq(ilat)
-        dens(ilat) = dens_ineq(ineq)
-        docc(ilat) = docc_ineq(ineq)
-        Smats(ilat,:,:,:,:,:) = Smats_ineq(ineq,:,:,:,:,:)
-        Sreal(ilat,:,:,:,:,:) = Sreal_ineq(ineq,:,:,:,:,:)
-     enddo
-
-     ! compute the local gf:
-     !
-     if(leads)then
-        call dmft_set_Gamma_matsubara(hyb_mats)
-     endif
-     call dmft_gloc_matsubara(Hij,[1d0],Gmats,Smats)
-     call dmft_print_gf_matsubara(Gmats,"LG",iprint=1)
-     do ineq=1,Nineq
-        ilat = ineq2lat(ineq)
-        Gmats_ineq(ineq,:,:,:,:,:) = Gmats(ilat,:,:,:,:,:)
-     enddo
-     !
-     if(leads)then
-        call dmft_set_Gamma_realaxis(hyb_real)
-     endif
-     call dmft_gloc_realaxis(Hij,[1d0],Greal,Sreal)
-     call dmft_print_gf_realaxis(Greal,"LG",iprint=1)
-     do ineq=1,Nineq
-        ilat = ineq2lat(ineq)
-        Greal_ineq(ineq,:,:,:,:,:) = Greal(ilat,:,:,:,:,:)
-     enddo
-
-     ! compute the Weiss field
-     if(cg_scheme=="weiss")then
-        call dmft_weiss(Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
+     ! ----------------------------------------------------------------- 
+     ! non-interacting case
+     ! ----------------------------------------------------------------- 
+     if(noint)then
+        Sreal=zero
+        !if(itime==1)then 
+        !  call dmft_gij_realaxis(Hij,[1d0],Gijreal,Sreal)
+        !  call dmft_print_gij_realaxis(Gijreal,"Gij_drive",iprint=2)
+        !endif
      else
-        call dmft_delta(Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
-     endif
 
-     ! fit baths and mix result with old baths
-     do ispin=1,Nspin
-        call ed_chi2_fitgf(bath_ineq,Weiss_ineq,Hloc_ineq,ispin)
+     ! ----------------------------------------------------------------- 
+     ! perform L\'anczos for interacting system
+     ! ----------------------------------------------------------------- 
+     !
+     ! init solver
+     call ed_init_solver(Bath_ineq,Hloc_ineq)
+     
+     ! break SU(2) symmetry for magnetic solutions
+     do ineq=1,Nineq
+        ilat = ineq2lat(ineq)
+        if(Nspin>1) call break_symmetry_bath(Bath_ineq(ineq,:),sb_field,dble(sb_field_sign(ineq)))
      enddo
-
-     if(phsym)then
-        do ineq=1,Nineq
-           call ph_symmetrize_bath(bath_ineq(ineq,:),save=.true.)
+   
+     ! dmft loop
+     iloop=0 ; converged=.false.
+     do while(.not.converged.AND.iloop<nloop) 
+        iloop=iloop+1
+        call start_loop(iloop,nloop,"DMFT-loop")   
+        bath_prev=bath_ineq
+   
+        ! solve impurities on each inequivalent site:
+        call ed_solve(bath_ineq,Hloc_ineq)
+   
+        ! retrieve self-energies and occupations(Nineq,Norb=1)
+        call ed_get_sigma_matsubara(Smats_ineq,Nineq)
+        call ed_get_sigma_real(Sreal_ineq,Nineq)
+        call ed_get_dens(dens_ineq,Nineq,iorb=1)
+        call ed_get_docc(docc_ineq,Nineq,iorb=1)
+   
+        ! spread self-energies and occupation to all lattice sites
+        do ilat=1,Nlat
+           ineq = lat2ineq(ilat)
+           dens(ilat) = dens_ineq(ineq)
+           docc(ilat) = docc_ineq(ineq)
+           Smats(ilat,:,:,:,:,:) = Smats_ineq(ineq,:,:,:,:,:)
+           Sreal(ilat,:,:,:,:,:) = Sreal_ineq(ineq,:,:,:,:,:)
         enddo
+   
+        ! compute the local gf:
+        !
+        if(leads)then
+           call dmft_set_Gamma_matsubara(hyb_mats)
+        endif
+        call dmft_gloc_matsubara(Hij,[1d0],Gmats,Smats)
+        call dmft_print_gf_matsubara(Gmats,"LG",iprint=1)
+        do ineq=1,Nineq
+           ilat = ineq2lat(ineq)
+           Gmats_ineq(ineq,:,:,:,:,:) = Gmats(ilat,:,:,:,:,:)
+        enddo
+        !
+        if(leads)then
+           call dmft_set_Gamma_realaxis(hyb_real)
+        endif
+        call dmft_gloc_realaxis(Hij,[1d0],Greal,Sreal)
+        call dmft_print_gf_realaxis(Greal,"LG",iprint=1)
+        do ineq=1,Nineq
+           ilat = ineq2lat(ineq)
+           Greal_ineq(ineq,:,:,:,:,:) = Greal(ilat,:,:,:,:,:)
+        enddo
+   
+        ! compute the Weiss field
+        if(cg_scheme=="weiss")then
+           call dmft_weiss(Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
+        else
+           call dmft_delta(Gmats_ineq,Smats_ineq,Weiss_ineq,Hloc_ineq)
+        endif
+   
+        ! fit baths and mix result with old baths
+        do ispin=1,Nspin
+           call ed_chi2_fitgf(bath_ineq,Weiss_ineq,Hloc_ineq,ispin)
+        enddo
+   
+        if(phsym)then
+           do ineq=1,Nineq
+              call ph_symmetrize_bath(bath_ineq(ineq,:),save=.true.)
+           enddo
+        endif
+        Bath_ineq=wmixing*Bath_ineq + (1.d0-wmixing)*Bath_prev
+   
+        converged = check_convergence(Weiss_ineq(1,1,1,1,1,:),dmft_error,nsuccess,nloop)
+        ! alternative convergency criteria
+        !converged = check_convergence_local(docc_ineq,dmft_error,nsuccess,nloop)
+        if(NREAD/=0.d0) call search_chemical_potential(xmu,sum(dens)/Nlat,converged)
+   
+        call end_loop()
+     end do
+   
+     ! save self-energy on disk
+     call dmft_print_gf_matsubara(Smats_ineq,"LSigma",iprint=1)
+     call dmft_print_gf_realaxis(Sreal_ineq,"LSigma",iprint=1)
+   
+     ! compute kinetic energy at convergence
+     !call dmft_kinetic_energy(Hij,[1d0],Smats)
+   
+
+     ! get occupations at convergence and write as a function of time
+     call ed_get_dens(dens_ineq,Nineq,iorb=1)
+     unit = free_unit()
+     inquire(file="observables_time.ed",exist=exist)
+     if(exist)then
+       open(unit,file="observables_time.ed",status="old",position="append")
+     else
+       open(unit,file="observables_time.ed")
      endif
-     Bath_ineq=wmixing*Bath_ineq + (1.d0-wmixing)*Bath_prev
+     write(unit,'(1f16.9)',advance='no')time(itime)
+     do ineq=1,Nineq
+        write(unit,'(1f16.9)',advance='no')dens_ineq(ineq)
+     enddo
+     write(unit,*) !newline
+     close(unit)
 
-     converged = check_convergence(Weiss_ineq(1,1,1,1,1,:),dmft_error,nsuccess,nloop)
-     ! alternative convergency criteria
-     !converged = check_convergence_local(docc_ineq,dmft_error,nsuccess,nloop)
-     if(NREAD/=0.d0) call search_chemical_potential(xmu,sum(dens)/Nlat,converged)
-
-     call end_loop()
-  end do
-
-  ! save self-energy on disk
-  call dmft_print_gf_matsubara(Smats_ineq,"LSigma",iprint=1)
-  call dmft_print_gf_realaxis(Sreal_ineq,"LSigma",iprint=1)
-
-  ! compute kinetic energy at convergence
-  call dmft_kinetic_energy(Hij,[1d0],Smats)
+ 
+     endif
+     ! ----------------------------------------------------------------- 
 
 
+     ! ----------------------------------------------------------------- 
+     ! set embedding matrix
+     ! ----------------------------------------------------------------- 
+     if(leads)then
+        call dmft_set_Gamma_realaxis(hyb_real) !needed for dmft_gij_realaxis
+     endif
+
+     ! ----------------------------------------------------------------- 
+     ! evalueate and print Green's function
+     ! ----------------------------------------------------------------- 
+     call dmft_gloc_realaxis(Hij,[1d0],Greal,Sreal)
+     if(igetgf)then
+        call dmft_print_gf_realaxis(Greal,"LG",iprint=1)
+     endif
+   
+     ! ----------------------------------------------------------------- 
+     ! evaluate DC/AC transport properties
+     ! ----------------------------------------------------------------- 
+     !
+     ! evaluates the non-local Green's function
+     if(.not.allocated(Gijreal))then
+        allocate(Gijreal(Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lreal))
+     endif
+     call dmft_gij_realaxis(Hij,[1d0],Gijreal,Sreal)
+     !
+     ! evaluate transmission function, DC & AC current
+     call ed_transport_acdc(Gijreal,time(itime))
+     !
+     ! deallocate non-local Green's function
+     deallocate(Gijreal)
+
+     !stop
+
+  enddo ! end of time loop
+   
 
 
 contains
@@ -437,8 +473,8 @@ contains
           is = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb
           js = jorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb
           ! symmetric hopping
-          Hij(is,js,1)=dcmplx(ret,imt) 
-          Hij(js,is,1)=dcmplx(ret,imt) ! symmetrize hopping
+          Hij(is,js,1)=dcmplx(ret, imt) 
+          Hij(js,is,1)=dcmplx(ret,-imt) ! symmetrize hopping
        enddo
     enddo
     close(unit)
@@ -469,103 +505,6 @@ contains
     enddo
     close(unit)
   end subroutine build_Hij
-
-
-  ! !----------------------------------------------------------------------------------------!
-  ! ! purpose: save the matsubare local self-energy on disk
-  ! !----------------------------------------------------------------------------------------!
-  ! subroutine save_sigma_mats(Smats)
-  !   complex(8),intent(inout)         :: Smats(:,:,:,:,:,:)
-  !   character(len=30)                :: suffix
-  !   integer                          :: ilat,ispin,iorb
-  !   real(8),dimension(:),allocatable :: wm
-
-  !   if(size(Smats,2)/=Nspin) stop "save_sigma: error in dim 2. Nspin"
-  !   if(size(Smats,3)/=Nspin) stop "save_sigma: error in dim 3. Nspin"
-  !   if(size(Smats,4)/=Norb) stop "save_sigma: error in dim 4. Norb"
-  !   if(size(Smats,5)/=Norb) stop "save_sigma: error in dim 5. Norb"
-
-  !   allocate(wm(Lmats))
-
-  !   wm = pi/beta*(2*arange(1,Lmats)-1)
-  !   write(LOGfile,*)"write spin-orbital diagonal elements:"
-  !   do ispin=1,Nspin
-  !      do iorb=1,Norb
-  !         suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_iw.ed"
-  !         call store_data("LSigma"//trim(suffix),Smats(:,ispin,ispin,iorb,iorb,:),wm)
-  !      enddo
-  !   enddo
-
-  ! end subroutine save_sigma_mats
-
-
-  ! !----------------------------------------------------------------------------------------!
-  ! ! purpose: save the real local self-energy on disk
-  ! !----------------------------------------------------------------------------------------!
-  ! subroutine save_sigma_real(Sreal)
-  !   complex(8),intent(inout)         :: Sreal(:,:,:,:,:,:)
-  !   character(len=30)                :: suffix
-  !   integer                          :: ilat,ispin,iorb
-  !   real(8),dimension(:),allocatable :: wm,wr
-
-  !   if(size(Sreal,2)/=Nspin) stop "save_sigma: error in dim 2. Nspin"
-  !   if(size(Sreal,3)/=Nspin) stop "save_sigma: error in dim 3. Nspin"
-  !   if(size(Sreal,4)/=Norb) stop "save_sigma: error in dim 4. Norb"
-  !   if(size(Sreal,5)/=Norb) stop "save_sigma: error in dim 5. Norb"
-
-  !   allocate(wr(Lreal))
-
-  !   wr = linspace(wini,wfin,Lreal)
-  !   do ispin=1,Nspin
-  !      do iorb=1,Norb
-  !         suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_realw.ed"
-  !         call store_data("LSigma"//trim(suffix),Sreal(:,ispin,ispin,iorb,iorb,:),wr)
-  !      enddo
-  !   enddo
-
-  ! end subroutine save_sigma_real
-
-
-  ! !----------------------------------------------------------------------------------------!
-  ! ! purpose: save the local self-energy on disk
-  ! !----------------------------------------------------------------------------------------!
-  ! subroutine save_sigma(Smats,Sreal)
-  !   complex(8),intent(inout)         :: Smats(:,:,:,:,:,:)
-  !   complex(8),intent(inout)         :: Sreal(:,:,:,:,:,:)
-  !   character(len=30)                :: suffix
-  !   integer                          :: ilat,ispin,iorb
-  !   real(8),dimension(:),allocatable :: wm,wr
-
-  !   if(size(Smats,2)/=Nspin) stop "save_sigma: error in dim 2. Nspin"
-  !   if(size(Smats,3)/=Nspin) stop "save_sigma: error in dim 3. Nspin"
-  !   if(size(Smats,4)/=Norb) stop "save_sigma: error in dim 4. Norb"
-  !   if(size(Smats,5)/=Norb) stop "save_sigma: error in dim 5. Norb"
-
-  !   if(size(Sreal,2)/=Nspin) stop "save_sigma: error in dim 2. Nspin"
-  !   if(size(Sreal,3)/=Nspin) stop "save_sigma: error in dim 3. Nspin"
-  !   if(size(Sreal,4)/=Norb) stop "save_sigma: error in dim 4. Norb"
-  !   if(size(Sreal,5)/=Norb) stop "save_sigma: error in dim 5. Norb"
-
-  !   allocate(wm(Lmats))
-  !   allocate(wr(Lreal))
-
-  !   wm = pi/beta*(2*arange(1,Lmats)-1)
-  !   wr = linspace(wini,wfin,Lreal)
-  !   write(LOGfile,*)"write spin-orbital diagonal elements:"
-  !   do ispin=1,Nspin
-  !      do iorb=1,Norb
-  !         suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_iw.ed"
-  !         call store_data("LSigma"//trim(suffix),Smats(:,ispin,ispin,iorb,iorb,:),wm)
-  !      enddo
-  !   enddo
-  !   do ispin=1,Nspin
-  !      do iorb=1,Norb
-  !         suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_realw.ed"
-  !         call store_data("LSigma"//trim(suffix),Sreal(:,ispin,ispin,iorb,iorb,:),wr)
-  !      enddo
-  !   enddo
-
-  ! end subroutine save_sigma
 
 
 
@@ -671,32 +610,52 @@ contains
   !----------------------------------------------------------------------------------------!
   ! purpose: evaluate 
   !  - conductance (without vertex corrections) 
-  !  - bias-driven current
+  !  - bias-driven DC & AC current
   ! for a nanostructure on the real axis, given the non-local Green's function 
-  ! and the L/R hybridization matrix, of size [Nlat*Nspin*Norb**2*Lreal]
+  ! and the L/R hybridization matrix
   !----------------------------------------------------------------------------------------!
-  subroutine ed_transport(Gret)
+  subroutine ed_transport_acdc(Gret,time_step)
     complex(8),intent(inout)              :: Gret(:,:,:,:,:,:,:)  ![Nlat][Nlat][Nspin][Nspin][Norb][Norb][Lreal]
+    real(8),intent(in)                    :: time_step
     ! auxiliary variables for matmul        
-    complex(8),dimension(:,:),allocatable :: GR,HR,GA,HL,Re,Le,Te ![Nlat*Norb]**2
-    complex(8),dimension(:,:),allocatable :: transe               ![Nspin][Lreal]
+    complex(8),dimension(:,:),allocatable :: GR,HR,GA,HL,Re,Le,Te ![Nlo][Nlo]
+    complex(8),dimension(:,:),allocatable :: Vt                   ![Nlo][Nlo]
     !
-    integer,dimension(:,:),allocatable    :: rmask,lmask          ![Nlat]**2
+    complex(8),dimension(:,:),allocatable :: transe_dc            ![Nspin][Lreal]
+    complex(8),dimension(:,:),allocatable :: transl_ac,transr_ac  ![Nspin][Lreal]
+    !
+    real(8),dimension(:),allocatable      :: g                    ![Nspin]
+    !
+    integer,dimension(:,:),allocatable    :: rmask,lmask          ![Nlat][Nlat]
     !
     real(8),dimension(:),allocatable      :: wr
+    real(8)                               :: wmesh
     !
-    real(8),dimension(:),allocatable      :: jcurr                ![Nspin]
-    real(8)                               :: lbias,rbias,dE
+    real(8),dimension(:),allocatable      :: jcurr_dc,jcurr_ac    ![Nspin]
+    real(8)                               :: lbias,rbias
     !
-    integer                               :: ilat,jlat,ispin,jspin,iorb,jorb,io,jo,is,js,i,Nlso,Nlo
+    integer                               :: Nlso,Nlo
+    integer                               :: ilat,jlat,ispin,jspin,iorb,jorb
+    integer                               :: io,jo,is,js,i,ixmu
     integer                               :: unit,unit_in,unit_out,eof,lfile
+    logical                               :: exist
     character(len=30)                     :: suffix
     !
     Nlso = Nlat*Nspin*Norb
     Nlo  = Nlat*Norb
     !
     allocate(wr(Lreal))
-    wr = linspace(wini,wfin,Lreal)
+    wr = linspace(wini,wfin,Lreal,mesh=wmesh)
+    !
+    !find index corresponding to chemical potential
+    do i=1,Lreal
+       !write(*,*) xmu, wr(i), i
+       !if((wr(i)-xmu)<wmesh/2.d0) ixmu=i
+       if((wr(i)-0.d0)<wmesh/2.d0) ixmu=i
+    enddo
+    !write(*,*) 'index selected: ',ixmu," corresponding to: ",wr(ixmu)
+    !write(*,*) 'also see wr(ixmu-1: ',wr(ixmu-1)," and wr(ixmu+1): ",wr(ixmu+1)
+       
 
     ! allocate variables for matrix-matrix multiplication
     allocate(GR(Nlo,Nlo));GR=zero
@@ -706,6 +665,7 @@ contains
     allocate(Re(Nlo,Nlo));Re=zero
     allocate(Le(Nlo,Nlo));Le=zero
     allocate(Te(Nlo,Nlo));Te=zero
+    allocate(Vt(Nlo,Nlo));Vt=zero
 
     ! set masks
     allocate(lmask(Nlat,Nlat),rmask(Nlat,Nlat))
@@ -721,6 +681,7 @@ contains
        lmask(ilat,jlat)=1
        write(6,*) ilat,jlat,lmask(ilat,jlat)
     enddo
+    close(unit)
     lfile = file_length("rmask.in")
     unit = free_unit()
     open(unit,file='rmask.in',status='old')
@@ -731,9 +692,10 @@ contains
        rmask(ilat,jlat)=1
        write(6,*) ilat,jlat,rmask(ilat,jlat)
     enddo
+    close(unit)
 
     ! allocate spin-resolved transmission coefficient
-    allocate(transe(Nspin,Lreal))
+    allocate(transe_dc(Nspin,Lreal),transl_ac(Nspin,Lreal),transr_ac(Nspin,Lreal))
 
     do ispin=1,Nspin
        do i=1,Lreal
@@ -757,6 +719,10 @@ contains
                       ! L-subset
                       HL(io,jo)=zero
                       if(lmask(ilat,jlat)==1) HL(io,jo) = cmplx(2.d0*dimag(Hyb_real(is,js,i)),0d0)
+                      !
+                      ! time derivative of the drive, spin-resolved
+                      Vt(io,jo)=dconjg(Uij(is,js))
+                      !
                    enddo
                 enddo
              enddo
@@ -764,64 +730,152 @@ contains
           ! advanced Green's function
           GA=conjg(transpose(GR))
           !
-          ! get transmission function as T(ispin,i)=Tr[Gadvc*Hybl*Gret*Hybr]
+          ! get DC transmission function as T(ispin,i)=Tr[Gadvc*Hybl*Gret*Hybr]
           Re = matmul(GR,HR)
           Le = matmul(GA,HL)
           Te = matmul(Le,Re)
-          transe(ispin,i) = trace_matrix(Te,Nlo)
+          transe_dc(ispin,i) = trace_matrix(Te,Nlo)
+          !
+          ! get left AC transmission function as T(ispin,i)=Tr[(dV/dt)*Gadv*Hybl*Gret]
+          Re = matmul(GA,matmul(HL,GR))
+          Te = matmul(Vt,Re)
+          transl_ac(ispin,i) = trace_matrix(Te,Nlo)
+          !
+          ! get right AC transmission function as T(ispin,i)=Tr[(dV/dt)*Gadv*Hybr*Gret]
+          Re = matmul(GA,matmul(HR,GR))
+          Te = matmul(Vt,Re)
+          transr_ac(ispin,i) = trace_matrix(Te,Nlo)
+ 
        enddo
+    enddo
+    !
+    ! write transport coefficients of disk
+    do ispin=1,Nspin
+       !suffix="_s"//reg(txtfy(ispin))//"_realw.ed"
+       suffix="_t"//reg(txtfy(itime))//"_s"//reg(txtfy(ispin))//"_realw.ed"
+       call splot("Te_dc"//trim(suffix),wr,transe_dc(ispin,:))
+    enddo
+    do ispin=1,Nspin
        suffix="_s"//reg(txtfy(ispin))//"_realw.ed"
-       call splot("Te"//trim(suffix),wr,transe(ispin,:))
+       call splot("Tl_ac"//trim(suffix),wr,transl_ac(ispin,:))
+    enddo
+    do ispin=1,Nspin
+       suffix="_s"//reg(txtfy(ispin))//"_realw.ed"
+       call splot("Tr_ac"//trim(suffix),wr,transr_ac(ispin,:))
     enddo
     
     deallocate(GR,HR,GA,HL)
     deallocate(rmask,lmask)
     deallocate(Re,Le)
-
-
-
-    if(jbias)then
-       !
-       ! evaluate spin-resolved current as:
-       ! J = \int_{-\infty}^{\infty} de T(e)*(f_L(e)-f_R(e))
-       allocate(jcurr(Nspin));jcurr=0.d0
-     
-       unit_in = free_unit()
-       open(unit_in,file='jbias.in',status='old')
-       unit_out= free_unit()
-       open(unit_out,file="jbias.ed")
-       do
-          read(unit_in,*,IOSTAT=EOF)lbias,rbias
-          if(EOF<0)exit
-          !
-          ! write L/R bias voltages
-          write(unit_out,'(2f16.9)',advance='no')lbias,rbias
-          !
-          dE=abs(wfin-wini)/Lreal
-          jcurr=0.d0
-          do ispin=1,Nspin
-              do i=1,Lreal
-                 jcurr(ispin) = jcurr(ispin) + transe(ispin,i)*dE* &
-                                (fermi(wr(i)-lbias,beta)-fermi(wr(i)-rbias,beta))
-              enddo
-              !
-              ! write spin-resolved current
-              write(unit_out,'(1f16.9)',advance='no')jcurr(ispin)
-          enddo
-          write(unit_out,*) ! newline
-       enddo
-       close(unit_in)
-       close(unit_out)
-
-       deallocate(jcurr)
-
-    endif
-
-
-
     deallocate(Te)
 
-  end subroutine ed_transport
+
+
+    ! evaluate conductance from transmission coefficient
+    ! g(ispin)=T(ispin,0)
+    !
+    ! allocate spin-resolved conductance
+    allocate(g(Nspin));g(:)=0.d0
+    !
+    unit_out= free_unit()
+    inquire(file="gcond_dc.ed",exist=exist)
+    if (exist) then
+      open(unit_out,file="gcond_dc.ed",status="old",position="append")
+    else
+      open(unit_out,file="gcond_dc.ed")
+    endif
+    ! 
+    ! write effective time [0:pi2]
+    write(unit_out,'(3f16.9)',advance='no')time_step
+    do ispin=1,Nspin
+       ! extract conductance at the chemical potential
+       g(ispin) = real(transe_dc(ispin,ixmu))
+       ! write spin-resolved conductance on disk
+       write(unit_out,'(1f16.9)',advance='no')g(ispin)
+    enddo
+    close(unit_out)
+    !
+    deallocate(g)
+
+
+    ! evaluate spin-resolved DC current as:
+    ! J = \int_{-\infty}^{\infty} de T_dc(e) (f_L(e)-f_R(e))
+    !
+    allocate(jcurr_dc(Nspin));jcurr_dc=0.d0
+    !
+    unit_in = free_unit()
+    open(unit_in,file='jbias.in',status='old')
+    !
+    unit_out= free_unit()
+    inquire(file="jbias_dc.ed",exist=exist)
+    if(exist)then
+      open(unit_out,file="jbias_dc.ed",status="old",position="append")
+    else
+      open(unit_out,file="jbias_dc.ed")
+    endif
+    do
+       read(unit_in,*,IOSTAT=EOF)lbias,rbias
+       if(EOF<0)exit
+       ! write L/R bias voltages
+       write(unit_out,'(3f16.9)',advance='no')time_step,lbias,rbias
+       jcurr_dc=0.d0
+       do ispin=1,Nspin
+           do i=1,Lreal
+              ! compute current by integration
+              jcurr_dc(ispin) = jcurr_dc(ispin) + transe_dc(ispin,ixmu)* &
+                                (fermi(wr(i)-xmu-lbias,beta)-fermi(wr(i)-xmu-rbias,beta))* &
+                                abs(wfin-wini)/Lreal
+           enddo
+           ! write spin-resolved current on disk
+           write(unit_out,'(1f16.9)',advance='no')jcurr_dc(ispin)
+       enddo
+       write(unit_out,*) ! newline
+    enddo
+    close(unit_in)
+    close(unit_out)
+    !
+    deallocate(jcurr_dc)
+    !
+    deallocate(transe_dc)
+
+
+
+    ! evaluate spin-resolved AC current (at T=0) as:
+    ! J = Re{T_ac(xmu)}/(2\pi)
+    !
+    allocate(jcurr_ac(Nspin));jcurr_ac=0.d0
+    !
+    unit_out= free_unit()
+    inquire(file="jbias_ac.ed",exist=exist)
+    if(exist)then
+      open(unit_out,file="jbias_ac.ed",status="old",position="append")
+    else
+      open(unit_out,file="jbias_ac.ed")
+    endif
+    write(unit_out,'(1f16.9)',advance='no')time_step
+    jcurr_ac=0.d0
+    do ispin=1,Nspin
+        ! exctract left current at the chemical potential 
+        jcurr_ac(ispin) = -real(transl_ac(ispin,ixmu))/pi2
+        ! write spin-resolved current on disk
+        write(unit_out,'(1f16.9)',advance='no')jcurr_ac(ispin)
+    enddo
+    do ispin=1,Nspin
+        ! exctract right current at the chemical potential 
+        jcurr_ac(ispin) = -real(transr_ac(ispin,ixmu))/pi2
+        ! write spin-resolved current on disk
+        write(unit_out,'(1f16.9)',advance='no')jcurr_ac(ispin)
+    enddo
+    write(unit_out,*) ! newline
+    close(unit_out)
+    !
+    deallocate(jcurr_ac)
+    !
+    deallocate(transl_ac,transr_ac)
+
+
+  end subroutine ed_transport_acdc
+
 
 
   !----------------------------------------------------------------------------------------!
@@ -949,6 +1003,202 @@ contains
   end subroutine set_hyb
 
 
+
+  !----------------------------------------------------------------------------------------!
+  ! purpose: define the adiabatic non-equilibrium drive 
+  !----------------------------------------------------------------------------------------!
+  subroutine set_drive(drive_model,Vijt,Uijt,Hij0,Hijt,time_step)
+    complex(8),dimension(:,:),intent(inout)   :: Vijt ![Nlso][Nlso]
+    complex(8),dimension(:,:),intent(inout)   :: Uijt ![Nlso][Nlso]
+    complex(8),dimension(:,:,:),intent(inout) :: Hij0 ![Nlso][Nlso][Nk]
+    complex(8),dimension(:,:,:),intent(inout) :: Hijt ![Nlso][Nlso][Nk]
+    real(8),intent(in)                        :: time_step
+    integer                                   :: i,j
+    integer                                   :: unit
+    !
+    ! set size of the drive from time-independent Hamiltonian
+    Nlso=size(Hij0,1)
+    !
+    ! reset drive
+    Vijt(:,:) = zero
+    Uijt(:,:) = zero
+    !
+    ! set drive and time-dependent Hamiltonian
+    call drive_model(Vijt,Uijt,Hij0(:,:,1),Hijt(:,:,1),time_step,Nlso)
+    !
+    ! write drive on HDD
+    unit = free_unit()
+    inquire(file="drive.out",exist=exist)
+    if(exist)then
+      open(unit,file="drive.out",status="old",position="append")
+    else
+      open(unit,file="drive.out")
+    endif
+    do i=1,Nlso
+       do j=1,Nlso
+          write(unit,'(1f16.9,2i6,8f16.9)')time_step,i,j,&
+             dreal(Vijt(i,j)),dimag(Vijt(i,j)),dreal(Uijt(i,j)),dimag(Uijt(i,j)),&
+             dreal(Hij0(i,j,1)),dimag(Hij0(i,j,1)),dreal(Hijt(i,j,1)),dimag(Hijt(i,j,1))
+       enddo
+    enddo
+    close(unit)
+    !
+  end subroutine set_drive
+
+
+
+
+
+  !----------------------------------------------------------------------------------------!
+  ! drive: time-dependent gate voltage
+  !----------------------------------------------------------------------------------------!
+  subroutine gate(Vijt,Uijt,Hij0,Hijt,time_step,N)
+    integer                   :: N
+    real(8)                   :: time_step
+    complex(8),dimension(N,N) :: Vijt !drive
+    complex(8),dimension(N,N) :: Uijt !drive time derivative
+    complex(8),dimension(N,N) :: Hij0 !time-independent Hamiltonian
+    complex(8),dimension(N,N) :: Hijt !time-  dependent Hamiltonian
+    !
+    integer                   :: i,ilat,jlat,iorb,jorb,is,js
+    integer                   :: lfile
+    real(8)                   :: Vg,delta,omega
+
+    ! ----------------------------------------------------------
+    ! explicit form of time-dependent Hamiltonian & drive:
+    !
+    ! H_{ij}(t) = H_{ij}(0) + V_{ij}(t)
+    ! V_{ij}(t) = Vg_{ii} cos(\omega t + \delta)
+    ! U_{ij}(t) = -V_g{ii} \omega sin(\omega t + \delta)
+    !
+    ! time_step: effective variable time (i.e., includes \omega)
+    ! Vg       : site-dependent gate
+    ! delta    : phase of the drive (in units of pi)
+    ! omega    : frequency of the drive
+    ! ----------------------------------------------------------
+
+    ! set time-dependent Hamiltonian to the static one
+    Hijt(:,:)=Hij0(:,:)
+
+    ! readin drive parameters from input (see format in the read below)
+    lfile = file_length("drive.in")
+    unit = free_unit()
+    open(unit,file='drive.in',status='old')
+    do i=1,lfile
+       read(unit,*) ilat, iorb, jlat, jorb, ispin, Vg, delta, omega
+       ilat=ilat+1
+       iorb=iorb+1
+       jlat=jlat+1
+       jorb=jorb+1
+       ispin=ispin+1
+       !
+       if((ilat>Nlat).or.(jlat>Nlat))stop "set_drive error: in input file 'drive.in' i/jlat > Nlat"
+       if((iorb>Norb).or.(jorb>Norb))stop "set_drive error: in input file 'drive.in' i/jorb > Norb"
+       if((ispin>Nspin))stop "set_drive error: in input file 'drive.in' ispin > Nspin"
+       !
+       ! get stride and set matrix element
+       is = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb
+       js = jorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb
+       !
+       ! set drive: 
+       Vijt(is,js)=Vg*cos(delta*pi+time_step)
+       Vijt(js,is)=dconjg(Vijt(is,js)) ! hermitian drive
+       !
+       ! set drive time derivative:
+       Uijt(is,js)=-Vg*omega*sin(delta*pi+time_step)
+       Uijt(js,is)=dconjg(Uijt(is,js)) ! hermitian drive
+       !
+       ! set time-dependent Hamiltonian
+       Hijt(is,js)=Hij0(is,js)+Vijt(is,js)
+       if(ilat/=jlat)then
+         Hijt(js,is)=Hij0(js,is)+Vijt(js,is) ! hermitian Hamiltonian
+       endif
+       !
+    enddo
+    close(unit)
+    !
+  end subroutine gate
+
+
+
+
+  !----------------------------------------------------------------------------------------!
+  ! drive: sinusoidal flux 
+  !----------------------------------------------------------------------------------------!
+  subroutine flux(Vijt,Uijt,Hij0,Hijt,time_step,N)
+    integer                   :: N
+    real(8)                   :: time_step
+    complex(8),dimension(N,N) :: Vijt !drive
+    complex(8),dimension(N,N) :: Uijt !drive time derivative
+    complex(8),dimension(N,N) :: Hij0 !time-independent Hamiltonian
+    complex(8),dimension(N,N) :: Hijt !time-  dependent Hamiltonian
+    !
+    integer                   :: i,ilat,jlat,iorb,jorb,is,js
+    integer                   :: lfile
+    real(8)                   :: phidc,phiac,delta,omega
+
+    ! ----------------------------------------------------------
+    ! explicit form of time-dependent Hamiltonian & drive:
+    !
+    ! H_{ij}(t) = t V_{ij}(t)
+    ! V_{ij}(t) = \exp(\imath (\phi_{DC} + \phi_{AC} cos(\omega t + \delta) ))
+    ! U_{ij}(t) = -\imath \phi_{AC} \omega sin(\omega t + \delta) * V_{ij}(t)
+    !
+    ! time_step: effective variable time (i.e., includes \omega)
+    ! phidc    : DC part of the drive
+    ! phiac    : AC part of the drive
+    ! delta    : phase of the drive (in units of pi)
+    ! omega    : frequency of the drive
+    ! ----------------------------------------------------------
+
+    ! set time-dependent Hamiltonian to the static one
+    Hijt(:,:)=Hij0(:,:)
+
+    ! readin drive parameters from input (see format in the read below)
+    lfile = file_length("drive.in")
+    unit = free_unit()
+    open(unit,file='drive.in',status='old')
+    do i=1,lfile
+       read(unit,*) ilat, iorb, jlat, jorb, ispin, phidc, phiac, delta, omega
+       ilat=ilat+1
+       iorb=iorb+1
+       jlat=jlat+1
+       jorb=jorb+1
+       ispin=ispin+1
+       !
+       if((ilat>Nlat).or.(jlat>Nlat))stop "set_drive error: in input file 'drive.in' i/jlat > Nlat"
+       if((iorb>Norb).or.(jorb>Norb))stop "set_drive error: in input file 'drive.in' i/jorb > Norb"
+       if((ispin>Nspin))stop "set_drive error: in input file 'drive.in' ispin > Nspin"
+       !
+       ! get stride and set matrix element
+       is = iorb + (ispin-1)*Norb + (ilat-1)*Nspin*Norb
+       js = jorb + (ispin-1)*Norb + (jlat-1)*Nspin*Norb
+       !
+       ! set drive: 
+       Vijt(is,js)=exp(xi*(phidc+phiac*cos(delta*pi+time_step)))
+       Vijt(js,is)=dconjg(Vijt(is,js)) ! hermitian drive
+       !
+       ! set drive time derivative:
+       Uijt(is,js)=-xi*phiac*omega*sin(delta*pi+time_step)*exp(xi*(phidc+phiac*cos(delta*pi+time_step)))
+       Uijt(js,is)=dconjg(Uijt(is,js)) ! hermitian drive
+       !
+       ! set time-dependent Hamiltonian
+       Hijt(is,js)=Hij0(is,js)*Vijt(is,js)
+       Hijt(js,is)=Hij0(js,is)*Vijt(js,is) ! hermitian Hamiltonian
+       !
+    enddo
+    close(unit)
+    !
+  end subroutine flux
+
+
+
+
+
+
+
+
+
   function trace_matrix(M,dim) result(tr)
     integer                       :: dim
     complex(8),dimension(dim,dim) :: M
@@ -959,152 +1209,6 @@ contains
        tr=tr+M(i,i)
     enddo
   end function trace_matrix
-
-
-  !----------------------------------------------------------------------------------------!
-  ! purpose: evaluate the effective exchange as in Katsnelson PRB 61, 8906 (2000), eq. (21)
-  ! given the non-local Green's function, the local (auxiliary) self-energy S_i = (S_iup-S_ido)/2 
-  ! and the fermi distribution on the real axis. 
-  ! Jeff_ij = 1/pi Im \int_{-infty}^{infty} S_i(w) G_ijup(w) S_j(w) G_ijdo(w) f(w) dw
-  !----------------------------------------------------------------------------------------!
-  subroutine ed_get_jeff(Gret,Sret)
-    complex(8),intent(inout)                  :: Gret(:,:,:,:,:,:,:) ![Nlat][Nlat][Nspin][Nspin][Norb][Norb][Lreal]
-    complex(8),intent(inout)                  :: Sret(:,:,:,:,:,:)   ![Nlat][Nspin][Nspin][Norb][Norb][Lreal]
-    complex(8),dimension(:,:,:,:),allocatable :: Saux(:,:,:,:)       ![Nlat][Norb][Norb][Lreal]
-    complex(8)                                :: kernel
-    real(8),dimension(:,:),allocatable        :: jeff(:,:)           ![Nlat][Nlat]
-    real(8),dimension(:),allocatable          :: wr
-    integer                                   :: ilat,jlat,iorb,jorb,i
-    !
-    !I/O
-    integer                                   :: unit
-    character(len=30)                         :: suffix
-    !
-
-    ! check inouts dimensions
-    call assert_shape(Gret,[Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lreal],"ed_get_jeff","Gret")
-    call assert_shape(Sret,[Nlat,Nspin,Nspin,Norb,Norb,Lreal],"ed_get_jeff","Sret")
-
-    allocate(Saux(Nlat,Norb,Norb,Lreal))
-    Saux(:,:,:,:)=zero
-    !
-    allocate(jeff(Nlat,Nlat))
-    jeff(:,:)=zero
-    !
-    allocate(wr(Lreal))
-    wr = linspace(wini,wfin,Lreal)
-    !
-    write(*,*) "computing effective non-local exchange"
-    !
-    ! sanity checks
-    if(Nspin/=2)stop "ed_get_jeff error: Nspin /= 2"
-    if(Norb>1)stop "ed_get_jeff error: Norb > 1 (mutli-orbital case no timplmented yet)"
-    !
-    ! define auxiliary local spin-less self-energy
-    do ilat=1,Nlat
-       Saux(ilat,1,1,:) = (Sret(ilat,1,1,1,1,:)-Sret(ilat,2,2,1,1,:))/2.d0
-       !Saux(ilat,1,1,:) = one
-    enddo
-    !unit = free_unit()
-    !open(unit,file="Saux.ed")
-    !do ilat=1,Nlat
-    !   do i=1,Lreal
-    !      write(unit,'(i5,7f16.9)')ilat,wr(i),Saux(ilat,1,1,i),Sret(ilat,1,1,1,1,i),Sret(ilat,2,2,1,1,i)
-    !   enddo
-    !enddo
-    !close(unit)
-    !
-    ! compute effective exchange
-    do ilat=1,Nlat
-       do jlat=1,Nlat
-          ! perform integral over frequency
-          kernel=0.d0
-          do i=1,Lreal
-             ! jeff kernel: non-local Green's function and fermi function convolution
-             !              in the multi-orbital case: trace over the orbitals required
-             kernel = kernel + Saux(ilat,1,1,i)*Gret(ilat,jlat,1,1,1,1,i)*Saux(jlat,1,1,i)*Gret(jlat,ilat,2,2,1,1,i)*fermi(wr(i),beta)
-          enddo
-          jeff(ilat,jlat) = 1.d0*dimag(kernel)/pi
-       enddo
-    enddo
-    !
-    ! write effective exchange on disk
-    unit = free_unit()
-    open(unit,file="jeff_ij.ed")
-    do ilat=1,Nlat
-       do jlat=1,Nlat
-          write(unit,*)ilat,jlat,jeff(ilat,jlat)
-       enddo
-    enddo
-    close(unit)
-
-    deallocate(Saux,jeff,wr) 
-
-  end subroutine ed_get_jeff
-
-
-  !----------------------------------------------------------------------------------------!
-  ! purpose: evaluate the non-local bare static spin susceptibility
-  ! given the non-local Green's function and the fermi distribution on the real axis. 
-  ! chi0_ij = 1/pi Im \int_{-infty}^{infty} G_ij(w) G_ji(w) f(w) dw
-  !----------------------------------------------------------------------------------------!
-  subroutine ed_get_chi0ij(Gret)
-    complex(8),intent(inout)                  :: Gret(:,:,:,:,:,:,:) ![Nlat][Nlat][Nspin][Nspin][Norb][Norb][Lreal]
-    complex(8)                                :: kernel
-    real(8),dimension(:,:),allocatable        :: jeff(:,:)           ![Nlat][Nlat]
-    real(8),dimension(:),allocatable          :: wr
-    integer                                   :: ilat,jlat,iorb,jorb,i
-    !
-    !I/O
-    integer                                   :: unit
-    character(len=30)                         :: suffix
-    !
-
-    ! check inouts dimensions
-    call assert_shape(Gret,[Nlat,Nlat,Nspin,Nspin,Norb,Norb,Lreal],"ed_get_jeff","Gret")
-
-    allocate(jeff(Nlat,Nlat))
-    jeff(:,:)=zero
-    !
-    allocate(wr(Lreal))
-    wr = linspace(wini,wfin,Lreal)
-    !
-    write(*,*) "computing bare static non-local susceptibility"
-    !
-    ! sanity checks
-    !if(Nspin/=1)stop "ed_get_chi0ij error: Nspin /= 1"
-    if(Norb>1)stop "ed_get_chi0ij error: Norb > 1 (mutli-orbital case no timplmented yet)"
-    !
-    ! compute bare static non-local susceptibility
-    do ilat=1,Nlat
-       do jlat=1,Nlat
-          ! perform integral over frequency
-          kernel=0.d0
-          do i=1,Lreal
-             ! jeff kernel: non-local Green's function and fermi function convolution
-             !              in the multi-orbital case: trace over the orbitals required
-             kernel = kernel + Gret(ilat,jlat,1,1,1,1,i)*Gret(jlat,ilat,1,1,1,1,i)*fermi(wr(i),beta)
-          enddo
-          jeff(ilat,jlat) = 1.d0*dimag(kernel)/pi
-       enddo
-    enddo
-    !
-    ! write bare static non-local susceptibility on disk
-    unit = free_unit()
-    open(unit,file="jeff_ij.ed")
-    do ilat=1,Nlat
-       do jlat=1,Nlat
-          write(unit,*)ilat,jlat,jeff(ilat,jlat)
-       enddo
-    enddo
-    close(unit)
-
-    deallocate(jeff,wr) 
-
-  end subroutine ed_get_chi0ij
-
-
-
 
 
   function extract_Hloc(Hk,Nlat,Nspin,Norb) result(Hloc)
@@ -1134,4 +1238,4 @@ contains
 
 
 
-end program ed_nano
+end program ed_nano_adiabatic

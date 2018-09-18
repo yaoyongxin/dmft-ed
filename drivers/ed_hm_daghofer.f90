@@ -1,4 +1,4 @@
-program ed_hm_3bands
+program ed_hm_daghofer
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
@@ -31,7 +31,7 @@ program ed_hm_3bands
   real(8)                                       :: ts,wmixing
   character(len=32)                             :: finput
   character(len=32)                             :: hkfile
-  logical                                       :: spinsym,bathsym
+  logical                                       :: spinsym,bathsym,iget_akw
   !
   real(8),dimension(2)                          :: Eout
   real(8),allocatable,dimension(:)              :: dens
@@ -41,13 +41,20 @@ program ed_hm_3bands
   complex(8),allocatable,dimension(:,:,:,:,:)   :: S0
 
   !modify daghofer hamiltonian
-  real(8)                                       :: alpha,theta
+  real(8)                                       :: alpha,theta,etanm
 
   !parse input file
   call parse_cmd_variable(finput,"FINPUT",default='inputED.conf')
 
+  call add_ctrl_var(beta,"BETA")
+  call add_ctrl_var(xmu,"xmu")
+  call add_ctrl_var(wini,"wini")
+  call add_ctrl_var(wfin,"wfin")
+  call add_ctrl_var(eps,"eps")
+ 
   call parse_input_variable(alpha,"ALPHA",finput,default=1.d0)
   call parse_input_variable(theta,"THETA",finput,default=0.d0)
+  call parse_input_variable(etanm,"ETANM",finput,default=0.d0)
 
   !Parse additional variables && read Input && read H(k)^2x2
   call parse_input_variable(hkfile,"HKFILE",finput,default="hkfile.in")
@@ -59,6 +66,8 @@ program ed_hm_3bands
   !
   call parse_input_variable(bathsym,"BATHSYM",finput,default=.false.)
   !
+  call parse_input_variable(iget_akw,"IGET_AKW",finput,default=.false.)
+
   call ed_read_input(trim(finput))
 
   if(Norb/=3)stop "Wrong setup from input file: Norb=3"
@@ -80,6 +89,18 @@ program ed_hm_3bands
   allocate(Zfoo(Nlat,Nso,Nso));Zfoo=0d0
   allocate(dens(Norb));dens=0d0
 
+
+  if(iget_akw)then
+     call read_sigma_real(Sreal)
+     call get_Akw(Sreal)
+     stop
+  endif
+
+
+ 
+
+
+
   !Build the Hamiltonian on a grid or on a path
   call build_hk(trim(hkfile))
   Hloc = lso2nnn_reshape(modelHloc,Nlat,Nspin,Norb)
@@ -98,19 +119,21 @@ program ed_hm_3bands
      call start_loop(iloop,nloop,"DMFT-loop")
 
      !Solve the EFFECTIVE IMPURITY PROBLEM (first w/ a guess for the bath)
-     call ed_solve(Bath,Hloc,iprint=0)
+     call ed_solve(Bath,Hloc)
 
      call ed_get_sigma_matsubara(Smats,Nlat)
      call ed_get_dens(dens)
 
      ! compute the local gf:
-     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats,iprint=4)
+     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats)
+     call dmft_print_gf_matsubara(Gmats,"LG",iprint=1)
+
 
      ! compute the Weiss field (only the Nineq ones)
      if(cg_scheme=='weiss')then
-        call dmft_weiss(Gmats,Smats,Weiss,Hloc,iprint=0)
+        call dmft_weiss(Gmats,Smats,Weiss,Hloc)
      else
-        call dmft_delta(Gmats,Smats,Weiss,Hloc,iprint=0)
+        call dmft_delta(Gmats,Smats,Weiss,Hloc)
      endif
 
      !Fit the new bath, starting from the old bath + the supplied Weiss
@@ -132,12 +155,16 @@ program ed_hm_3bands
   enddo
 
   call ed_get_sigma_real(Sreal,Nlat)
-  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal,iprint=4)
+  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal)
+  call dmft_print_gf_realaxis(Greal,"LG",iprint=1)
+
 
 
   ! save self-energy on disk
-  call save_sigma_mats(Smats)
-  call save_sigma_real(Sreal)
+  !call save_sigma_mats(Smats)
+  !call save_sigma_real(Sreal)
+  call dmft_print_gf_matsubara(Smats,"LSigma",iprint=1)
+  call dmft_print_gf_realaxis(Sreal,"LSigma",iprint=1)
 
 contains
 
@@ -172,8 +199,8 @@ contains
     !
     xmu_tb = 0.212d0
     !
-    hk(1,1) = 2.d0*t2*cos(kx) + 2.d0*t1*cos(ky) + 4.d0*t3*cos(kx)*cos(ky) - xmu_tb
-    hk(2,2) = 2.d0*t1*cos(kx) + 2.d0*t2*cos(ky) + 4.d0*t3*cos(kx)*cos(ky) - xmu_tb
+    hk(1,1) = 2.d0*t2*cos(kx) + 2.d0*t1*cos(ky) + 4.d0*t3*cos(kx)*cos(ky) - xmu_tb + etanm
+    hk(2,2) = 2.d0*t1*cos(kx) + 2.d0*t2*cos(ky) + 4.d0*t3*cos(kx)*cos(ky) - xmu_tb - etanm
     hk(3,3) = 2.d0*t5*(cos(kx)+cos(ky)) + 4.d0*t6*cos(kx)*cos(ky) + dxy   - xmu_tb
     hk(1,2) = 4.d0*t4*sin(kx)*sin(ky)
     hk(1,3) = 2.d0*t7*sin(kx)*xi + 4.d0*t8*sin(kx)*cos(ky)*xi
@@ -245,57 +272,47 @@ contains
          points_name=[character(len=10) :: "G","X","M", "G"],&
          file="Eigenbands.nint")
 
+    !draw bands along both X and Y high-symmetry points (nematic)
+    if(allocated(kpath))deallocate(kpath)
+    !path: G M Y G X M G
+    allocate(kpath(7,3))
+    kpath(1,:)=[0d0,0d0,0d0]
+    kpath(2,:)=[ pi, pi,0d0]
+    kpath(3,:)=[0d0, pi,0d0]
+    kpath(4,:)=[0d0,0d0,0d0]
+    kpath(5,:)=[ pi,0d0,0d0]
+    kpath(6,:)=[ pi, pi,0d0]
+    kpath(7,:)=[0d0,0d0,0d0]
+    call TB_solve_model(hk_model,Nlso,kpath,Nkpath,&
+         colors_name=[red1,green1,blue1],&
+         points_name=[character(len=10) :: "G", "M", "Y", "G","X","M", "G"],&
+         file="Eigenbands_XY.nint")
+
+
 
 
     !Build the local GF:
-    Gmats=zero
-    Greal=zero
-    fooSmats =zero
-    fooSreal =zero
-    call add_ctrl_var(beta,"BETA")
-    call add_ctrl_var(xmu,"xmu")
-    call add_ctrl_var(wini,"wini")
-    call add_ctrl_var(wfin,"wfin")
-    call add_ctrl_var(eps,"eps")
-    call dmft_gloc_matsubara(Hk,Wtk,Gmats,fooSmats,iprint=1)
-    call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal,iprint=1)
+    !Gmats=zero
+    !Greal=zero
+    !fooSmats =zero
+    !fooSreal =zero
+    !call add_ctrl_var(beta,"BETA")
+    !call add_ctrl_var(xmu,"xmu")
+    !call add_ctrl_var(wini,"wini")
+    !call add_ctrl_var(wfin,"wfin")
+    !call add_ctrl_var(eps,"eps")
+    !call dmft_gloc_matsubara(Hk,Wtk,Gmats,fooSmats,iprint=1)
+    !call dmft_gloc_realaxis(Hk,Wtk,Greal,fooSreal,iprint=1)
     !
   end subroutine build_hk
 
 
 
-  !----------------------------------------------------------------------------------------!
-  ! purpose: save the matsubare local self-energy on disk
-  !----------------------------------------------------------------------------------------!
-  subroutine save_sigma_mats(Smats)
-    complex(8),intent(inout)         :: Smats(:,:,:,:,:,:)
-    character(len=30)                :: suffix
-    integer                          :: ilat,ispin,iorb
-    real(8),dimension(:),allocatable :: wm
-
-    if(size(Smats,2)/=Nspin) stop "save_sigma: error in dim 2. Nspin"
-    if(size(Smats,3)/=Nspin) stop "save_sigma: error in dim 3. Nspin"
-    if(size(Smats,4)/=Norb) stop "save_sigma: error in dim 4. Norb"
-    if(size(Smats,5)/=Norb) stop "save_sigma: error in dim 5. Norb"
-
-    allocate(wm(Lmats))
-
-    wm = pi/beta*(2*arange(1,Lmats)-1)
-    write(LOGfile,*)"write spin-orbital diagonal elements:"
-    do ispin=1,Nspin
-       do iorb=1,Norb
-          suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_iw.ed"
-          call store_data("LSigma"//trim(suffix),Smats(:,ispin,ispin,iorb,iorb,:),wm)
-       enddo
-    enddo
-
-  end subroutine save_sigma_mats
-
 
   !----------------------------------------------------------------------------------------!
-  ! purpose: save the real local self-energy on disk
+  ! purpose: read the real local self-energy from disk
   !----------------------------------------------------------------------------------------!
-  subroutine save_sigma_real(Sreal)
+  subroutine read_sigma_real(Sreal)
     complex(8),intent(inout)         :: Sreal(:,:,:,:,:,:)
     character(len=30)                :: suffix
     integer                          :: ilat,ispin,iorb
@@ -309,19 +326,82 @@ contains
     allocate(wr(Lreal))
 
     wr = linspace(wini,wfin,Lreal)
+    write(LOGfile,*)"write spin-orbital diagonal elements:"
     do ispin=1,Nspin
        do iorb=1,Norb
           suffix="_l"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//"_realw.ed"
-          call store_data("LSigma"//trim(suffix),Sreal(:,ispin,ispin,iorb,iorb,:),wr)
+          call sread("LSigma"//trim(suffix),wr,Sreal(:,ispin,ispin,iorb,iorb,:))
        enddo
     enddo
 
-  end subroutine save_sigma_real
+  end subroutine read_sigma_real
 
 
 
 
-end program ed_hm_3bands
+
+
+  subroutine get_Akw(Sreal)
+    integer                                         :: ik,ispin,iorb,ilat
+    integer                                         :: Npts,Nktot
+    !
+    complex(8),allocatable,dimension(:,:,:,:,:,:)   :: Sreal
+    complex(8),allocatable,dimension(:,:,:,:,:,:,:) :: Gkreal
+    real(8),allocatable,dimension(:,:)              :: Akreal
+    real(8),dimension(:),allocatable                :: wr
+    real(8),dimension(:),allocatable                :: kgrid
+    real(8),dimension(:,:),allocatable              :: kpath
+    !
+    Nlat  = size(Sreal,1)
+    Nspin = size(Sreal,2)
+    Norb  = size(Sreal,4)
+    Lreal = size(Sreal,6)
+    Nlso=Nlat*Nspin*Norb
+
+    allocate(wr(Lreal))
+    wr = linspace(wini,wfin,Lreal)
+    !
+    !path: G X M G
+    allocate(kpath(4,3))
+    kpath(1,:)=[0d0,0d0,0d0]
+    kpath(2,:)=[ pi,0d0,0d0]
+    kpath(3,:)=[ pi, pi,0d0]
+    kpath(4,:)=[0d0,0d0,0d0]
+    !
+    !get kpoints
+    Npts  = size(kpath,1)
+    Nktot = (Npts-1)*Nkpath
+    !
+    allocate(kgrid(Nktot))
+    !
+    !allocate Hamiltonian and build model along path
+    allocate(Hk(Nlso,Nlso,Nktot));Hk=zero
+    call TB_build_model(hk,hk_model,Nlso,kpath,Nkpath)
+    !
+    !allocate and compute Gkw
+    allocate(Gkreal(Nktot,Nlat,Nspin,Nspin,Norb,Norb,Lreal))
+    do ik=1,Nktot
+       kgrid(ik)=ik
+       call dmft_gk_realaxis(Hk(:,:,ik),1d0,Gkreal(ik,:,:,:,:,:,:),Sreal) 
+    enddo
+    !
+    !get Akw
+    allocate(Akreal(Nktot,Lreal))
+    Akreal=zero
+    do ispin=1,Nspin
+       do iorb=1,Norb
+          do ilat=1,Nlat
+             Akreal = Akreal - dimag(Gkreal(:,ilat,ispin,ispin,iorb,iorb,:))/pi/Nspin/Norb/Nlat 
+          enddo
+       enddo
+    enddo
+    call splot3d("Akw.dat",kgrid,wr,Akreal(:,:))
+    ! 
+  end subroutine get_Akw
+ 
+
+
+end program ed_hm_daghofer
 
 
 
