@@ -31,9 +31,10 @@ program ed_LVO_hetero
   character(len=32)                                   :: geometry,hetero_kind,z_symmetry,gauge
   logical                                             :: bulk_magsym,diaglocalpbm
   logical                                             :: fullfree
-  integer                                             :: Nr,Nt,Nphotons,skiptstp,sigma_t
-  logical                                             :: Efield,put_dipole,optimize_dipole
-  real(8)                                             :: tmax,fieldfactor
+  integer                                             :: Nr,Nt,Nphotons,skiptstp,Efieldstart,leadlimit
+  logical                                             :: Efield,put_dipole,optimize_dipole,Einleads,modelPulse
+  real(8)                                             :: DeltaeV,EinjeV
+  real(8)                                             :: timestep,tmax,fieldfactor
   real(8)                                             :: potential,Eloc_R,Eloc_L
   !Mpi:
   integer                                             :: comm,rank,ier,siz
@@ -111,19 +112,23 @@ program ed_LVO_hetero
   call parse_input_variable(diaglocalpbm   ,"DIAGLOCAL"   ,finput, default=.false.         )
   call parse_input_variable(fullfree       ,"FULLFREE"    ,finput, default=.false.         )
   call parse_input_variable(potential      ,"POTENTIAL"   ,finput, default=0.0d0           )
-  call parse_input_variable(Eloc_L         ,"ELOC_L"       ,finput, default=0.0d0           )
+  call parse_input_variable(Eloc_L         ,"ELOC_L"      ,finput, default=0.0d0           )
   call parse_input_variable(Eloc_R         ,"ELOC_R"      ,finput, default=0.0d0           )
   call parse_input_variable(Efield         ,"EFIELD"      ,finput, default=.false.         )
+  call parse_input_variable(Einleads       ,"EINLEADS"    ,finput, default=.true.          )
+  call parse_input_variable(modelPulse     ,"MODELPULSE"  ,finput, default=.false.         )
   call parse_input_variable(fieldfactor    ,"EFIELDFACTOR",finput, default=1.d0            )
-  call parse_input_variable(optimize_dipole,"OPTIMIZE"    ,finput, default=.false.         )
-  call parse_input_variable(Nr             ,"NR"          ,finput, default=10              )
-  call parse_input_variable(Nt             ,"NT"          ,finput, default=200             )
-  call parse_input_variable(sigma_t        ,"SIGMAT"      ,finput, default=1               )
-  call parse_input_variable(tmax           ,"TMAX"        ,finput, default=1.d0            )
+  call parse_input_variable(DeltaeV        ,"DELTAEV"     ,finput, default=0.5d0           )
+  call parse_input_variable(EinjeV         ,"EINJEV"      ,finput, default=5.d0            )
+  call parse_input_variable(skiptstp       ,"SKIPTSTP"    ,finput, default=0               )
   call parse_input_variable(gauge          ,"GAUGE"       ,finput, default="E"             )
   call parse_input_variable(Nphotons       ,"NPHOTONS"    ,finput, default=5               )
+  call parse_input_variable(timestep       ,"TIMESTEP"    ,finput, default=0.01d0          )
+  call parse_input_variable(tmax           ,"TMAX"        ,finput, default=1.d0            )
+  call parse_input_variable(Efieldstart    ,"EFIELDSTART" ,finput, default=10              )
   call parse_input_variable(put_dipole     ,"PUTDIPOLE"   ,finput, default=.true.          )
-  call parse_input_variable(skiptstp       ,"SKIPTSTP"    ,finput, default=0               )
+  call parse_input_variable(optimize_dipole,"OPTIMIZE"    ,finput, default=.false.         )
+  call parse_input_variable(Nr             ,"NR"          ,finput, default=10              )
   !
   call ed_read_input(trim(finput),comm)
   !
@@ -171,20 +176,39 @@ program ed_LVO_hetero
      allocate(Jpvec(Nlayer))       ;Jpvec=0d0
      !
      do ilayer=1,Nlayer
-        Ufactor=1.d0
-        if((.not.fullfree).and.(i>=Nlayer-1))Ufactor=4.d0
-        if((fullfree).and.(i>=Nlayer-3))Ufactor=4.d0
-        Ulocvec(ilayer,:)=Uloc/Ufactor
-        Ustvec(ilayer)=Ust/Ufactor
-        Jhvec(ilayer)=Jh/Ufactor
-        Jxvec(ilayer)=Jx/Ufactor
-        Jpvec(ilayer)=Jp/Ufactor
+        Ulocvec(ilayer,:)=Uloc
+        Ustvec(ilayer)=Ust
+        Jhvec(ilayer)=Jh
+        Jxvec(ilayer)=Jx
+        Jpvec(ilayer)=Jp
+        if(((.not.fullfree).and.(ilayer>=Nlayer-1)).or.((fullfree).and.(ilayer>=Nlayer-3)))then
+           Ulocvec(ilayer,:)=1   !Uloc/Ufactor
+           Ustvec(ilayer)=0.9    !Ust/Ufactor
+           Jhvec(ilayer)=0.05    !Jh/Ufactor
+           Jxvec(ilayer)=0.05    !Jx/Ufactor
+           Jpvec(ilayer)=0.05    !Jp/Ufactor
+        endif
+        if(master)write(LOGfile,'(a9,I4,7(a6,F6.3))')"Layer: ",ilayer,"U1:",Ulocvec(ilayer,1)   &
+                                                                     ,"U2:",Ulocvec(ilayer,2)   &
+                                                                     ,"U3:",Ulocvec(ilayer,3)   &
+                                                                     ,"Up:",Ustvec(ilayer)      &
+                                                                     ,"Jh:",Jhvec(ilayer)       &
+                                                                     ,"Jx:",Jxvec(ilayer)       &
+                                                                     ,"Jp:",Jpvec(ilayer)
      enddo
+  endif
+  !
+  if(geometry=="hetero".and.hetero_kind=="LVOSTO")then
+     Einleads=.false.
+     leadlimit=0
+  elseif(geometry=="hetero".and.hetero_kind=="LVOSTO_Ti")then
+     leadlimit=9
   endif
   !
   NlNsNo=Nlat*Nspin*Norb
   NsNo=Nspin*Norb
   !
+  Nt=int(tmax/timestep)
   !
   !##########################       ALLOCATION       ##########################
   !
@@ -284,6 +308,11 @@ program ed_LVO_hetero
      if (lattice_flag)then
         if(fullfree)then
            if(geometry=="hetero".and.hetero_kind=="LVOSTO_Ti")then
+              write(LOGfile,*)"   Uvec: ",(Ulocvec(i,:),i=1,Nlayer)
+              write(LOGfile,*)"   Ust: ",Ustvec
+              write(LOGfile,*)"   Jhvec: ",Jhvec
+              write(LOGfile,*)"   Jpvec: ",Jpvec
+              write(LOGfile,*)"   Jxvec: ",Jxvec
               call ed_solve(Comm,Bath,Hloc_nnn,Ulocvec,Ustvec,Jhvec,Jpvec,Jxvec)
            else
               call ed_solve(comm,Bath,Hloc_nnn)
@@ -632,7 +661,7 @@ contains
     logical                     ,intent(in)           ::   Efield
     real(8)                                           ::   R1(3),R2(3),R3(3)
     real(8)                                           ::   Ruc(Nlat,3)
-    logical                                           ::   IOfile,Potflag
+    logical                                           ::   IOfile,Potflag,Pfileup,Pfiledw
     integer                                           ::   ndx,ios,unitIO
     real(8)                                           ::   mu
     real(8)         ,allocatable                      ::   Awt(:,:),var(:)
@@ -644,13 +673,14 @@ contains
     complex(8)      ,allocatable                      ::   Potential_nn(:,:,:,:,:)
     !
     character(len=32)                                 ::   fileDR
-    integer                                           ::   Nw,nph,it,Ntlength
+    integer                                           ::   Nw,nph,it,Ntlength,sigma_t
     real(8)                                           ::   top,bottom,lvl,dumw,dumF
-    real(8)                                           ::   Deltaw,wo,dt
-    real(8)                                           ::   Afact
+    real(8)                                           ::   Deltaw,wo,amplitude
+    real(8)                                           ::   Afact,HtoEsq,EsqtoH
+    real(8)                                           ::   dt,dw,Einj
     real(8)         ,allocatable                      ::   w(:),t(:),rndp(:),Wband(:),Phlist(:)
     real(8)         ,allocatable                      ::   fieldvect(:,:,:,:)
-    complex(8)      ,allocatable                      ::   Ew(:),Et(:,:)
+    complex(8)      ,allocatable                      ::   Hw(:),Ew(:),Et(:,:)
     complex(8)      ,allocatable                      ::   Aw(:),At(:,:)
     complex(8)      ,allocatable                      ::   Hkt(:,:,:,:)
     complex(8)      ,allocatable                      ::   Hloct(:,:,:)
@@ -659,6 +689,10 @@ contains
     complex(8)      ,allocatable                      ::   Gloct_aux(:,:,:,:,:,:,:)
     !
     Afact=2.d0*pi/(Planck_constant_in_eV_s*1e15)
+    !versione Poyinting
+    EsqtoH=sqrt(electric_constant/(4*pi*1e-7)) ! [e/(V*s)]
+    !versione densità di E
+    EsqtoH=electric_constant/2.d0              ! []
     !
     Ntlength=int(2200/Nt)
     sigma_t=2
@@ -762,11 +796,12 @@ contains
     if(master)write(LOGfile,*)" Bulk tot k-points:",Lk
     !
     !
+    allocate(Potential_so(NlNsNo,NlNsNo));Potential_so=zero
+    allocate(Potential_nn(Nlat,Nspin,Nspin,Norb,Norb));Potential_nn=zero
     if(geometry=="hetero")then
-       allocate(Potential_so(NlNsNo,NlNsNo));Potential_so=zero
-       allocate(Potential_nn(Nlat,Nspin,Nspin,Norb,Norb));Potential_nn=zero
-       inquire(file="Potential_up.w90",exist=IOfile)
-       if(IOfile)then
+       inquire(file="Potential_up.w90",exist=Pfileup)
+       inquire(file="Potential_dw.w90",exist=Pfiledw)
+       if(Pfileup.and.Pfiledw)then
           unitIO=free_unit()
           open(unit=unitIO,file="Potential_up.w90",status="old",action="read",position="rewind")
           do ilayer=1,Nlayer
@@ -855,6 +890,7 @@ contains
        if(allocated(w))     deallocate(w)     ;allocate(w(2*Nw))                     ;w=0d0
        if(allocated(t))     deallocate(t)     ;allocate(t(2*Ntlength*Nt))            ;t=linspace(-Ntlength*tmax,Ntlength*tmax,2*Ntlength*Nt)
        if(allocated(Ew))    deallocate(Ew)    ;allocate(Ew(2*Nw))                    ;Ew=zero
+       if(allocated(Hw))    deallocate(Hw)    ;allocate(Hw(2*Nw))                    ;Hw=zero
        if(allocated(Aw))    deallocate(Aw)    ;allocate(Aw(2*Nw))                    ;Aw=zero
        if(allocated(Phlist))deallocate(Phlist);allocate(Phlist(Nphotons))            ;Phlist=0d0
        !
@@ -866,96 +902,156 @@ contains
        open(unit=unitIO,file="Fluence_w.dat",status="old",action="read",position="rewind")
        do i=1,Nw
           read(unitIO,*) dumw,dumF
-          w(i+Nw)=dumw
+          w(i+Nw)=dumw/(2.0*pi) !w is the frequency not the pulsations
           w(Nw-i+1)=-w(i+Nw)
-          !
           if(w(i+Nw).le.6.8)then
-             Ew(i+Nw)=dcmplx(sqrt(2.d0*dumF/electric_constant)*Bohr_radius,0d0)
-             Ew(Nw-i+1)=Ew(i+Nw)
+             Hw(i+Nw)=dcmplx(dumF,0d0)
+             Hw(Nw-i+1)=Hw(i+Nw)
           endif
-          !
        enddo
        close(unitIO)
        !
-       !2) print E(w)
+       dw=abs(w(3)-w(2)) !*1e15
+       dt=abs(t(3)-t(2)) !/1e15
+       !
+       !2) get E(w) [V/m] Imaginary and anti-symmetric in w so as to have the sine pulse
+       do i=1,Nw
+          Ew(i+Nw)=dcmplx(0d0,sqrt(real(Hw(i))/EsqtoH))
+          Ew(Nw-i+1)=-Ew(i+Nw)
+       enddo
+       !
+       !3) get E(w) [V/Bh] and print
+       do i=1,2*Nw
+          Ew(i)=Ew(i)*Bohr_radius ! TRIAL p(w): +exp(-( (w(i)+w(Nw+int(Nw/2)))/0.2)**2)
+       enddo
        if(master)then
           unitIO=free_unit()
           open(unit=unitIO,file="E_w.dat",status="unknown",action="write",position="rewind")
              do i=1,2*Nw
-             write(unitIO,'(3000F12.7)')  w(i),real(Ew(i))
+             write(unitIO,'(30E20.12)')  w(i),real(Ew(i)),aimag(Ew(i))
           enddo
           close(unitIO)
        endif
        !
-       !3) generate A(w)
+       !4) generate A(w) and print
        Aw=Ew/(Xi*w)
-       !
-       !4) print A(w)
        if(master)then
           unitIO=free_unit()
           open(unit=unitIO,file="A_w.dat",status="unknown",action="write",position="rewind")
           do i=1,2*Nw
-             write(unitIO,'(3000F12.7)')  w(i),aimag(Aw(i))
+             write(unitIO,'(30E20.12)')  w(i),real(Aw(i)),aimag(Aw(i))
           enddo
           close(unitIO)
        endif
        !
-       call invFourier(w,Ew,t,Et(:,Nphotons+1))
+       !5) Fourier transform in fmtsec of the real field and Vec Pot
+       call Fourier_nu2t_corr(w,Ew,t,Et(:,Nphotons+1))
        do i=2*Ntlength*Nt,2,-1
           At(i,Nphotons+1) =-(Et(i,Nphotons+1)-Et(i-1,Nphotons+1))/abs(t(1)-t(2))
        enddo
        !
+       !6) time integral of the real field [V^2/Bh^2]*s*[e/(V*s)]/e = [eV/Bh^2]
+       Einj = sum(abs(Ew)**2)*dw*EsqtoH/electron_volt
+       if(master)write(LOGfile,'(A,1F12.5)') "  H(w) carried eV/Bh^2: ", Einj
+       Einj = sum(abs(Et(:,Nphotons+1))**2)*dt*EsqtoH/electron_volt
+       if(master)write(LOGfile,'(A,1F12.5)') "  H(t) carried eV/Bh^2: ", Einj
+       !HERE I CAN ALREADY SEE THE ERROR INTRODUCED BY THE F. TRANSFORM
+       !beacuse the integral over dt is not going up to infty end then I miss some power
+       !
+       !7) Additional pulse energies
        if(Nphotons.gt.0)then
-          Deltaw=w(2*Nw)/Nphotons
-          do nph=1,Nphotons+1
-             if(nph.le.Nphotons)then
-                wo = (nph-1)*Deltaw + Deltaw/2.d0
-                Phlist(nph)=((nph-1)*Deltaw + Deltaw/2.d0)/Afact
-                do i=1,2*Ntlength*Nt
-                   Et(i,nph) = Et(i,Nphotons+1) * cos(2*pi*wo*t(i)) * exp (-(t(i)/(1.d0*tmax))**2) * 2/((1.d0*tmax)*sqrt(pi))
-                enddo
-             elseif(nph.eq.Nphotons+1)then
-                do i=1,2*Ntlength*Nt
-                   Et(i,nph) = Et(i,nph) * exp(-(t(i)/(6.d0*tmax))**2) 
-                enddo
-             endif
-             do i=2*Ntlength*Nt,2,-1
-                At(i,nph) =-(Et(i,nph)-Et(i-1,nph))/abs(t(1)-t(2))
-             enddo
+          !
+          Deltaw = DeltaeV * Afact
+          !
+          do nph=1,Nphotons
+            !
+            Phlist(nph)=(nph-1)*DeltaeV + DeltaeV/2.d0
+            wo = (nph-1)*Deltaw + Deltaw/2.d0
+            !
+            ! I would have used this but I have a shitty F.transf. and E(t) is just crap
+            amplitude = Et(i,Nphotons+1)
+            ! I just use this and let's see from the power spectra
+            amplitude = (sqrt(550.d0/EsqtoH)*Bohr_radius)
+            do i=1,2*Ntlength*Nt
+               Et(i,nph) =  amplitude * sin(wo*t(i)) * exp(-(t(i)/(0.9*tmax))**2) !*2/(0.9*tmax*sqrt(pi)) this makes sense anly with the convolution argument
+            enddo
+            Einj = sum(abs(Et(:,nph))**2)*dt*EsqtoH/electron_volt
+            if(master)write(LOGfile,'(A,1I5,1F10.4,A,1F12.5)') "  Non Renormalized E(t) nr. ",nph, Phlist(nph)," is carring eV/Bh^2: ", Einj
+            !
+            do i=2*Ntlength*Nt,2,-1
+               At(i,nph) =-(Et(i,nph)-Et(i-1,nph))/abs(t(1)-t(2))
+            enddo
+            !
           enddo
+          !
+          !Normalization to a given injected energy
+          if(modelPulse)then
+             do nph=1,Nphotons
+                Et(:,nph) = Et(:,nph)*sqrt((EinjeV*electron_volt/(dt*EsqtoH))/dot_product(Et(:,nph),Et(:,nph)))
+                Einj = sum(abs(Et(:,nph))**2)*dt*EsqtoH/electron_volt
+                if(master)write(LOGfile,'(A,1I8,A,1F12.5)') "  Renormalized E(t) nr. ",nph," is carring eV/Bh^2: ", Einj
+             enddo
+          endif
+          !
+          !Power spectra computations
+          !This is just to see roughly where are the P(w) compared to the real one NB: w is the inverse time not pulsation
+          !here the result are in better agreement because the field is finite in time and the same goes for the relative P(w)
+          !so the integral is decays well and the results are comparable
+          deallocate(Ew);allocate(Ew(4000));Ew=zero
+          deallocate(w) ;allocate(w(4000)) ;w=linspace(-2000*dw,2000*dw,4000)
+          do nph=1,Nphotons+1
+             Ew=zero
+             call Fourier_t2nu_corr(t,Et(:,nph),w,Ew)
+             Einj = sum(abs(Ew)**2)*dw*EsqtoH/electron_volt
+             if(master)write(LOGfile,'(A,1I8,A,1F12.5)') "  E(w) nr. ",nph," is carring eV/Bh^2: ", Einj
+             unitIO=free_unit()
+             open(unit=unitIO,file="Pw"//str(nph)//".out",status="unknown",action="write",position="rewind")
+             do i=1,4000
+                write(unitIO,'(90E20.8)')w(i), real(Ew(i)), aimag(Ew(i)), EsqtoH*(abs(Ew(i)/Bohr_radius)**2)
+             enddo
+             close(unitIO)
+          enddo
+          !
        endif
+       where(abs((Et))<1.d-15)Et=zero
+       where(abs((At))<1.d-15)At=zero
        !
        if(allocated(fieldvect))deallocate(fieldvect);allocate(fieldvect(Ntlength*Nt,Nphotons+1,3,2)) ;fieldvect=0d0
        do nph=1,Nphotons+1
           !E(t)  from -2tmax
-          fieldvect(1+10:Ntlength*Nt,nph,1,1)=real(Et((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-10,nph))*fieldfactor
-          fieldvect(1+10:Ntlength*Nt,nph,2,1)=real(Et((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-10,nph))*fieldfactor
-          fieldvect(1+10:Ntlength*Nt,nph,3,1)=0d0
+          fieldvect(1+Efieldstart:Ntlength*Nt,nph,1,1)=real(Et((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*fieldfactor
+          fieldvect(1+Efieldstart:Ntlength*Nt,nph,2,1)=real(Et((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*fieldfactor
+          fieldvect(1+Efieldstart:Ntlength*Nt,nph,3,1)=0d0
           !A(t)  from -2tmax
-          fieldvect(1+10:Ntlength*Nt,nph,1,2)=real(At((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-10,nph))*Afact*fieldfactor
-          fieldvect(1+10:Ntlength*Nt,nph,2,2)=real(At((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-10,nph))*Afact*fieldfactor
-          fieldvect(1+10:Ntlength*Nt,nph,3,2)=0d0
+          fieldvect(1+Efieldstart:Ntlength*Nt,nph,1,2)=real(At((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*Afact*fieldfactor
+          fieldvect(1+Efieldstart:Ntlength*Nt,nph,2,2)=real(At((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*Afact*fieldfactor
+          fieldvect(1+Efieldstart:Ntlength*Nt,nph,3,2)=0d0
        enddo
        !
        write(LOGfile,'(1A)') "  A(t) and E(t) generated"
        if(master)then
           unitIO=free_unit()
           open(unit=unitIO,file="E_t.dat",status="unknown",action="write",position="rewind")
-          write(unitIO,'(1A1,3000F12.7)') "#",0d0,(Phlist(nph),nph=1,Nphotons)
+          write(unitIO,'(1A1,3000E20.8)') "#",0d0,(Phlist(nph),nph=1,Nphotons)
+          write(unitIO,'(1A1,3000E20.8)') "#",0d0,((dot_product(fieldvect(:,nph,1,1),fieldvect(:,nph,1,1))),nph=1,Nphotons)
           do i=1,Ntlength*Nt
-             write(unitIO,'(1A1,3000F12.7)')  " ",sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i),(fieldvect(i,nph,1,1),nph=1,Nphotons+1)
+             write(unitIO,'(1A1,3000E20.8)')  " ",sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i),(fieldvect(i,nph,1,1),nph=1,Nphotons+1)
           enddo
           close(unitIO)
           unitIO=free_unit()
           open(unit=unitIO,file="A_t.dat",status="unknown",action="write",position="rewind")
-          write(unitIO,'(1A1,3000F12.7)') "#",0d0,(Phlist(nph),nph=1,Nphotons)
+          write(unitIO,'(1A1,3000E20.8)') "#",0d0,(Phlist(nph),nph=1,Nphotons)
           do i=1,Ntlength*Nt
-             write(unitIO,'(1A1,3000F12.7)')  " ",sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i),(fieldvect(i,nph,1,2),nph=1,Nphotons+1)
+             write(unitIO,'(1A1,3000E20.8)')  " ",sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i),(fieldvect(i,nph,1,2),nph=1,Nphotons+1)
           enddo
           close(unitIO)
        endif
        !
        deallocate(w,Ew,Et,Aw,At,Phlist)
+
+  STOP
+
+
        !
        !--------------------- DIPOLE --------------------
        if(put_dipole)then
@@ -1009,7 +1105,12 @@ contains
           if(allocated(Hloct))deallocate(Hloct);allocate(Hloct(NlNsNo,NlNsNo,Ntlength*Nt));Hloct =zero
           if(allocated(Hoppt))deallocate(Hoppt);allocate(Hoppt(NlNsNo,NlNsNo,4,Ntlength*Nt));Hoppt =zero
           !
-          call TB_hr_to_hk(comm,fieldvect(:,nph,:,:),gauge,R1,R2,R3,Ruc,put_dipole,Hoppt,fileHR,fileDR,Nspin,Norb,Nlat,Ntlength*Nt)
+          call TB_hr_to_hk(comm,fieldvect(:,nph,:,:),gauge,R1,R2,R3,Ruc   &
+                                                    ,put_dipole           &
+                                                    ,Einleads,leadlimit   &
+                                                    ,Hoppt                &
+                                                    ,fileHR,fileDR        &
+                                                    ,Nspin,Norb,Nlat,Ntlength*Nt)
           !
           !rotate Hloct & Hoppt to CF
           do i=1,Ntlength*Nt
@@ -1026,12 +1127,12 @@ contains
           !print Hloc(t)
           unitIO=free_unit()
           open(unit=unitIO,file="RE_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,10
+          do i=1,Efieldstart
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (real(Hloct(io,jo,1)),jo=1,NlNsNo)
              enddo
           enddo
-          do i=(10+1)+skiptstp,Ntlength*Nt
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (real(Hloct(io,jo,i)),jo=1,NlNsNo)
              enddo
@@ -1039,12 +1140,12 @@ contains
           close(unitIO)
           unitIO=free_unit()
           open(unit=unitIO,file="IM_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,10
+          do i=1,Efieldstart
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (aimag(Hloct(io,jo,1)),jo=1,NlNsNo)
              enddo
           enddo
-          do i=(10+1)+skiptstp,Ntlength*Nt
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
              enddo
@@ -1054,12 +1155,12 @@ contains
           !print Hopping
           unitIO=free_unit()
           open(unit=unitIO,file="RE_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,10
+          do i=1,Efieldstart
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
              enddo
           enddo
-          do i=(10+1)+skiptstp,Ntlength*Nt
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
              enddo
@@ -1067,26 +1168,26 @@ contains
           close(unitIO)
           unitIO=free_unit()
           open(unit=unitIO,file="IM_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,10
+          do i=1,Efieldstart
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
              enddo
           enddo
-          do i=(10+1)+skiptstp,Ntlength*Nt
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
              enddo
           enddo
           close(unitIO)
+          !
           unitIO=free_unit()
           open(unit=unitIO,file="RE_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-
-          do i=1,10
+          do i=1,Efieldstart
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
              enddo
           enddo
-          do i=(10+1)+skiptstp,Ntlength*Nt
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
              enddo
@@ -1094,14 +1195,41 @@ contains
           close(unitIO)
           unitIO=free_unit()
           open(unit=unitIO,file="IM_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,10
+          do i=1,Efieldstart
              do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
+                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
              enddo
           enddo
-          do i=(10+1)+skiptstp,Ntlength*Nt
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
              do io=1,NlNsNo
                 write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
+             enddo
+          enddo
+          close(unitIO)
+          !
+          unitIO=free_unit()
+          open(unit=unitIO,file="RE_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+          do i=1,Efieldstart
+             do io=1,NlNsNo
+                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+             enddo
+          enddo
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+             do io=1,NlNsNo
+                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
+             enddo
+          enddo
+          close(unitIO)
+          unitIO=free_unit()
+          open(unit=unitIO,file="IM_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+          do i=1,Efieldstart
+             do io=1,NlNsNo
+                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+             enddo
+          enddo
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+             do io=1,NlNsNo
+                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
              enddo
           enddo
           close(unitIO)
@@ -1109,19 +1237,23 @@ contains
           !print Hopping control
           unitIO=free_unit()
           open(unit=unitIO,file="t17_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,10
+          do i=1,Efieldstart
              write(unitIO,'(9000F12.6)') sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i), real(Hloct(1,7,i)) ,aimag(Hloct(1,7,i))   &
                                         ,real(Hoppt(1+0*NsNo,7+0*NsNo,2,i)),aimag(Hoppt(1+0*NsNo,7+0*NsNo,2,i)) &
                                         ,real(Hoppt(1+2*NsNo,7+2*NsNo,2,i)),aimag(Hoppt(1+2*NsNo,7+2*NsNo,2,i)) &
                                         ,real(Hoppt(1+4*NsNo,7+4*NsNo,2,i)),aimag(Hoppt(1+4*NsNo,7+4*NsNo,2,i)) &
-                                        ,real(Hoppt(1+6*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+6*NsNo,7+6*NsNo,2,i))
+                                        ,real(Hoppt(1+6*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+6*NsNo,7+6*NsNo,2,i)) &
+                                        ,real(Hoppt(1+8*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+8*NsNo,7+6*NsNo,2,i)) &
+                                        ,real(Hoppt(1+10*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+10*NsNo,7+6*NsNo,2,i))
           enddo
-          do i=(10+1)+skiptstp,Ntlength*Nt
+          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
              write(unitIO,'(9000F12.6)') sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i), real(Hloct(1,7,i)) ,aimag(Hloct(1,7,i))   &
                                         ,real(Hoppt(1+0*NsNo,7+0*NsNo,2,i)),aimag(Hoppt(1+0*NsNo,7+0*NsNo,2,i)) &
                                         ,real(Hoppt(1+2*NsNo,7+2*NsNo,2,i)),aimag(Hoppt(1+2*NsNo,7+2*NsNo,2,i)) &
                                         ,real(Hoppt(1+4*NsNo,7+4*NsNo,2,i)),aimag(Hoppt(1+4*NsNo,7+4*NsNo,2,i)) &
-                                        ,real(Hoppt(1+6*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+6*NsNo,7+6*NsNo,2,i))
+                                        ,real(Hoppt(1+6*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+6*NsNo,7+6*NsNo,2,i)) &
+                                        ,real(Hoppt(1+8*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+8*NsNo,7+6*NsNo,2,i)) &
+                                        ,real(Hoppt(1+10*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+10*NsNo,7+6*NsNo,2,i))
           enddo
           close(unitIO)
           !
@@ -1539,49 +1671,115 @@ contains
   !+------------------------------------------------------------------------------------------+!
   !PURPOSE: Fourier
   !+------------------------------------------------------------------------------------------+!
-  subroutine invFourier(w,func_in,t,func_out)
+  subroutine Fourier_nu2t(n,func_in,t,func_out)
     implicit none
-    real(8)          ,intent(in)   ::   w(:),t(:)
+    real(8)          ,intent(in)   ::   n(:),t(:)
     complex(8)       ,intent(in)   ::   func_in(:)
     complex(8)       ,intent(out)  ::   func_out(size(t))
-    real(8)                        ::   dt,dw
-    integer                        ::   it,iw
+    complex(8)                     ::   func(size(func_in))
+    real(8)                        ::   dt,dn,A
+    integer                        ::   it,in
     !
-    if(size(func_in) .ne.size(w))stop "wrong size Fourier"
+    if(size(func_in) .ne.size(n))stop "wrong size Fourier_nu2t"
     !
-    dw=abs(w(2)-w(1))
+    dn=abs(n(2)-n(1))
     dt=abs(t(2)-t(1))
     !
+    A = maxval(abs(func_in))
+    func = func_in / A
     func_out=zero
     do it=1,size(t)
-       do iw=1,size(w)
-          func_out(it) = func_out(it) + dw*func_in(iw)*dcmplx(cos(w(iw)*t(it)),-sin(w(iw)*t(it)))/sqrt(2*pi)
+       do in=1,size(n)
+          func_out(it) = func_out(it) + dn*func(in)*dcmplx(+cos(2.d0*pi*n(in)*t(it)),+sin(2.d0*pi*n(in)*t(it)))!/sqrt(2*pi)
        enddo
     enddo
+    func_out = func_out * A
     !
-  end subroutine invFourier
+  end subroutine Fourier_nu2t
   !
-  subroutine dirFourier(t,func_in,w,func_out)
+  subroutine Fourier_t2nu(t,func_in,n,func_out)
     implicit none
-    real(8)          ,intent(in)   ::   w(:),t(:)
+    real(8)          ,intent(in)   ::   n(:),t(:)
     complex(8)       ,intent(in)   ::   func_in(:)
-    complex(8)       ,intent(out)  ::   func_out(size(t))
-    real(8)                        ::   dt,dw
-    integer                        ::   it,iw
+    complex(8)       ,intent(out)  ::   func_out(size(n))
+    complex(8)                     ::   func(size(func_in))
+    real(8)                        ::   dt,dn,A
+    integer                        ::   it,in
     !
-    if(size(func_in) .ne.size(t))stop "wrong size Fourier"
+    if(size(func_in) .ne.size(t))stop "wrong size Fourier_t2nu"
     !
-    dw=abs(w(2)-w(1))
+    dn=abs(n(2)-n(1))
     dt=abs(t(2)-t(1))
     !
+    A = maxval(abs(func_in))
+    func = func_in / A
     func_out=zero
-    do iw=1,size(w)
+    do in=1,size(n)
        do it=1,size(t)
-          func_out(iw) = func_out(iw) + dt*func_in(it)*dcmplx(cos(w(iw)*t(it)),sin(w(iw)*t(it)))/sqrt(2*pi)
+          func_out(in) = func_out(in) + dt*func(it)*dcmplx(+cos(2.d0*pi*n(in)*t(it)),-sin(2.d0*pi*n(in)*t(it)))
        enddo
     enddo
+    func_out = func_out * A
     !
-  end subroutine dirFourier
+  end subroutine Fourier_t2nu
+  !
+  subroutine Fourier_nu2t_corr(n,func_in,t,func_out)
+    implicit none
+    real(8)          ,intent(in)   ::   n(:),t(:)
+    complex(8)       ,intent(in)   ::   func_in(:)
+    complex(8)       ,intent(out)  ::   func_out(size(t))
+    complex(8)                     ::   func(size(func_in))
+    real(8)                        ::   dt,dn,A,f1,f2,slope
+    integer                        ::   it,in
+    !
+    if(size(func_in) .ne.size(n))stop "wrong size Fourier_nu2t"
+    !
+    dn=abs(n(2)-n(1))
+    dt=abs(t(2)-t(1))
+    !
+    A = maxval(abs(func_in))
+    func = func_in / A
+    func_out=zero
+    do it=1,size(t)
+       f1 = (cdexp(-Xi*2.d0*pi*t(it)*dn)-1.d0)/(-Xi*2.d0*pi*t(it))
+       f2 = (cdexp(-Xi*2.d0*pi*t(it)*dn)*(-Xi*2.d0*pi*t(it)*dn-1.d0)+1.d0)/((-Xi*2.d0*pi*t(it))**2)
+       do in=1,size(n)-1
+          slope = (func(in+1)-func(in))/dn
+          func_out(it) = func_out(it) + cdexp(-Xi*2.d0*pi*n(in)*t(it))*(f1*func(in)+f2*slope)
+       enddo
+    enddo
+    func_out = func_out * A
+    !
+  end subroutine Fourier_nu2t_corr
+  !
+  subroutine Fourier_t2nu_corr(t,func_in,n,func_out)
+    implicit none
+    real(8)          ,intent(in)   ::   n(:),t(:)
+    complex(8)       ,intent(in)   ::   func_in(:)
+    complex(8)       ,intent(out)  ::   func_out(size(n))
+    complex(8)                     ::   func(size(func_in))
+    real(8)                        ::   dt,dn,A,f1,f2,slope
+    integer                        ::   it,in
+    !
+    if(size(func_in) .ne.size(t))stop "wrong size Fourier_t2nu"
+    !
+    dn=abs(n(2)-n(1))
+    dt=abs(t(2)-t(1))
+    !
+    A = maxval(abs(func_in))
+    func = func_in / A
+    func_out=zero
+    do in=1,size(n)
+       f1 = (cdexp(+Xi*2.d0*pi*n(in)*dt)-1.d0)/(+Xi*2.d0*pi*n(in))
+       f2 = (cdexp(+Xi*2.d0*pi*n(in)*dt)*(+Xi*2.d0*pi*n(in)*dt-1.d0)+1.d0)/((+Xi*2.d0*pi*n(in))**2)
+       do it=1,size(t)-1
+          slope = (func(it+1)-func(it))/dt
+          func_out(in) = func_out(in) + cdexp(Xi*2.d0*pi*n(in)*t(it))*(f1*func(it)+f2*slope)
+       enddo
+    enddo
+    func_out = func_out * A
+    !
+  end subroutine Fourier_t2nu_corr
   !
   !
   !
@@ -1784,16 +1982,19 @@ contains
           !
           if(potential.ne.0d0)then
              !
-             correction=0d0
+             ! Gradient on Vanadium
+             do ilayer=1,Nlayer-2
+                correction=0d0
+                do iorb=1,Norb
+                   do ispin=1,Nspin
+                      Grad_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=potential*(ilayer-1) + correction
+                      Grad_nn(2*ilayer,ispin,ispin,iorb,iorb)  =potential*(ilayer-1) + correction
+                   enddo
+                enddo
+             enddo
+             ! Gradient on Titanium
              do iorb=1,Norb
                 do ispin=1,Nspin
-                   ! Gradient on Vanadium
-                   do ilayer=1,(Nlat/2-2)
-                      if(ilayer==2)correction=0.15
-                      Grad_nn(2*ilayer-1,ispin,ispin,iorb,iorb)=potential*(ilayer-1-1) + correction
-                      Grad_nn(2*ilayer,ispin,ispin,iorb,iorb)  =potential*(ilayer-1-1) + correction
-                   enddo
-                   ! Gradient on Titanium
                    Grad_nn(9,ispin,ispin,iorb,iorb)=Eloc_R
                    Grad_nn(10,ispin,ispin,iorb,iorb)=Eloc_R
                    Grad_nn(11,ispin,ispin,iorb,iorb)=Eloc_L
@@ -1866,13 +2067,13 @@ end program ed_LVO_hetero
 !          unitIO=free_unit()
 !          open(unit=unitIO,file="E_t.dat",status="unknown",action="write",position="rewind")
 !          do i=1,(10+1)*Nt
-!             write(unitIO,'(3000F12.7)')  tmax+t(9*Nt+i),(real(Et(9*Nt+i,nph)),nph=1,Nphotons+1)
+!             write(unitIO,'(3000E20.8)')  tmax+t(9*Nt+i),(real(Et(9*Nt+i,nph)),nph=1,Nphotons+1)
 !          enddo
 !          close(unitIO)
 !          unitIO=free_unit()
 !          open(unit=unitIO,file="A_t.dat",status="unknown",action="write",position="rewind")
 !          do i=1,(10+1)*Nt
-!             write(unitIO,'(3000F12.7)')  tmax+t(9*Nt+i),(real(At(9*Nt+i,nph)),nph=1,Nphotons+1)
+!             write(unitIO,'(3000E20.8)')  tmax+t(9*Nt+i),(real(At(9*Nt+i,nph)),nph=1,Nphotons+1)
 !          enddo
 !          close(unitIO)
 !       endif
@@ -1947,21 +2148,21 @@ end program ed_LVO_hetero
 !             unitIO=free_unit()
 !             open(unit=unitIO,file="Awt_l11_"//str(nph)//".dat",status="unknown",action="write",position="rewind")
 !             do i=1,Lreal
-!                write(unitIO,'(3000F12.7)')wr(i),(-aimag(Gloct(1,1,1,1,1,i,j))/pi,j=1,Nt+10)
+!                write(unitIO,'(3000E20.8)')wr(i),(-aimag(Gloct(1,1,1,1,1,i,j))/pi,j=1,Nt+10)
 !             enddo
 !             close(unitIO)
 !             !
 !             unitIO=free_unit()
 !             open(unit=unitIO,file="Awt_l22_"//str(nph)//".dat",status="unknown",action="write",position="rewind")
 !             do i=1,Lreal
-!                write(unitIO,'(3000F12.7)')wr(i),(-aimag(Gloct(1,1,1,2,2,i,j))/pi,j=1,Nt+10)
+!                write(unitIO,'(3000E20.8)')wr(i),(-aimag(Gloct(1,1,1,2,2,i,j))/pi,j=1,Nt+10)
 !             enddo
 !             close(unitIO)
 !             !
 !             unitIO=free_unit()
 !             open(unit=unitIO,file="Awt_l33_"//str(nph)//".dat",status="unknown",action="write",position="rewind")
 !             do i=1,Lreal
-!                write(unitIO,'(3000F12.7)')wr(i),(-aimag(Gloct(1,1,1,3,3,i,j))/pi,j=1,Nt+10)
+!                write(unitIO,'(3000E20.8)')wr(i),(-aimag(Gloct(1,1,1,3,3,i,j))/pi,j=1,Nt+10)
 !             enddo
 !             close(unitIO)
 !          endif
@@ -2000,7 +2201,7 @@ end program ed_LVO_hetero
 !             unitIO=free_unit()
 !             open(unit=unitIO,file="W_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
 !             do j=1,Nt+10
-!                write(unitIO,'(30F12.7)')abs(tflex(1,nph)-tflex(2,nph))*j,(Wt(io,j,nph,1),io=1,NlNsNo),(Wt(io,j,nph,2),io=1,NlNsNo)
+!                write(unitIO,'(30E20.8)')abs(tflex(1,nph)-tflex(2,nph))*j,(Wt(io,j,nph,1),io=1,NlNsNo),(Wt(io,j,nph,2),io=1,NlNsNo)
 !             enddo
 !             close(unitIO)
 !             !
