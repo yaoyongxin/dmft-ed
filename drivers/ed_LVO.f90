@@ -899,8 +899,10 @@ contains
           enddo
           close(unitIO)
           !
+          !E field y component
           fieldvect(:,:,2,1)=fieldvect(:,:,1,1)
-          fieldvect(:,:,2,1)=fieldvect(:,:,1,1)
+          !A field y component
+          fieldvect(:,:,2,2)=fieldvect(:,:,1,2)
           !
           write(LOGfile,'(1A)') "  A(t) and E(t) readed"
           !
@@ -1105,6 +1107,7 @@ contains
           !
           deallocate(w,Ew,Et,Aw,At,Phlist)
        endif
+       deallocate(t)
        !
        !
        !--------------------- DIPOLE --------------------
@@ -1141,191 +1144,153 @@ contains
        call MPI_Barrier(Comm,ier)
        !
        !--------------------- HAMILTONIAN --------------------
-       do nph=1,Nphotons+1
-          if(master)then
+       if(master)then
+          do nph=1,Nphotons+1
+          !do nph=6,6
              write(LOGfile,*)
              write(LOGfile,'(A,1I3,1A4,1I3)') "  Photon",nph," of ",Nphotons+1
-          endif
-          if(allocated(Hloct))deallocate(Hloct);allocate(Hloct(NlNsNo,NlNsNo,Ntlength*Nt));Hloct =zero
-          if(allocated(Hoppt))deallocate(Hoppt);allocate(Hoppt(NlNsNo,NlNsNo,4,Ntlength*Nt));Hoppt =zero
-          !
-          call TB_hr_to_hk(comm,fieldvect(:,nph,:,:),gauge,R1,R2,R3,Ruc   &
-                                                    ,put_dipole           &
-                                                    ,Einleads,leadlimit   &
-                                                    ,Hoppt                &
-                                                    ,fileHR,fileDR        &
-                                                    ,Nspin,Norb,Nlat,Ntlength*Nt)
-          if(master)write(LOGfile,'(A)') "  Hloc(K,t) in main"
-          !
-
-
-          call TB_write_Hloc(Hoppt(:,:,1,1)+Potential_so,reg("Hloc.test1"))
-
-
-          !rotate Hloct & Hoppt to CF
-          do i=1,Ntlength*Nt
+             if(allocated(Hloct))deallocate(Hloct);allocate(Hloct(NlNsNo,NlNsNo,Ntlength*Nt));Hloct =zero
+             if(allocated(Hoppt))deallocate(Hoppt);allocate(Hoppt(NlNsNo,NlNsNo,4,Ntlength*Nt));Hoppt =zero
              !
-             Hloct(:,:,i)=matmul(Udag,matmul((Hoppt(:,:,1,i)+Potential_so),U))
-             call herm_check(Hloct(:,:,i))
+             call TB_hr_to_hk(fieldvect(:,nph,:,:),gauge,R1,R2,R3,Ruc   &
+                                                      ,put_dipole           &
+                                                      ,Einleads,leadlimit   &
+                                                      ,Hoppt                &
+                                                      ,fileHR,fileDR        &
+                                                      ,Nspin,Norb,Nlat,Ntlength*Nt)
+             write(LOGfile,'(A)') "  Hloc(K,t) in main"
              !
-             do j=2,4
-                Hoppt(:,:,j,i)=matmul(Udag,matmul(Hoppt(:,:,j,i),U))
+             !rotate Hloct & Hoppt to CF
+             do i=1,Ntlength*Nt
+                !
+                Hloct(:,:,i)=matmul(Udag,matmul((Hoppt(:,:,1,i)+Potential_so),U))
+                call herm_check(Hloct(:,:,i))
+                !
+                do j=2,4
+                   Hoppt(:,:,j,i)=matmul(Udag,matmul(Hoppt(:,:,j,i),U))
+                enddo
+                !
              enddo
+             write(LOGfile,'(A)') "  Hloc(K,t) rotated"
              !
-          enddo
-          if(master)write(LOGfile,'(A)') "  Hloc(K,t) rotated"
-
-          call TB_write_Hloc(Hloct(:,:,1),reg("Hlocrot.test1"))
-
-          !
-          !print Hloc(t)
-          unitIO=free_unit()
-          open(unit=unitIO,file="RE_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hloct(io,jo,1)),jo=1,NlNsNo)
+             !print Hloc(t)
+             unitIO=free_unit()
+             open(unit=unitIO,file="RE_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hloct(io,jo,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hloct(io,jo,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hloct(io,jo,i)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          close(unitIO)
-          unitIO=free_unit()
-          open(unit=unitIO,file="IM_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hloct(io,jo,1)),jo=1,NlNsNo)
+             close(unitIO)
+             unitIO=free_unit()
+             open(unit=unitIO,file="IM_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hloct(io,jo,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          close(unitIO)
-          if(master)write(LOGfile,'(A)') "  Hloc(K,t) printed"
-          !
-          !print Hopping
-          unitIO=free_unit()
-          open(unit=unitIO,file="RE_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
+             close(unitIO)
+             write(LOGfile,'(A)') "  Hloc(K,t) printed"
+             !
+             !print Hopping
+             unitIO=free_unit()
+             open(unit=unitIO,file="RE_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          close(unitIO)
-          unitIO=free_unit()
-          open(unit=unitIO,file="IM_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
+             close(unitIO)
+             unitIO=free_unit()
+             open(unit=unitIO,file="IM_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          close(unitIO)
-          if(master)write(LOGfile,'(A)') "  H_x(K,t) printed"
-          !
-          unitIO=free_unit()
-          open(unit=unitIO,file="RE_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
+             close(unitIO)
+             write(LOGfile,'(A)') "  H_x(K,t) printed"
+             !
+             unitIO=free_unit()
+             open(unit=unitIO,file="RE_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          close(unitIO)
-          unitIO=free_unit()
-          open(unit=unitIO,file="IM_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
+             close(unitIO)
+             unitIO=free_unit()
+             open(unit=unitIO,file="IM_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          close(unitIO)
-          if(master)write(LOGfile,'(A)') "  H_y(K,t) printed"
-          !
-          unitIO=free_unit()
-          open(unit=unitIO,file="RE_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+             close(unitIO)
+             write(LOGfile,'(A)') "  H_y(K,t) printed"
+             !
+             unitIO=free_unit()
+             open(unit=unitIO,file="RE_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (real(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          close(unitIO)
-          unitIO=free_unit()
-          open(unit=unitIO,file="IM_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          do i=1,Efieldstart
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+             close(unitIO)
+             unitIO=free_unit()
+             open(unit=unitIO,file="IM_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
+             do i=1,Efieldstart
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+                enddo
              enddo
-          enddo
-          do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-             do io=1,NlNsNo
-                write(unitIO,'(9000F12.6)') (aimag(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
+             do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
+                do io=1,NlNsNo
+                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
+                enddo
              enddo
+             close(unitIO)
+             write(LOGfile,'(A)') "  H_z(K,t) printed"
+             deallocate(Hloct,Hoppt)
           enddo
-          close(unitIO)
-          if(master)write(LOGfile,'(A)') "  H_z(K,t) printed"
-          !
-          !print Hopping control
-          !unitIO=free_unit()
-          !open(unit=unitIO,file="t17_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
-          !do i=1,Efieldstart
-          !   write(unitIO,'(9000F12.6)') sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i), real(Hloct(1,7,i)) ,aimag(Hloct(1,7,i))   &
-          !                              ,real(Hoppt(1+0*NsNo,7+0*NsNo,2,i)),aimag(Hoppt(1+0*NsNo,7+0*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+2*NsNo,7+2*NsNo,2,i)),aimag(Hoppt(1+2*NsNo,7+2*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+4*NsNo,7+4*NsNo,2,i)),aimag(Hoppt(1+4*NsNo,7+4*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+6*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+6*NsNo,7+6*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+8*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+8*NsNo,7+6*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+10*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+10*NsNo,7+6*NsNo,2,i))
-          !enddo
-          !do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
-          !   write(unitIO,'(9000F12.6)') sigma_t*tmax+t((Ntlength-sigma_t)*Nt+i), real(Hloct(1,7,i)) ,aimag(Hloct(1,7,i))   &
-          !                              ,real(Hoppt(1+0*NsNo,7+0*NsNo,2,i)),aimag(Hoppt(1+0*NsNo,7+0*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+2*NsNo,7+2*NsNo,2,i)),aimag(Hoppt(1+2*NsNo,7+2*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+4*NsNo,7+4*NsNo,2,i)),aimag(Hoppt(1+4*NsNo,7+4*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+6*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+6*NsNo,7+6*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+8*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+8*NsNo,7+6*NsNo,2,i)) &
-          !                              ,real(Hoppt(1+10*NsNo,7+6*NsNo,2,i)),aimag(Hoppt(1+10*NsNo,7+6*NsNo,2,i))
-          !enddo
-          !close(unitIO)
-          !
-          deallocate(Hloct,Hoppt)
-       enddo
-       deallocate(t)
-       !
-       !--------------------- BANDWIDTH --------------------
-       inquire(file="bandwidth.used",exist=IOfile)
-       if(.not.IOfile)then
-          if(master)write(LOGfile,'(1A)') "  bandwidth-->launch G0loc calculation in diag basis"
-       else
-          if(master)write(LOGfile,'(1A)') "  bandwidth found"
        endif
+       call MPI_Barrier(Comm,ier)
+       !
     endif
     if(geometry=="hetero")deallocate(Potential_nn,Potential_so)
     !
