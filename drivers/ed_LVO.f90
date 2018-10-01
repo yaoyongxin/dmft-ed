@@ -200,7 +200,10 @@ program ed_LVO_hetero
      enddo
   endif
   !
-  if(geometry=="hetero".and.hetero_kind=="LVOSTO")then
+  if(geometry=="bulk")then
+     Einleads=.true.
+     leadlimit=5
+  elseif(geometry=="hetero".and.hetero_kind=="LVOSTO")then
      Einleads=.false.
      leadlimit=0
   elseif(geometry=="hetero".and.hetero_kind=="LVOSTO_Ti")then
@@ -696,7 +699,7 @@ contains
     !versione densità di E
     EsqtoH=electric_constant/2.d0              ! []
     !
-    Ntlength=int(2200/Nt)
+    Ntlength=int(5000/Nt)
     sigma_t=2
     !
     !
@@ -1020,7 +1023,7 @@ contains
              do nph=1,Nphotons
                !
                Phlist(nph)=(nph-1)*DeltaeV + DeltaeV/2.d0
-               wo = (nph-1)*Deltaw + Deltaw/2.d0
+               wo = nph*Deltaw  !(nph-1)*Deltaw + Deltaw/2.d0
                !
                ! I would have used this but I have a shitty F.transf. and E(t) is just crap
                amplitude = Et(i,Nphotons+1)
@@ -1076,11 +1079,11 @@ contains
              !E(t)  from -2tmax
              fieldvect(1+Efieldstart:Ntlength*Nt,nph,1,1)=real(Et((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*fieldfactor
              fieldvect(1+Efieldstart:Ntlength*Nt,nph,2,1)=real(Et((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*fieldfactor
-             fieldvect(1+Efieldstart:Ntlength*Nt,nph,3,1)=0d0
+             fieldvect(:,nph,3,1)=0d0
              !A(t)  from -2tmax
              fieldvect(1+Efieldstart:Ntlength*Nt,nph,1,2)=real(At((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*Afact*fieldfactor
              fieldvect(1+Efieldstart:Ntlength*Nt,nph,2,2)=real(At((Ntlength-sigma_t)*Nt+1:(2*Ntlength-sigma_t)*Nt-Efieldstart,nph))*Afact*fieldfactor
-             fieldvect(1+Efieldstart:Ntlength*Nt,nph,3,2)=0d0
+             fieldvect(:,nph,3,2)=0d0
           enddo
           !
           write(LOGfile,'(1A)') "  A(t) and E(t) generated"
