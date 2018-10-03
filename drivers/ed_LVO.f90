@@ -697,7 +697,7 @@ contains
     !versione Poyinting
     EsqtoH=sqrt(electric_constant/(4*pi*1e-7)) ! [e/(V*s)]
     !versione densità di E
-    EsqtoH=electric_constant/2.d0              ! []
+    !EsqtoH=electric_constant/2.d0              ! []
     !
     Ntlength=int(5000/Nt)
     sigma_t=2
@@ -1181,12 +1181,12 @@ contains
              open(unit=unitIO,file="RE_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hloct(io,jo,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hloct(io,jo,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hloct(io,jo,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hloct(io,jo,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
@@ -1194,12 +1194,12 @@ contains
              open(unit=unitIO,file="IM_Hloct_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hloct(io,jo,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hloct(io,jo,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hloct(io,jo,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
@@ -1210,12 +1210,12 @@ contains
              open(unit=unitIO,file="RE_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
@@ -1223,12 +1223,12 @@ contains
              open(unit=unitIO,file="IM_HopptX_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hoppt(io,jo,2,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hoppt(io,jo,2,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
@@ -1238,12 +1238,12 @@ contains
              open(unit=unitIO,file="RE_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
@@ -1251,12 +1251,12 @@ contains
              open(unit=unitIO,file="IM_HopptY_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hoppt(io,jo,3,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hoppt(io,jo,3,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
@@ -1266,12 +1266,12 @@ contains
              open(unit=unitIO,file="RE_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (real(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (real(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
@@ -1279,12 +1279,12 @@ contains
              open(unit=unitIO,file="IM_HopptZ_ph"//str(nph)//".dat",status="unknown",action="write",position="rewind")
              do i=1,Efieldstart
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hoppt(io,jo,4,1)),jo=1,NlNsNo)
                 enddo
              enddo
              do i=(Efieldstart+1)+skiptstp,Ntlength*Nt
                 do io=1,NlNsNo
-                   write(unitIO,'(9000F20.9)') (aimag(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
+                   write(unitIO,'(90E20.12)') (aimag(Hoppt(io,jo,4,i)),jo=1,NlNsNo)
                 enddo
              enddo
              close(unitIO)
