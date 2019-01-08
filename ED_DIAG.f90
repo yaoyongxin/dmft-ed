@@ -207,9 +207,6 @@ contains
        !
        if(ed_verbose>=4)then
           write(LOGfile,*)"EigValues: ",eig_values(:Neigen)
-          do i=1,Dim
-             write(200,*)abs(eig_basis(i,1))
-          enddo
           write(LOGfile,*)""
           write(LOGfile,*)""
        endif
