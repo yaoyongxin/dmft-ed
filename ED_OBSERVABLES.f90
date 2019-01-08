@@ -6,27 +6,22 @@ MODULE ED_OBSERVABLES
   USE SF_IOTOOLS, only:free_unit,reg,txtfy
   USE SF_ARRAYS, only: arange
   USE SF_LINALG
+  !
   USE ED_INPUT_VARS
   USE ED_VARS_GLOBAL
   USE ED_EIGENSPACE
   USE ED_SETUP
-  USE ED_HAMILTONIAN_MATVEC
+  USE ED_HAMILTONIAN
   USE ED_BATH
   USE ED_AUX_FUNX
-#ifdef _MPI
-  USE MPI
-  USE SF_MPI
-#endif
-
+  !
   implicit none
   private
   !
   public :: observables_impurity
   public :: local_energy_impurity
-  public :: ed_observables_set_MPI
-  public :: ed_observables_del_MPI
 
-  
+
   logical,save                       :: iolegend=.true.
   real(8),dimension(:),allocatable   :: dens,dens_up,dens_dw
   real(8),dimension(:),allocatable   :: docc
@@ -38,33 +33,8 @@ MODULE ED_OBSERVABLES
   real(8)                            :: Egs
   !
 
-#ifdef _MPI
-  integer                            :: MpiComm=MPI_UNDEFINED
-#endif
-  logical                            :: MpiStatus=.false.
-  logical                            :: MPI_MASTER=.true.  !
-
 
 contains 
-
-  subroutine ed_observables_set_MPI(comm)
-#ifdef _MPI
-    integer :: comm
-    MpiComm  = comm
-    MpiStatus = .true.
-    MPI_MASTER= get_Master_MPI(MpiComm)
-#else
-    integer,optional :: comm
-#endif
-  end subroutine ed_observables_set_MPI
-
-
-  subroutine ed_observables_del_MPI()
-#ifdef _MPI
-    MpiComm  = MPI_UNDEFINED
-    MpiStatus = .false.
-#endif
-  end subroutine ed_observables_del_MPI
 
 
 
@@ -134,7 +104,7 @@ contains
        !
        idim    = getdim(isector)
        !
-       if(Mpi_Master)then
+       if(Mpimaster)then
           call build_sector(isector,H)
           !
           do i=1,idim
@@ -197,7 +167,7 @@ contains
                 !
                 idim    = getdim(isector)
                 !
-                if(Mpi_Master)then
+                if(Mpimaster)then
                    call build_sector(isector,H)
                    !GET <(C_UP + CDG_DW)(CDG_UP + C_DW)> = 
                    !<C_UP*CDG_UP> + <CDG_DW*C_DW> + <C_UP*C_DW> + <CDG_DW*CDG_UP> = 
@@ -264,7 +234,7 @@ contains
        peso = peso/zeta_function
        !
        idim  = getdim(isector)
-       if(Mpi_Master)then
+       if(Mpimaster)then
           call build_sector(isector,H)
           !
           !Diagonal densities
@@ -337,7 +307,7 @@ contains
           !
           idim  = getdim(isector)
           !
-          if(Mpi_Master)then             
+          if(Mpimaster)then             
              call build_sector(isector,H)
              !
              !Diagonal densities
@@ -386,7 +356,7 @@ contains
        enddo
     endif
     !
-    if(MPI_MASTER)then
+    if(MPIMASTER)then
        call get_szr
        if(iolegend)call write_legend
        call write_observables()
@@ -429,7 +399,7 @@ contains
 
 
 
-  
+
 
 
 
@@ -491,7 +461,7 @@ contains
        peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
        peso = peso/zeta_function
        !
-       if(Mpi_Master)then
+       if(Mpimaster)then
           !
           call build_sector(isector,H)
           !
@@ -684,7 +654,7 @@ contains
        write(LOGfile,"(A,10f18.12)")"Dse     =",ed_Dse
        write(LOGfile,"(A,10f18.12)")"Dph     =",ed_Dph
     endif
-    if(MPI_MASTER)then
+    if(MPIMASTER)then
        call write_energy_info()
        call write_energy()
     endif

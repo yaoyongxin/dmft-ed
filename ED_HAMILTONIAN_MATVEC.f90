@@ -18,9 +18,9 @@ MODULE ED_HAMILTONIAN_MATVEC
   private
 
   !>Build sparse hamiltonian of the sector
-  public  :: vecDim_Hv_sector
   public  :: build_Hv_sector
   public  :: delete_Hv_sector
+  public  :: vecDim_Hv_sector
   !
   !
   !>Sparse Mat-Vec product using stored sparse matrix 
@@ -37,28 +37,30 @@ MODULE ED_HAMILTONIAN_MATVEC
 #endif
   !
   !
-  !> Related auxiliary routines:
-  public  :: ed_hamiltonian_matvec_set_MPI
-  public  :: ed_hamiltonian_matvec_del_MPI
+  ! !> Related auxiliary routines:
+  ! public  :: ed_hamiltonian_matvec_set_MPI
+  ! public  :: ed_hamiltonian_matvec_del_MPI
+  !   !> MPI local variables (shared)
+  ! #ifdef _MPI
+  !   integer          :: MpiComm=MPI_UNDEFINED
+  ! #else
+  !   integer          :: MpiComm=0
+  ! #endif
+  !   logical          :: MpiStatus=.false.
+  !   integer          :: MpiIerr
+  !   integer          :: MpiRank=0
+  !   integer          :: MpiSize=1
+  !   logical          :: MpiMaster=.true.
+  !   integer          :: MpiQ=1
+  !   integer          :: MpiR=0
 
-
-  !> MPI local variables (shared)
-#ifdef _MPI
-  integer          :: MpiComm=MPI_UNDEFINED
-#else
-  integer          :: MpiComm=0
-#endif
-  logical          :: MpiStatus=.false.
-  integer          :: MpiIerr
-  integer          :: MpiRank=0
-  integer          :: MpiSize=1
-  logical          :: MpiMaster=.true.
-  integer          :: MpiQ=1
-  integer          :: MpiR=0
-
-  integer          :: MpiIstart
-  integer          :: MpiIend
-  integer          :: MpiIshift
+  !   integer          :: MpiIstart
+  !   integer          :: MpiIend
+  !   integer          :: MpiIshift
+  !
+  ! integer          :: Dim
+  ! integer          :: DimUp
+  ! integer          :: DimDw
   !
   integer          :: Hsector=0
   logical          :: Hstatus=.false.
@@ -72,37 +74,6 @@ MODULE ED_HAMILTONIAN_MATVEC
 contains
 
 
-  !####################################################################
-  !                        AUXILIARY ROUTINES
-  !####################################################################
-  subroutine ed_hamiltonian_matvec_set_MPI(comm_)
-#ifdef _MPI
-    integer :: comm_
-    MpiComm = comm_
-    MpiStatus=.true.
-    MpiRank = get_Rank_MPI(MpiComm)
-    MpiSize = get_Size_MPI(MpiComm)
-    MpiMaster = get_Master_MPI(MpiComm)
-#else
-    integer,optional :: comm_
-#endif
-  end subroutine ed_hamiltonian_matvec_set_MPI
-
-
-  subroutine ed_hamiltonian_matvec_del_MPI()
-#ifdef _MPI
-    MpiComm = MPI_UNDEFINED
-#else
-    MpiComm = 0
-#endif
-    MpiStatus=.false.
-    MpiRank=0
-    MpiSize=1
-    MpiQ=1
-    MpiR=0
-  end subroutine ed_hamiltonian_matvec_del_MPI
-
-
 
 
 
@@ -110,34 +81,6 @@ contains
   !####################################################################
   !                 MAIN ROUTINES: BUILD/DELETE SECTOR
   !####################################################################
-  function vecDim_Hv_sector(isector) result(vecDim)
-    integer :: isector
-    integer :: Dim
-    integer :: vecDim
-    !
-    Dim  = getdim(isector)
-    !
-#ifdef _MPI
-    if(MpiStatus)then
-       MpiQ = Dim/MpiSize
-       MpiR = 0
-       if(MpiRank==(MpiSize-1))MpiR=mod(Dim,MpiSize)
-    else
-       MpiQ = Dim
-       MpiR = 0
-    endif
-#else
-    MpiQ = Dim
-    MpiR = 0
-#endif
-    !
-    vecDim=MpiQ + MpiR
-    !
-  end function vecDim_Hv_sector
-
-
-
-
   subroutine build_Hv_sector(isector,Hmat)
     integer                            :: isector,SectorDim
     complex(8),dimension(:,:),optional :: Hmat
@@ -176,15 +119,27 @@ contains
     !
     !
     if(present(Hmat))then
+       spHtimesV_cc => null()
        call ed_buildh_c(isector,Hmat)
        return
     endif
     !
     select case (ed_sparse_H)
+       !
+       !
     case (.true.)
+       spHtimesV_cc => spMatVec_cc
+#ifdef _MPI
+       if(MpiStatus)spHtimesV_cc => spMatVec_MPI_cc
+#endif
        call ed_buildh_c(isector)
+       !
+       !
     case (.false.)
-       !nothing to be done: direct matrix-vector product
+       spHtimesV_cc => directMatVec_cc
+#ifdef _MPI
+       if(MpiStatus)spHtimesV_cc => directMatVec_MPI_cc
+#endif
     end select
     !
   end subroutine build_Hv_sector
@@ -195,12 +150,12 @@ contains
     call delete_sector(Hsector,H)
     Hstatus=.false.
     !
-    mpiQ = 0
-    mpiR = 0
-    MpiIshift = 0
-    MpiIstart = 0
-    MpiIend   = 0
-    !
+    ! mpiQ = 0
+    ! mpiR = 0
+    ! MpiIshift = 0
+    ! MpiIstart = 0
+    ! MpiIend   = 0
+    ! !
 #ifdef _MPI
     if(MpiStatus)then
        call sp_delete_matrix(MpiComm,spH0)
@@ -211,7 +166,39 @@ contains
     call sp_delete_matrix(spH0)
 #endif
     !
+    spHtimesV_cc => null()
+    !
   end subroutine delete_Hv_sector
+
+  
+  function vecDim_Hv_sector(isector) result(vecDim)
+    integer :: isector
+    integer :: Dim
+    integer :: vecDim
+    !
+    Dim  = getdim(isector)
+    !
+#ifdef _MPI
+    if(MpiStatus)then
+       MpiQ = Dim/MpiSize
+       MpiR = 0
+       if(MpiRank==(MpiSize-1))MpiR=mod(Dim,MpiSize)
+    else
+       MpiQ = Dim
+       MpiR = 0
+    endif
+#else
+    MpiQ = Dim
+    MpiR = 0
+#endif
+    !
+    vecDim=MpiQ + MpiR
+    !
+  end function vecDim_Hv_sector
+
+
+
+
 
 
 
@@ -620,3 +607,37 @@ end MODULE ED_HAMILTONIAN_MATVEC
 
 
 
+
+
+
+
+
+!   !####################################################################
+!   !                        AUXILIARY ROUTINES
+!   !####################################################################
+!   subroutine ed_hamiltonian_matvec_set_MPI(comm_)
+! #ifdef _MPI
+!     integer :: comm_
+!     MpiComm = comm_
+!     MpiStatus=.true.
+!     MpiRank = get_Rank_MPI(MpiComm)
+!     MpiSize = get_Size_MPI(MpiComm)
+!     MpiMaster = get_Master_MPI(MpiComm)
+! #else
+!     integer,optional :: comm_
+! #endif
+!   end subroutine ed_hamiltonian_matvec_set_MPI
+
+
+!   subroutine ed_hamiltonian_matvec_del_MPI()
+! #ifdef _MPI
+!     MpiComm = MPI_UNDEFINED
+! #else
+!     MpiComm = 0
+! #endif
+!     MpiStatus=.false.
+!     MpiRank=0
+!     MpiSize=1
+!     MpiQ=1
+!     MpiR=0
+!   end subroutine ed_hamiltonian_matvec_del_MPI

@@ -1,6 +1,10 @@
 MODULE ED_VARS_GLOBAL
   USE SF_CONSTANTS
   USE ED_SPARSE_MATRIX
+#ifdef _MPI
+  USE MPI
+  USE SF_MPI
+#endif  
   implicit none
 
 
@@ -23,6 +27,7 @@ MODULE ED_VARS_GLOBAL
   !---------------- SECTOR-TO-FOCK SPACE STRUCTURE -------------------!
   type sector_map
      integer,dimension(:),allocatable :: map
+     logical                          :: status=.false.
   end type sector_map
 
   interface map_allocate
@@ -85,6 +90,7 @@ MODULE ED_VARS_GLOBAL
   integer,allocatable,dimension(:)                   :: gettwoJz
   integer,allocatable,dimension(:)                   :: getmaxtwoJz
   logical,allocatable,dimension(:)                   :: twin_mask
+  logical,allocatable,dimension(:)                   :: sectors_mask
 
   !Effective Bath used in the ED code (this is opaque to user)
   !PRIVATE
@@ -208,17 +214,46 @@ MODULE ED_VARS_GLOBAL
   character(len=32)                                  :: ed_file_suffix=""       !suffix string attached to the output files.
   character(len=10)                                  :: ineq_site_suffix="_ineq"
   integer                                            :: site_indx_padding=4
+  logical                                            :: Jhflag              !spin-exchange and pair-hopping flag.
+  logical                                            :: offdiag_gf_flag=.false.
+
+
+
+  !This is the internal Mpi Communicator and variables.
+  !=========================================================
+#ifdef _MPI
+  integer                                            :: MpiComm_Global=MPI_UNDEFINED
+  integer                                            :: MpiComm=MPI_UNDEFINED
+#endif
+  integer                                            :: MpiGroup_Global=MPI_GROUP_NULL
+  integer                                            :: MpiGroup=MPI_GROUP_NULL
+  logical                                            :: MpiStatus=.false.
+  logical                                            :: MpiMaster=.true.
+  integer                                            :: MpiRank=0
+  integer                                            :: MpiSize=1
+  integer,allocatable,dimension(:)                   :: MpiMembers
+  integer                                            :: mpiQup=0
+  integer                                            :: mpiRup=0
+  integer                                            :: mpiQdw=0
+  integer                                            :: mpiRdw=0
+  integer                                            :: mpiQ=0
+  integer                                            :: mpiR=0
+  integer                                            :: mpiIstart
+  integer                                            :: mpiIend
+  integer                                            :: mpiIshift
+  logical                                            :: mpiAllThreads=.true.
 
 
 
 contains
 
 
-
+  !=========================================================
   subroutine map_allocate_scalar(H,N)
     type(sector_map) :: H
-    integer :: N
+    integer          :: N
     allocate(H%map(N))
+    H%status=.true.
   end subroutine map_allocate_scalar
   !
   subroutine map_allocate_vector(H,N)
@@ -231,9 +266,16 @@ contains
   end subroutine map_allocate_vector
 
 
+
+  !=========================================================
   subroutine map_deallocate_scalar(H)
     type(sector_map) :: H
-    deallocate(H%map)
+    if(.not.H%status)then
+       write(*,*) "WARNING map_deallocate_scalar: H is not allocated"
+       return
+    endif
+    if(allocated(H%map))deallocate(H%map)
+    H%status=.false.
   end subroutine map_deallocate_scalar
   !
   subroutine map_deallocate_vector(H)
@@ -243,6 +285,34 @@ contains
        deallocate(H(i)%map)
     enddo
   end subroutine map_deallocate_vector
+
+
+  !=========================================================
+  subroutine ed_set_MpiComm(comm)
+#ifdef _MPI
+    integer :: comm,ierr
+    MpiComm_Global = comm
+    MpiComm        = MpiComm_Global
+    MpiStatus      = .true.
+    MpiSize        = get_Size_MPI(MpiComm_Global)
+    MpiRank        = get_Rank_MPI(MpiComm_Global)
+    MpiMaster      = get_Master_MPI(MpiComm_Global)
+    call Mpi_Comm_group(MpiComm_Global,MpiGroup_Global,ierr)
+#else
+    integer,optional :: comm
+#endif
+  end subroutine ed_set_MpiComm
+
+  subroutine ed_del_MpiComm()
+#ifdef _MPI
+    MpiComm_Global = MPI_UNDEFINED
+    MpiComm        = MPI_UNDEFINED
+    MpiStatus      = .false.
+    MpiSize        = 1
+    MpiRank        = 0
+    MpiMaster      = .true.
+#endif
+  end subroutine ed_del_MpiComm
 
 
 END MODULE ED_VARS_GLOBAL

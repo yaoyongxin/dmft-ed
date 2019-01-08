@@ -299,11 +299,14 @@ contains        !some routine to perform simple operation on the lists
        !    space%emax=-huge(1.d0)
        !    space%emin=huge(1.d0)
        ! else
-       if(pos==space%size)then     !pop last term carrying e=emax, update emax
-          space%emax = p%e
-       elseif(pos==1)then          !pop first term carrying e=emin, update emin
-          space%emin = p%e
-       endif
+       ! if(pos==space%size)then     !pop last term carrying e=emax, update emax
+       !    space%emax = p%e
+       ! elseif(pos==1)then          !pop first term carrying e=emin, update emin
+       !    space%emin = p%e
+       ! endif
+       !
+       space%emax = es_return_energy(space,space%size)
+       space%emin = es_return_energy(space,1)
     endif
     pp=>null()
     p =>null()
@@ -488,7 +491,7 @@ contains        !some routine to perform simple operation on the lists
           allocate(Vector(1))
        endif
        Vector = 0d0
-       call gather_vector_MPI(MpiComm,c%cvec(1:Nloc),Vector)
+       call gather_vector_MPI(MpiComm,c%cvec,Vector)
     else
        !
        if(MpiMaster)then
@@ -499,7 +502,7 @@ contains        !some routine to perform simple operation on the lists
           allocate(Vtmp(1))
        endif
        Vtmp = 0d0
-       call gather_vector_MPI(MpiComm,c%twin%cvec(1:Nloc),Vtmp)
+       call gather_vector_MPI(MpiComm,c%twin%cvec,Vtmp)
        if(MpiMaster)then
           allocate(Vector(Ndim))
           forall(i=1:Dim)Vector(i) = Vtmp(Order(i))

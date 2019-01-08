@@ -5,17 +5,12 @@ module ED_MAIN
   USE ED_AUX_FUNX
   USE ED_SETUP
   USE ED_BATH
-  USE ED_HAMILTONIAN_MATVEC
-  USE ED_GF_SHARED,only: ed_greens_functions_set_MPI,ed_greens_functions_del_MPI
+  USE ED_HAMILTONIAN
   USE ED_GREENS_FUNCTIONS
   USE ED_OBSERVABLES
   USE ED_DIAG
   USE SF_IOTOOLS, only: str,reg
   USE SF_TIMER,only: start_timer,stop_timer
-#ifdef _MPI
-  USE MPI
-  USE SF_MPI
-#endif
   implicit none
   private
 
@@ -274,15 +269,6 @@ contains
     call write_dmft_bath(dmft_bath,LOGfile)
     if(MPI_MASTER)call save_dmft_bath(dmft_bath,used=.true.)
     !
-    select case(ed_sparse_H)
-    case (.true.)
-       spHtimesV_cc => spMatVec_cc
-    case (.false.)
-       spHtimesV_cc => directMatVec_cc
-    case default
-       stop "ed_solve_single ERROR: ed_sparse_H undefined"
-    end select
-    !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call buildgf_impurity()             !build the one-particle impurity Green's functions  & Self-energy
@@ -320,20 +306,9 @@ contains
     call write_dmft_bath(dmft_bath,LOGfile)
     if(MPI_MASTER)call save_dmft_bath(dmft_bath,used=.true.)
     !
-    select case(ed_sparse_H)
-    case (.true.)
-       spHtimesV_cc => spMatVec_MPI_cc
-    case (.false.)
-       spHtimesV_cc => directMatVec_MPI_cc
-    case default
-       stop "ed_solve_single_mpi ERROR: ed_sparse_H undefined"
-    end select
     !
-    !SET THE LOCAL COMMUNICATORS IN ALL THE RELEVANT PARTS OF THE CODE:
-    call ed_hamiltonian_matvec_set_MPI(MpiComm)
-    call ed_diag_set_MPI(MpiComm)
-    call ed_greens_functions_set_MPI(MpiComm)
-    call ed_observables_set_MPI(MpiComm)    
+    !SET THE LOCAL MPI COMMUNICATOR :
+    call ed_set_MpiComm(MpiComm)
     !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
@@ -345,11 +320,9 @@ contains
     call deallocate_dmft_bath(dmft_bath)   
     call es_delete_espace(state_list)
     !
-    !DELETE THE LOCAL COMMUNICATORS IN ALL THE RELEVANT PARTS OF THE CODE:
-    call ed_hamiltonian_matvec_del_MPI()
-    call ed_diag_del_MPI()
-    call ed_greens_functions_del_MPI()
-    call ed_observables_del_MPI()
+    !DELETE THE LOCAL MPI COMMUNICATOR:
+    call ed_del_MpiComm()
+    !
     nullify(spHtimesV_cc)
   end subroutine ed_solve_single_mpi
 #endif
@@ -360,7 +333,7 @@ contains
 
 
 
-  
+
 
 
 

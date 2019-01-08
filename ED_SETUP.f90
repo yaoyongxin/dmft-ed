@@ -11,9 +11,6 @@ MODULE ED_SETUP
   implicit none
   private
 
-  public :: get_Nsectors
-  !
-  public :: setup_ed_dimensions
   public :: init_ed_structure
   !
   public :: setup_pointers_normal
@@ -37,44 +34,55 @@ MODULE ED_SETUP
   !
 #ifdef _MPI
   public :: scatter_vector_MPI
+  public :: scatter_basis_MPI
   public :: gather_vector_MPI
   public :: allgather_vector_MPI
 #endif
 
+  ! public :: get_Nsectors
+  ! !
 
 
 
 contains
 
 
-  !+------------------------------------------------------------------+
-  !PURPOSE  : return the Number of sectors using local variables
-  ! This is similar to setup Dimensions but does only return Nsectors
-  ! It is used in initialization to allocate arrays which require 
-  ! to know Nsectors before really initializing ED
-  !+------------------------------------------------------------------+
-  function get_Nsectors() result(Nsectors)
-    integer :: Nsectors
-    integer :: Ns
+
+  subroutine ed_checks_global
     !
-    select case(bath_type)
-    case default
-       Ns = (Nbath+1)*Norb
-    case ('hybrid')
-       Ns = Nbath+Norb
-    case ('replica')
-       Ns = Norb*(Nbath+1)
-    end select
+    !CHECKS:
+    if(Lfit>Lmats)Lfit=Lmats
+    if(Nspin>2)stop "ED ERROR: Nspin > 2 is currently not supported"
+    if(Norb>3)stop "ED ERROR: Norb > 3 is currently not supported" 
     !
-    select case(ed_mode)
-    case default
-       Nsectors = (Ns+1)*(Ns+1) !nup=0:Ns;ndw=0:Ns
-    case ("superc")
-       Nsectors = 2*Ns+1     !sz=-Ns:Ns=2*Ns+1=Nlevels+1
-    case("nonsu2")
-       Nsectors = 2*Ns+1     !n=0:2*Ns=2*Ns+1=Nlevels+1
-    end select
-  end function get_Nsectors
+    if(ed_mode=="superc")then
+       if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ." 
+    endif
+    if(ed_mode=="nonsu2")then
+       if(Nspin/=2)then
+          write(LOGfile,"(A)")"ED msg: ed_mode=nonSU2 with Nspin!=2 is not allowed."
+          write(LOGfile,"(A)")"        to enforce spin symmetry up-dw set ed_para=T."
+          stop
+       endif
+    endif
+    !
+    if(Nspin>1.AND.ed_twin.eqv..true.)then
+       write(LOGfile,"(A)")"WARNING: using twin_sector with Nspin>1"
+       call sleep(1)
+    end if
+    !
+    if(lanc_method=="lanczos")then
+       if(lanc_nstates_total>1)stop "ED ERROR: lanc_method==lanczos available only for lanc_nstates_total==1, T=0"
+       if(lanc_nstates_sector>1)stop "ED ERROR: lanc_method==lanczos available only for lanc_nstates_sector==1, T=0"
+    endif
+    !
+    if(ed_sectors.AND.ed_mode/="normal")then
+       stop "ED_ERROR: using ed_sectors with ed_mode=[superc,nonsu2] NOT TESTED! Uncomment this line in ED_SETUP if u want to take the risk.."
+    endif
+  end subroutine ed_checks_global
+
+
+
 
 
 
@@ -85,7 +93,7 @@ contains
   ! Ns      = # of levels (per spin)
   ! Nlevels = 2*Ns = Total # of levels (counting spin degeneracy 2) 
   !+------------------------------------------------------------------+
-  subroutine setup_ed_dimensions()
+  subroutine ed_setup_dimensions()
     integer                                           :: maxtwoJz,inJz,dimJz
     integer                                           :: isector,in,shift
     select case(bath_type)
@@ -132,7 +140,7 @@ contains
           Nhel     = 2
        endif
     end select
-  end subroutine setup_ed_dimensions
+  end subroutine ed_setup_dimensions
 
 
 
@@ -151,7 +159,9 @@ contains
     if(present(MpiComm))MPI_MASTER=get_Master_MPI(MpiComm)
 #endif
     !
-    call setup_ed_dimensions()
+    call ed_checks_global
+    !
+    call ed_setup_dimensions
     !
     dim_sector_max=0
     select case(ed_mode)
@@ -174,8 +184,10 @@ contains
     write(LOGfile,"(A,2I15)")'Largest Sector(s)    = ',dim_sector_max
     write(LOGfile,"(A,I15)")'Number of sectors     = ',Nsectors
     write(LOGfile,"(A)")"--------------------------------------------"
+    call sleep(1)
     !
     allocate(impHloc(Nspin,Nspin,Norb,Norb))
+    impHloc = zero
     reHloc = 0d0 ; imHloc = 0d0
     !
     !Search and read impHloc
@@ -242,6 +254,7 @@ contains
     !
     allocate(getBathStride(Norb,Nbath));getBathStride=0
     allocate(twin_mask(Nsectors));
+    allocate(sectors_mask(Nsectors))
     allocate(neigen_sector(Nsectors))
     !
     !
@@ -263,11 +276,8 @@ contains
           lanc_nstates_total=lanc_nstates_total+1
           write(LOGfile,"(A,I10)")"Increased Lanc_nstates_total:",lanc_nstates_total
        endif
-    endif
-    !
-    !
-    if(finiteT)then
        write(LOGfile,"(A)")"Lanczos FINITE temperature calculation:"
+       !
        write(LOGfile,"(A,I3)")"Nstates x Sector = ", lanc_nstates_sector
        write(LOGfile,"(A,I3)")"Nstates   Total  = ", lanc_nstates_total
        call sleep(1)
@@ -276,38 +286,18 @@ contains
        call sleep(1)
     endif
     !
+    Jhflag=.FALSE.
+    if(Norb>1.AND.(Jx/=0d0.OR.Jp/=0d0))Jhflag=.TRUE.
     !
-    !CHECKS:
-    if(Lfit>Lmats)Lfit=Lmats
-    if(Nspin>2)stop "ED ERROR: Nspin > 2 is currently not supported"
-    if(Norb>3)stop "ED ERROR: Norb > 3 is currently not supported" 
-    ! if(nerr < dmft_error) nerr=dmft_error
-    if(ed_mode=="superc")then
-       if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ." 
-       ! if(Norb>1)stop "ED WARNING: SC in multi-band is not tested. Remove this line in ED_SETUP to go on."
-       ! if(ed_twin)stop  "ED WARNING: SC + ED_TWIN is not tested. Remove this line in ED_SETUP to go on."
-    endif
-    if(ed_mode=="nonsu2")then
-       if(Nspin/=2)then
-          write(LOGfile,"(A)")"ED msg: ed_mode=nonSU2 with Nspin!=1 is not allowed."
-          write(LOGfile,"(A)")"        to enforce spin symmetry up-dw set ed_para=T."
-          stop
-       endif
-       !if(ed_twin)stop  "ED WARNING: NONSU2 + ED_TWIN is not tested. Remove this line in ED_AUX_FUNX to go on."
-    endif
+    !
+    offdiag_gf_flag=ed_solve_offdiag_gf
+    if(bath_type/="normal")offdiag_gf_flag=.true.
     !
     !
     if(nread/=0.d0)then
        i=abs(floor(log10(abs(nerr)))) !modulus of the order of magnitude of nerror
        niter=nloop/3
-       !nloop=(i-1)*niter                !increase the max number of dmft loop allowed so to do threshold loop
-       !write(LOGfile,"(A,I10)")"Increased Nloop to:",nloop
     endif
-    if(Nspin>1.AND.ed_twin.eqv..true.)then
-       write(LOGfile,"(A)")"WARNING: using twin_sector with Nspin>1"
-       call sleep(1)
-    end if
-    !
     !
     !
     !allocate functions
@@ -338,10 +328,6 @@ contains
     impF0mats=zero
     impF0real=zero
     !
-    ! allocate(GFpoles(Nspin,Nspin,Norb,Norb,2,lanc_nGFiter))
-    ! allocate(GFweights(Nspin,Nspin,Norb,Norb,2,lanc_nGFiter))
-    ! GFpoles=0d0
-    ! GFweights=0d0
     !
     !allocate observables
     allocate(ed_dens(Norb),ed_docc(Norb),ed_phisc(Norb),ed_dens_up(Norb),ed_dens_dw(Norb))
@@ -410,16 +396,18 @@ contains
        write(LOGfile,"(A)")"Restarting from a state_list file:"
        list_len=file_length("state_list"//reg(ed_file_suffix)//".restart")
        allocate(list_sector(list_len))
+       !
        open(free_unit(unit),file="state_list"//reg(ed_file_suffix)//".restart",status="old")
        read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,"(i6,f18.12,2x,ES19.12,1x,2i3,3x,i3,i10)",iostat=status)istate,adouble,adouble,nup,ndw,isector,anint
+          read(unit,*,iostat=status)istate,nup,ndw,isector
           list_sector(istate)=isector
           if(nup/=getnup(isector).OR.ndw/=getndw(isector))&
                stop "setup_pointers_normal error: nup!=getnup(isector).OR.ndw!=getndw(isector) "
        enddo
        close(unit)
+       !
        lanc_nstates_total = list_len
        do isector=1,Nsectors
           neigen_sector(isector) = max(1,count(list_sector==isector))
@@ -430,7 +418,6 @@ contains
        enddo
     endif
     !
-
     twin_mask=.true.
     if(ed_twin)then
        ! stop "WARNING: In this updated version with Nup-Ndw factorization the twin-sectors have not been tested!!"
@@ -518,19 +505,22 @@ contains
        dim = get_superc_sector_dimension(isz)
        getDim(isector)=dim
     enddo
+    !
+    !
     inquire(file="state_list"//reg(ed_file_suffix)//".restart",exist=IOfile)
     if(IOfile)then
        list_len=file_length("state_list"//reg(ed_file_suffix)//".restart")
        allocate(list_sector(list_len))
+       !
        open(free_unit(unit),file="state_list"//reg(ed_file_suffix)//".restart",status="old")
-       read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,sz,isector,anint
+          read(unit,*,iostat=status)istate,sz,isector
           list_sector(istate)=isector
           if(sz/=getsz(isector))stop "setup_pointers_superc error: sz!=getsz(isector)."
        enddo
        close(unit)
+       !
        lanc_nstates_total = list_len
        do isector=1,Nsectors
           neigen_sector(isector) = max(1,count(list_sector==isector))
@@ -667,19 +657,21 @@ contains
        enddo
     endif
     !
+    !
     inquire(file="state_list"//reg(ed_file_suffix)//".restart",exist=IOfile)
     if(IOfile)then
        list_len=file_length("state_list"//reg(ed_file_suffix)//".restart")
        allocate(list_sector(list_len))
+       !
        open(free_unit(unit),file="state_list"//reg(ed_file_suffix)//".restart",status="old")
-       read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,in,isector,anint
+          read(unit,*,iostat=status) istate,in,isector
           list_sector(istate)=isector
           if(in/=getn(isector))stop "setup_pointers_superc error: n!=getn(isector)."
        enddo
        close(unit)
+       !
        lanc_nstates_total = list_len
        do isector=1,Nsectors
           neigen_sector(isector) = max(1,count(list_sector==isector))
@@ -689,9 +681,10 @@ contains
           neigen_sector(isector) = min(getdim(isector),lanc_nstates_sector)   !init every sector to required eigenstates
        enddo
     endif
+    !
     twin_mask=.true.
     if(ed_twin)then
-       write(LOGfile,*)"TWIN STATES IN SC CHANNEL: NOT TESTED!!"
+       write(LOGfile,*)"TWIN STATES IN nonSU2 CHANNEL: NOT TESTED!!"
        call sleep(3)
        do isector=1,Nsectors
           in=getn(isector)
@@ -977,8 +970,8 @@ contains
     real(8)                   :: Sz_tot,Lz_tot,shift,stride,jzv
     real(8),allocatable       :: Jz(:)
     integer                   :: ivec(Ns),jvec(Ns)
-
-
+    !
+    !
     stride=0.d0
     nt  = getN(isector)
     dim = getDim(isector)
@@ -1119,12 +1112,12 @@ contains
        deallocate(H%map)
        !
     case('normal')
-       call build_sector(isector,H)!up,Hdw)
+       call build_sector(isector,H)
        do i=1,dim
-          Order(i)=flip_state(H%map(i))!flip_state(Hup%map(i),Hdw%map(i))
+          Order(i)=flip_state(H%map(i))
        enddo
        call sort_array(Order)
-       deallocate(H%map)!deallocate(Hup%map,Hdw%map)
+       deallocate(H%map)
        !
     end select
   end subroutine twin_sector_order
@@ -1403,6 +1396,24 @@ contains
   end subroutine scatter_vector_MPI
 
 
+  subroutine scatter_basis_MPI(MpiComm,v,vloc)
+    integer                   :: MpiComm
+    complex(8),dimension(:,:) :: v    !size[N,N]
+    complex(8),dimension(:,:) :: vloc !size[Nloc,Neigen]
+    integer                   :: N,Nloc,Neigen,i
+    N      = size(v,1)
+    Nloc   = size(vloc,1)
+    Neigen = size(vloc,2)
+    if( size(v,2) < Neigen ) stop "error scatter_basis_MPI: size(v,2) < Neigen"
+    !
+    do i=1,Neigen
+       call scatter_vector_MPI(MpiComm,v(:,i),vloc(:,i))
+    end do
+    !
+    return
+  end subroutine scatter_basis_MPI
+
+
   !! AllGather Vloc on each thread into the array V: sum_threads(size(Vloc)) must be equal to size(v)
   subroutine gather_vector_MPI(MpiComm,vloc,v)
     integer                          :: MpiComm
@@ -1484,3 +1495,37 @@ contains
 
 
 end MODULE ED_SETUP
+
+
+
+
+
+
+! !+------------------------------------------------------------------+
+! !PURPOSE  : return the Number of sectors using local variables
+! ! This is similar to setup Dimensions but does only return Nsectors
+! ! It is used in initialization to allocate arrays which require 
+! ! to know Nsectors before really initializing ED
+! !+------------------------------------------------------------------+
+! function get_Nsectors() result(Nsectors)
+!   integer :: Nsectors
+!   integer :: Ns
+!   !
+!   select case(bath_type)
+!   case default
+!      Ns = (Nbath+1)*Norb
+!   case ('hybrid')
+!      Ns = Nbath+Norb
+!   case ('replica')
+!      Ns = Norb*(Nbath+1)
+!   end select
+!   !
+!   select case(ed_mode)
+!   case default
+!      Nsectors = (Ns+1)*(Ns+1) !nup=0:Ns;ndw=0:Ns
+!   case ("superc")
+!      Nsectors = 2*Ns+1     !sz=-Ns:Ns=2*Ns+1=Nlevels+1
+!   case("nonsu2")
+!      Nsectors = 2*Ns+1     !n=0:2*Ns=2*Ns+1=Nlevels+1
+!   end select
+! end function get_Nsectors

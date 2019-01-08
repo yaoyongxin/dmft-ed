@@ -2,7 +2,7 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.8.8)
 PROJECT(dmft_ed Fortran)
 SET(VERSION 5.1.1)
 
-SET(BUILD_TYPE "TESTING" CACHE STRING "Build type")
+SET(BUILD_TYPE "RELEASE" CACHE STRING "Build type")
 MESSAGE(STATUS "BUILD_TYPE=${BUILD_TYPE}")
 SET(CMAKE_BUILD_TYPE ${BUILD_TYPE} CACHE INTERNAL "Build type" FORCE)
 
@@ -41,7 +41,7 @@ ENDIF(VERBOSE)
 if(CMAKE_Fortran_COMPILER_ID MATCHES GNU) # this is gfortran
   SET(CMAKE_Fortran_MODDIR_FLAG   "-J")
   SET(CMAKE_Fortran_FLAGS         "-cpp -ffree-line-length-none") # -mcmodel=large  this is to remove the 2Gb limit of virtual memory allocation
-  SET(CMAKE_Fortran_FLAGS_TESTING "-O2 ")
+  SET(CMAKE_Fortran_FLAGS_TESTING "-O2 -funroll-all-loops")
   SET(CMAKE_Fortran_FLAGS_DEBUG   "-O0 -p -g -Wsurprising  -Waliasing -fwhole-file -fcheck=all -pedantic -fbacktrace")
   SET(CMAKE_Fortran_FLAGS_RELEASE "-O3 -ffast-math -march=native -funroll-all-loops -fno-protect-parens -flto")
   
@@ -163,7 +163,10 @@ FILE(GLOB DMFT_ED_LOCAL_SRC
   ED_EIGENSPACE.f90
   ED_BATH.f90
   ED_BATH_FUNCTIONS.f90
-  ED_HAMILTONIAN_MATVEC.f90
+  ED_HAMILTONIAN_SHARED.f90
+  ED_HAMILTONIAN_STORED_HxV.f90
+  ED_HAMILTONIAN_DIRECT_HxV.f90
+  ED_HAMILTONIAN.f90
   ED_DIAG.f90
   ED_OBSERVABLES.f90
   ED_GF_SHARED.f90
