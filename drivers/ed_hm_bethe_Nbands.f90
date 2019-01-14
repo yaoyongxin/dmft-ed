@@ -109,7 +109,8 @@ program hm_Nbands_bethe
      call dmft_self_consistency(comm,Gmats,Smats,Weiss,Hloc,SCtype=cg_scheme)
      !
      !Perform the SELF-CONSISTENCY by fitting the new bath
-     call ed_chi2_fitgf(comm,Weiss,bath,ispin=1)
+     call ed_chi2_fitgf(comm,Weiss,bath,ispin=1,iorb=1)
+     call orb_equality_bath(bath,save=.true.)
      !
      !MIXING:
      if(iloop>1)Bath = wmixing*Bath + (1.d0-wmixing)*Bath_

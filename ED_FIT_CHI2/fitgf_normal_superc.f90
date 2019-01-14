@@ -15,7 +15,7 @@
 !+-------------------------------------------------------------+
 !PURPOSE  : Chi^2 interface for Irreducible bath Superconducting phase
 !+-------------------------------------------------------------+
-subroutine chi2_fitgf_normal_superc(fg,bath_,ispin)
+subroutine chi2_fitgf_normal_superc_AllOrb(fg,bath_,ispin)
   complex(8),dimension(:,:,:,:)        :: fg ![2][Norb][Norb][Lmats]
   real(8),dimension(:),intent(inout)   :: bath_
   integer                              :: ispin
@@ -203,8 +203,193 @@ contains
        close(funit)
     enddo
   end subroutine write_fit_result
-end subroutine chi2_fitgf_normal_superc
+end subroutine chi2_fitgf_normal_superc_AllOrb
 
+
+subroutine chi2_fitgf_normal_superc_OneOrb(fg,bath_,ispin,iorb)
+  complex(8),dimension(:,:,:,:)        :: fg ![2][Norb][Norb][Lmats]
+  real(8),dimension(:),intent(inout)   :: bath_
+  integer                              :: ispin,iorb
+  real(8),dimension(:),allocatable     :: array_bath
+  integer                              :: iter,stride,i,io,j,Asize
+  real(8)                              :: chi
+  logical                              :: check
+  type(effective_bath)                 :: dmft_bath
+  character(len=256)                   :: suffix
+  integer                              :: unit
+  !
+  if(size(fg,1)/=2)stop "chi2_fitgf_normal_superc error: size[fg,1]!=2"
+  if(size(fg,2)/=Norb)stop "chi2_fitgf_normal_superc error: size[fg,2]!=Norb"
+  if(size(fg,3)/=Norb)stop "chi2_fitgf_normal_superc error: size[fg,3]!=Norb"
+  !
+  check= check_bath_dimension(bath_)
+  if(.not.check)stop "chi2_fitgf_normal_superc: wrong bath dimensions"
+  !
+  Ldelta = Lfit ; if(Ldelta>size(fg,4))Ldelta=size(fg,4)
+  !
+  allocate(Gdelta(1,Ldelta))
+  allocate(Fdelta(1,Ldelta))
+  allocate(Xdelta(Ldelta))
+  allocate(Wdelta(Ldelta))
+  !
+  Xdelta = pi/beta*dble(2*arange(1,Ldelta)-1)
+  !
+  select case(Cg_weight)
+  case default
+     Wdelta=dble(Ldelta)
+  case(1)
+     Wdelta=1.d0
+  case(2)
+     Wdelta=1d0*arange(1,Ldelta)
+  case(3)
+     wdelta=Xdelta
+  end select
+  !
+  !
+  call allocate_dmft_bath(dmft_bath)
+  call set_dmft_bath(bath_,dmft_bath)
+  !
+  !E_{\s,\a}(:)  [ 1 ][ 1 ][Nbath]
+  !D_{\s,\a}(:)  [ 1 ][ 1 ][Nbath]
+  !V_{\s,\a}(:)  [ 1 ][ 1 ][Nbath]
+  Asize = Nbath + Nbath + Nbath
+  allocate(array_bath(Asize))
+  !
+  Orb_indx=iorb
+  Spin_indx=ispin
+  !
+  Gdelta(1,1:Ldelta) = fg(1,iorb,iorb,1:Ldelta)
+  Fdelta(1,1:Ldelta) = fg(2,iorb,iorb,1:Ldelta)
+  !
+  !3*Nbath == Nbath + Nbath + Nbath
+  stride = 0
+  do i=1,Nbath
+     io = stride + i
+     array_bath(io) = dmft_bath%e(ispin,iorb,i)
+  enddo
+  stride = Nbath
+  do i=1,Nbath
+     io = stride + i
+     array_bath(io) = dmft_bath%d(ispin,iorb,i)
+  enddo
+  stride = 2*Nbath
+  do i=1,Nbath
+     io = stride + i
+     array_bath(io) = dmft_bath%v(ispin,iorb,i)
+  enddo
+  !
+  !
+  select case(cg_method)     !0=NR-CG[default]; 1=CG-MINIMIZE; 2=CG+
+  case default
+     select case (cg_scheme)
+     case ("weiss")
+        call fmin_cg(array_bath,chi2_weiss_normal_superc,&
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+     case ("delta")
+        call fmin_cg(array_bath,chi2_delta_normal_superc,grad_chi2_delta_normal_superc,&
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+     case default
+        stop "chi2_fitgf_normal_superc error: cg_scheme != [weiss,delta]"
+     end select
+     !
+  case (1)
+     select case (cg_scheme)
+     case ("weiss")
+        call fmin_cgminimize(array_bath,chi2_weiss_normal_superc,&
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol)
+     case ("delta")
+        call fmin_cgminimize(array_bath,chi2_delta_normal_superc,&
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol)
+     case default
+        stop "chi2_fitgf_normal_superc error: cg_scheme != [weiss,delta]"
+     end select
+     !
+  case (2)
+     select case (cg_scheme)
+     case ("weiss")
+        call fmin_cgplus(array_bath,chi2_weiss_normal_superc,&
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol)
+     case ("delta")
+        call fmin_cgplus(array_bath,chi2_delta_normal_superc,grad_chi2_delta_normal_superc,&
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol)
+     case default
+        stop "chi2_fitgf_normal_superc error: cg_scheme != [weiss,delta]"
+     end select
+     !
+  end select
+  !
+  write(LOGfile,"(A,ES18.9,A,I5,A)")&
+       'chi^2|iter'//reg(ed_file_suffix)//'=',chi," | ",iter,&
+       "  <--  Orb"//reg(txtfy(iorb))//" Spin"//reg(txtfy(ispin))
+  !
+  suffix="_orb"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//reg(ed_file_suffix)
+  unit=free_unit()
+  open(unit,file="chi2fit_results"//reg(suffix)//".ed",position="append")
+  write(unit,"(ES18.9,1x,I5)") chi,iter
+  close(unit)
+  !
+  stride = 0
+  do i=1,Nbath
+     io = stride + i
+     dmft_bath%e(ispin,iorb,i) = array_bath(io)
+  enddo
+  stride = Nbath
+  do i=1,Nbath
+     io = stride + i
+     dmft_bath%d(ispin,iorb,i) = array_bath(io) 
+  enddo
+  stride = 2*Nbath
+  do i=1,Nbath
+     io = stride + i
+     dmft_bath%v(ispin,iorb,i) = array_bath(io)
+  enddo
+  !
+  call write_dmft_bath(dmft_bath,LOGfile)
+  !
+  call save_dmft_bath(dmft_bath)
+  !
+  call write_fit_result(ispin,iorb)
+  call get_dmft_bath(dmft_bath,bath_)
+  call deallocate_dmft_bath(dmft_bath)
+  deallocate(Gdelta,Fdelta,Xdelta,Wdelta)
+  !
+contains
+  !
+  subroutine write_fit_result(ispin,iorb)
+    complex(8)        :: fgand(2,Ldelta)
+    integer           :: i,j,iorb,ispin,gunit,funit
+    real(8)           :: w
+    Gdelta(1,1:Ldelta) = fg(1,iorb,iorb,1:Ldelta)
+    Fdelta(1,1:Ldelta) = fg(2,iorb,iorb,1:Ldelta)
+    !
+    if(cg_scheme=='weiss')then
+       fgand(1,:) = g0and_bath_mats(ispin,ispin,iorb,iorb,xi*Xdelta(:),dmft_bath)
+       fgand(2,:) = f0and_bath_mats(ispin,ispin,iorb,iorb,xi*Xdelta(:),dmft_bath)
+    else
+       fgand(1,:) = delta_bath_mats(ispin,ispin,iorb,iorb,xi*Xdelta(:),dmft_bath)
+       fgand(2,:) = fdelta_bath_mats(ispin,ispin,iorb,iorb,xi*Xdelta(:),dmft_bath)
+    endif
+    !
+    suffix="_orb"//reg(txtfy(iorb))//"_s"//reg(txtfy(ispin))//reg(ed_file_suffix)
+    if(cg_scheme=='weiss')then
+       gunit=free_unit()
+       open(gunit,file="fit_weiss"//reg(suffix)//".ed")
+       funit=free_unit()
+       open(funit,file="fit_fweiss"//reg(suffix)//".ed")
+    else
+       gunit=free_unit()
+       open(gunit,file="fit_delta"//reg(suffix)//".ed")
+       funit=free_unit()
+       open(funit,file="fit_fdelta"//reg(suffix)//".ed")
+    endif
+    do i=1,Ldelta
+       write(gunit,"(10F24.15)")Xdelta(i),dimag(Gdelta(1,i)),dimag(fgand(1,i)),dreal(Gdelta(1,i)),dreal(fgand(1,i))
+       write(funit,"(10F24.15)")Xdelta(i),dimag(Fdelta(1,i)),dimag(fgand(2,i)),dreal(Fdelta(1,i)),dreal(fgand(2,i))
+    enddo
+    close(gunit)
+    close(funit)
+  end subroutine write_fit_result
+end subroutine chi2_fitgf_normal_superc_OneOrb
 
 
 

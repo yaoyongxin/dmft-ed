@@ -46,7 +46,6 @@ MODULE ED_BATH
   public :: get_component_bath
   public :: set_component_bath
   public :: copy_component_bath
-  ! public :: save_bath
 
   !explicit symmetries:
   interface break_symmetry_bath
@@ -67,6 +66,12 @@ MODULE ED_BATH
      module procedure orb_symmetrize_bath_lattice
   end interface orb_symmetrize_bath
   public :: orb_symmetrize_bath
+
+  interface orb_equality_bath
+     module procedure orb_equality_bath_site
+     module procedure orb_equality_bath_lattice
+  end interface orb_equality_bath
+  public :: orb_equality_bath
 
   interface ph_symmetrize_bath
      module procedure ph_symmetrize_bath_site

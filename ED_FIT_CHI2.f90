@@ -83,10 +83,10 @@ contains
   !+----------------------------------------------------------------------+
   !                                NORMAL                                 !
   !+----------------------------------------------------------------------+
-  subroutine chi2_fitgf_generic_normal(fg,bath,ispin)
+  subroutine chi2_fitgf_generic_normal(fg,bath,ispin,iorb)
     complex(8),dimension(:,:,:,:,:) :: fg ![Nspin][Nspin][Norb][Norb][Niw] 
     real(8),dimension(:)            :: bath
-    integer,optional                :: ispin
+    integer,optional                :: ispin,iorb
     integer                         :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
     call assert_shape(fg,[Nspin,Nspin,Norb,Norb,size(fg,5)],"chi2_fitgf_generic_normal","fg")
@@ -106,7 +106,11 @@ contains
     case default
        select case(ed_mode)
        case ("normal")
-          call chi2_fitgf_normal_normal(fg(ispin_,ispin_,:,:,:),bath,ispin_)
+          if(present(iorb))then
+             call chi2_fitgf_normal_normal_OneOrb(fg(ispin_,ispin_,:,:,:),bath,ispin_,iorb)
+          else
+             call chi2_fitgf_normal_normal_AllOrb(fg(ispin_,ispin_,:,:,:),bath,ispin_)
+          endif
        case ("nonsu2")
           if(present(ispin))then
              write(LOGfile,"(A)")"chi2_fitgf_generic_normal WARNING: ed_mode=nonsu2 but only ONE spin orientation required. disregarded"
@@ -137,32 +141,37 @@ contains
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_normal
 
-  subroutine chi2_fitgf_generic_normal_NOSPIN(fg,bath,ispin)
+  subroutine chi2_fitgf_generic_normal_NOSPIN(fg,bath,ispin,iorb)
     complex(8),dimension(:,:,:)                      :: fg ![Norb][Norb][Niw]
     complex(8),dimension(Nspin,Nspin,Norb,Norb,Lfit) :: fg_
     real(8),dimension(:),intent(inout)               :: bath
-    integer,optional                                 :: ispin
+    integer,optional                                 :: ispin,iorb
     integer                                          :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
     if(size(fg,3)<Lfit)stop "chi2_fitgf_generic_normal_NOSPIN error: size[fg,3] < Lfit" 
     fg_=zero
     fg_(ispin_,ispin_,:,:,1:Lfit) = fg(:,:,1:Lfit)
-    call chi2_fitgf_generic_normal(fg_,bath,ispin_)
+    if(present(iorb))then
+       call chi2_fitgf_generic_normal(fg_,bath,ispin_,iorb)
+    else
+       call chi2_fitgf_generic_normal(fg_,bath,ispin_)
+    endif
   end subroutine chi2_fitgf_generic_normal_NOSPIN
 
 
 
 #ifdef _MPI
-  subroutine chi2_fitgf_generic_normal_mpi(comm,fg,bath,ispin)
+  subroutine chi2_fitgf_generic_normal_mpi(comm,fg,bath,ispin,iorb)
     integer                         :: comm
     complex(8),dimension(:,:,:,:,:) :: fg ![Nspin][Nspin][Norb][Norb][Niw] 
     real(8),dimension(:)            :: bath
-    integer,optional                :: ispin
+    integer,optional                :: ispin,iorb
     integer                         :: ispin_
     !
     MPI_MASTER=get_Master_MPI(comm)
     !
     ispin_=1;if(present(ispin))ispin_=ispin
+    !
     call assert_shape(fg,[Nspin,Nspin,Norb,Norb,size(fg,5)],"chi2_fitgf_generic_normal","fg")
     select case(cg_method)
     case default
@@ -180,7 +189,11 @@ contains
        case default
           select case(ed_mode)
           case ("normal")
-             call chi2_fitgf_normal_normal(fg(ispin_,ispin_,:,:,:),bath,ispin_)
+             if(present(iorb))then
+                call chi2_fitgf_normal_normal_OneOrb(fg(ispin_,ispin_,:,:,:),bath,ispin_,iorb)
+             else
+                call chi2_fitgf_normal_normal_AllOrb(fg(ispin_,ispin_,:,:,:),bath,ispin_)
+             endif
           case ("nonsu2")
              if(present(ispin))then
                 write(LOGfile,"(A)")"chi2_fitgf_generic_normal WARNING: ed_mode=nonsu2 but only ONE spin orientation required. disregarded"
@@ -216,18 +229,22 @@ contains
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_normal_mpi
 
-  subroutine chi2_fitgf_generic_normal_NOSPIN_mpi(comm,fg,bath,ispin)
+  subroutine chi2_fitgf_generic_normal_NOSPIN_mpi(comm,fg,bath,ispin,iorb)
     integer :: comm
     complex(8),dimension(:,:,:)                      :: fg ![Norb][Norb][Niw]
     complex(8),dimension(Nspin,Nspin,Norb,Norb,Lfit) :: fg_
     real(8),dimension(:),intent(inout)               :: bath
-    integer,optional                                 :: ispin
+    integer,optional                                 :: ispin,iorb
     integer                                          :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
     if(size(fg,3)<Lfit)stop "chi2_fitgf_generic_normal_NOSPIN error: size[fg,3] < Lfit" 
     fg_=zero
     fg_(ispin_,ispin_,:,:,1:Lfit) = fg(:,:,1:Lfit)
-    call chi2_fitgf_generic_normal_mpi(comm,fg_,bath,ispin_)
+    if(present(iorb))then
+       call chi2_fitgf_generic_normal_mpi(comm,fg_,bath,ispin_,iorb)
+    else
+       call chi2_fitgf_generic_normal_mpi(comm,fg_,bath,ispin_)
+    endif
   end subroutine chi2_fitgf_generic_normal_NOSPIN_mpi
 #endif
 
@@ -240,10 +257,10 @@ contains
   !+----------------------------------------------------------------------+
   !                                SUPERC                                 !
   !+----------------------------------------------------------------------+
-  subroutine chi2_fitgf_generic_superc(fg,bath,ispin)
+  subroutine chi2_fitgf_generic_superc(fg,bath,ispin,iorb)
     complex(8),dimension(:,:,:,:,:,:) :: fg ![2][Nspin][Nspin][Norb][Norb][Niw]
     real(8),dimension(:)            :: bath
-    integer,optional                :: ispin
+    integer,optional                :: ispin,iorb
     integer                         :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
     call assert_shape(fg,[2,Nspin,Nspin,Norb,Norb,size(fg,6)],"chi2_fitgf_generic_superc","fg")
@@ -263,11 +280,15 @@ contains
     case default
        select case(ed_mode)
        case ("superc")
-          call chi2_fitgf_normal_superc(fg(:,ispin_,ispin_,:,:,:),bath,ispin_)
+          if(present(iorb))then
+             call chi2_fitgf_normal_superc_OneOrb(fg(:,ispin_,ispin_,:,:,:),bath,ispin_,iorb)
+          else
+             call chi2_fitgf_normal_superc_AllOrb(fg(:,ispin_,ispin_,:,:,:),bath,ispin_)
+          endif
        case default
           write(LOGfile,"(A)") "chi2_fitgf WARNING: ed_mode=normal/nonsu2 but NORMAL & ANOMAL components provided."
           call sleep(1)
-          call chi2_fitgf_normal_normal(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
+          call chi2_fitgf_normal_normal_AllOrb(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
        end select
     case ("hybrid")
        select case(ed_mode)
@@ -284,26 +305,30 @@ contains
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_superc
 
-  subroutine chi2_fitgf_generic_superc_NOSPIN(fg,bath,ispin)
+  subroutine chi2_fitgf_generic_superc_NOSPIN(fg,bath,ispin,iorb)
     complex(8),dimension(:,:,:,:)                      :: fg ![2][Norb][Norb][Niw]
     complex(8),dimension(2,Nspin,Nspin,Norb,Norb,Lfit) :: fg_
     real(8),dimension(:),intent(inout)                 :: bath
-    integer,optional                                   :: ispin
+    integer,optional                                   :: ispin,iorb
     integer                                            :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
     if(size(fg,4)<Lfit)stop "chi2_fitgf_generic_superc_NOSPIN error: size[fg,4] < Lfit"
     fg_=zero
     fg_(:,ispin_,ispin_,:,:,1:Lfit) = fg(:,:,:,1:Lfit)
-    call chi2_fitgf_generic_superc(fg_,bath,ispin_)
+    if(present(iorb))then
+       call chi2_fitgf_generic_superc(fg_,bath,ispin_,iorb)
+    else
+       call chi2_fitgf_generic_superc(fg_,bath,ispin_)
+    endif
   end subroutine chi2_fitgf_generic_superc_NOSPIN
 
 
 #ifdef _MPI
-  subroutine chi2_fitgf_generic_superc_mpi(comm,fg,bath,ispin)
+  subroutine chi2_fitgf_generic_superc_mpi(comm,fg,bath,ispin,iorb)
     integer                           :: comm
     complex(8),dimension(:,:,:,:,:,:) :: fg ![2][Nspin][Nspin][Norb][Norb][Niw]
     real(8),dimension(:)              :: bath
-    integer,optional                  :: ispin
+    integer,optional                  :: ispin,iorb
     integer                           :: ispin_
     !
     MPI_MASTER=get_Master_MPI(comm)
@@ -327,11 +352,15 @@ contains
        case default
           select case(ed_mode)
           case ("superc")
-             call chi2_fitgf_normal_superc(fg(:,ispin_,ispin_,:,:,:),bath,ispin_)
+             if(present(iorb))then
+                call chi2_fitgf_normal_superc_OneOrb(fg(:,ispin_,ispin_,:,:,:),bath,ispin_,iorb)
+             else
+                call chi2_fitgf_normal_superc_AllOrb(fg(:,ispin_,ispin_,:,:,:),bath,ispin_)
+             endif
           case default
              write(LOGfile,"(A)") "chi2_fitgf WARNING: ed_mode=normal/nonsu2 but NORMAL & ANOMAL components provided."
              call sleep(1)
-             call chi2_fitgf_normal_normal(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
+             call chi2_fitgf_normal_normal_AllOrb(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
           end select
        case ("hybrid")
           select case(ed_mode)
@@ -353,18 +382,22 @@ contains
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_superc_mpi
 
-  subroutine chi2_fitgf_generic_superc_NOSPIN_mpi(comm,fg,bath,ispin)
+  subroutine chi2_fitgf_generic_superc_NOSPIN_mpi(comm,fg,bath,ispin,iorb)
     integer                                            :: comm
     complex(8),dimension(:,:,:,:)                      :: fg ![2][Norb][Norb][Niw]
     complex(8),dimension(2,Nspin,Nspin,Norb,Norb,Lfit) :: fg_
     real(8),dimension(:),intent(inout)                 :: bath
-    integer,optional                                   :: ispin
+    integer,optional                                   :: ispin,iorb
     integer                                            :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
     if(size(fg,4)<Lfit)stop "chi2_fitgf_generic_superc_NOSPIN error: size[fg,4] < Lfit"
     fg_=zero
     fg_(:,ispin_,ispin_,:,:,1:Lfit) = fg(:,:,:,1:Lfit)
-    call chi2_fitgf_generic_superc_mpi(comm,fg_,bath,ispin_)
+    if(present(iorb))then
+       call chi2_fitgf_generic_superc_mpi(comm,fg_,bath,ispin_,iorb)
+    else
+       call chi2_fitgf_generic_superc_mpi(comm,fg_,bath,ispin_)
+    endif
   end subroutine chi2_fitgf_generic_superc_NOSPIN_mpi
 #endif
 

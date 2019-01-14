@@ -181,12 +181,12 @@ contains
        else
           allocate(eig_values(Dim)) ; eig_values=0d0
           !
-          allocate(eig_basis_tmp(Dim,Dim)) ; eig_basis_tmp=0d0
+          allocate(eig_basis_tmp(Dim,Dim)) ; eig_basis_tmp=zero
           !
           call build_Hv_sector(isector,eig_basis_tmp)
           !
           if(MpiMaster)call eigh(eig_basis_tmp,eig_values,'V','U')
-          if(dim==1)eig_basis_tmp(dim,dim)=1d0
+          if(dim==1)eig_basis_tmp(dim,dim)=one
           !
           call delete_Hv_sector()
 #ifdef _MPI
