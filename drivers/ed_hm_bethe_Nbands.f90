@@ -19,6 +19,7 @@ program hm_Nbands_bethe
   real(8),dimension(:),allocatable            :: Wband
   !
   complex(8),allocatable,dimension(:,:,:,:,:) :: Weiss,Smats,Sreal,Gmats,Greal
+  complex(8),allocatable,dimension(:) :: Gtest
   character(len=16)                           :: finput
   real(8)                                     :: wmixing
   !
@@ -75,6 +76,7 @@ program hm_Nbands_bethe
   allocate(Gmats(Nspin,Nspin,Norb,Norb,Lmats))
   allocate(Sreal(Nspin,Nspin,Norb,Norb,Lreal))
   allocate(Greal(Nspin,Nspin,Norb,Norb,Lreal))
+  allocate(Gtest(Lmats))
   allocate(Hloc(Nspin,Nspin,Norb,Norb))
   allocate(dens(Norb))
   Hloc(1,1,:,:)=diag(H0)
@@ -118,6 +120,10 @@ program hm_Nbands_bethe
 
      !Check convergence (if required change chemical potential)
      if(master)then
+        Gtest=zero
+        do iorb=1,Norb
+           Gtest=Gtest+Weiss(1,1,iorb,iorb,:)/Norb
+        enddo
         converged = check_convergence(Weiss(1,1,1,1,:)+Weiss(1,1,2,2,:),dmft_error,nsuccess,nloop,reset=.false.)
         if(nread/=0d0)then
            call ed_get_dens(dens)

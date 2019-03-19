@@ -398,10 +398,18 @@ contains
        allocate(list_sector(list_len))
        !
        open(free_unit(unit),file="state_list"//reg(ed_file_suffix)//".restart",status="old")
+       ! read(unit,*)!read comment line
+       ! status=0
+       ! do while(status>=0)
+       !    read(unit,*,iostat=status)istate,nup,ndw,isector
+       !    list_sector(istate)=isector
+       !    if(nup/=getnup(isector).OR.ndw/=getndw(isector))&
+       !         stop "setup_pointers_normal error: nup!=getnup(isector).OR.ndw!=getndw(isector) "
+       ! enddo
        read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,*,iostat=status)istate,nup,ndw,isector
+          read(unit,"(i6,f18.12,2x,ES19.12,1x,2i3,3x,i3,i10)",iostat=status)istate,adouble,adouble,nup,ndw,isector,anint
           list_sector(istate)=isector
           if(nup/=getnup(isector).OR.ndw/=getndw(isector))&
                stop "setup_pointers_normal error: nup!=getnup(isector).OR.ndw!=getndw(isector) "
@@ -513,13 +521,21 @@ contains
        allocate(list_sector(list_len))
        !
        open(free_unit(unit),file="state_list"//reg(ed_file_suffix)//".restart",status="old")
+       read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,*,iostat=status)istate,sz,isector
+          read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,sz,isector,anint
           list_sector(istate)=isector
           if(sz/=getsz(isector))stop "setup_pointers_superc error: sz!=getsz(isector)."
        enddo
+       ! status=0
+       ! do while(status>=0)
+       !    read(unit,*,iostat=status)istate,sz,isector
+       !    list_sector(istate)=isector
+       !    if(sz/=getsz(isector))stop "setup_pointers_superc error: sz!=getsz(isector)."
+       ! enddo
        close(unit)
+
        !
        lanc_nstates_total = list_len
        do isector=1,Nsectors
@@ -664,9 +680,16 @@ contains
        allocate(list_sector(list_len))
        !
        open(free_unit(unit),file="state_list"//reg(ed_file_suffix)//".restart",status="old")
+       ! status=0
+       ! do while(status>=0)
+       !    read(unit,*,iostat=status) istate,in,isector
+       !    list_sector(istate)=isector
+       !    if(in/=getn(isector))stop "setup_pointers_superc error: n!=getn(isector)."
+       ! enddo
+       read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,*,iostat=status) istate,in,isector
+          read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,in,isector,anint
           list_sector(istate)=isector
           if(in/=getn(isector))stop "setup_pointers_superc error: n!=getn(isector)."
        enddo
