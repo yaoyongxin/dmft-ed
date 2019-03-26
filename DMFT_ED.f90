@@ -51,6 +51,7 @@ MODULE DMFT_ED
        ed_get_eknot                           ,&
        ed_get_doubles                         ,&
        ed_get_density_matrix                  ,&
+       ed_get_neigen_total                    ,&
        ed_get_quantum_SOC_operators_single    ,&
        ed_get_quantum_SOC_operators_lattice   ,&
        ed_read_impSigma_single                ,&
