@@ -409,7 +409,8 @@ contains
        read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,"(i6,f18.12,2x,ES19.12,1x,2i3,3x,i3,i10)",iostat=status)istate,adouble,adouble,nup,ndw,isector,anint
+          !read(unit,"(i6,f18.12,2x,ES19.12,1x,2i3,3x,i3,i10)",iostat=status)istate,adouble,adouble,nup,ndw,isector,anint
+          read(unit,*,iostat=status)istate,adouble,adouble,nup,ndw,isector,anint
           list_sector(istate)=isector
           if(nup/=getnup(isector).OR.ndw/=getndw(isector))&
                stop "setup_pointers_normal error: nup!=getnup(isector).OR.ndw!=getndw(isector) "
@@ -524,7 +525,8 @@ contains
        read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,sz,isector,anint
+          !read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,sz,isector,anint
+          read(unit,*,iostat=status) istate,adouble,adouble,sz,isector,anint
           list_sector(istate)=isector
           if(sz/=getsz(isector))stop "setup_pointers_superc error: sz!=getsz(isector)."
        enddo
