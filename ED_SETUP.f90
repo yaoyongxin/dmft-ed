@@ -689,7 +689,8 @@ contains
        read(unit,*)!read comment line
        status=0
        do while(status>=0)
-          read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,in,isector,anint
+          !read(unit,"(i6,f18.12,2x,ES19.12,1x,i3,3x,i3,i10)",iostat=status) istate,adouble,adouble,in,isector,anint
+          read(unit,*,iostat=status) istate,adouble,adouble,in,isector,anint
           list_sector(istate)=isector
           if(in/=getn(isector))stop "setup_pointers_superc error: n!=getn(isector)."
        enddo

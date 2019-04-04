@@ -71,12 +71,23 @@ contains
        enddo
     endif
     !
-     if(ed_para.and.Nspin==2)then
-        impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
-        impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
-        impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
-        impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
-     endif
+    ! IF SOMEONE WANTS TO GET BACK THIS I AM GONNA GET ANGRY.
+    ! I DEBUGGED THIS 2 or 3 TIMES ALREADY.
+    ! IF YOU WANT TO TAKE THE RISK, FINE BUT AT LEAST SET ED_PARA=FALSE TO
+    ! AVOID MIS-BEHAVIORS TO OTHERS.
+    ! REMARK: THE NSPIN=2 CASE IS MEANT FOR SOLVING MAGNETIC SYSTEMS. IF YOU
+    ! SET ED_PARA=TRUE YOU ARE SCREWING UP THE CALCUTIONS OF OTHERS WHO WANT
+    ! TO DO MAGNETISM. SO IF YOU KNOW YOU NEED NSPIN=2 AND NO-MAGNETISM
+    ! THEN YOU WILL ADJUST YOUR ED_PARA.
+    ! I HONESTLY DON'T SEE ANY REASON WHY ED_PARA FLAG SHOULD EXIST ANYWAY.
+    ! IF YOU NEED TO SUPPRESS MAGNETISM JUST DO AS THE SMART PEOPLE DO: DON'T BREAK
+    ! THE SPIN SYMMETRY AND COPY BATH_UP INTO BATH_DW ONCE BATH_UP IS DETERMINED.
+    ! if(ed_para.and.Nspin==2)then
+    !    impGmats(1,1,:,:,:) = (impGmats(1,1,:,:,:)+impGmats(2,2,:,:,:))/2.d0
+    !    impGmats(2,2,:,:,:) =  impGmats(1,1,:,:,:)
+    !    impGreal(1,1,:,:,:) = (impGreal(1,1,:,:,:)+impGreal(2,2,:,:,:))/2.d0
+    !    impGreal(2,2,:,:,:) =  impGreal(1,1,:,:,:)
+    ! endif
     !
   end subroutine build_gf_normal
 
@@ -593,12 +604,18 @@ contains
     !pesoBZ = vnorm2/zeta_function
     !if(finiteT)pesoBZ = vnorm2*exp(-beta*(Ei-Egs))/zeta_function
     !
-    diag             = 0.d0
-    subdiag          = 0.d0
-    Z                = eye(Nlanc)
+    !THIS IS HARMLESS BUT WE ARE SLOWLY GOING TO CHANGE EVERYWHERE
+    ! FROM TQL2 TO LAPACK EIGH.
+    ! diag             = 0.d0
+    ! subdiag          = 0.d0
+    ! Z                = eye(Nlanc)
+    ! diag(1:Nlanc)    = alanc(1:Nlanc)
+    ! subdiag(2:Nlanc) = blanc(2:Nlanc)
+    ! call tql2(Nlanc,diag,subdiag,Z,ierr)
+    !
     diag(1:Nlanc)    = alanc(1:Nlanc)
     subdiag(2:Nlanc) = blanc(2:Nlanc)
-    call tql2(Nlanc,diag,subdiag,Z,ierr)
+    call eigh(diag(1:Nlanc),subdiag(2:Nlanc),Ev=Z(:Nlanc,:Nlanc))
     !
     do j=1,nlanc
        de = diag(j)-Ei
