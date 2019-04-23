@@ -609,43 +609,46 @@ CONTAINS
        sii=abs(sii)
        zii=abs(zii)
 
-       units = free_units(6)
-       open(units(1),file='n_col.data')
-       open(units(2),file='docc_col.data')
-       open(units(3),file='phi_col.data')
-       open(units(4),file='n_row.data')
-       open(units(5),file='docc_row.data')
-       open(units(6),file='phi_row.data')
-       !
-       do col=1,Ncol
-          grid_y(col)=col
-          do row=1,Nrow
-             grid_x(row)  = row
-             i            = ij2site(row,col)
-             nij(row,col) = nii(i)
-             dij(row,col) = dii(i)
-             pij(row,col) = pii(i)
-          enddo
-       enddo
-       !
-       do row=1,Nrow
-          write(units(1),'(100(f18.10))') dble(row),nij(row,:)
-          write(units(2),'(100(f18.10))') dble(row),dij(row,:)
-          write(units(3),'(100(f18.10))') dble(row),pij(row,:)
-       end do
-       !
-       do col=1,Ncol
-          write(units(4),'(100(f18.10))') dble(col),nij(:,col)
-          write(units(5),'(100(f18.10))') dble(col),dij(:,col)
-          write(units(6),'(100(f18.10))') dble(col),pij(:,col)
-       end do
+       ! write(*,*)"Print col, row"
+       ! units = free_units(6)
+       ! open(units(1),file='n_col.data')
+       ! open(units(2),file='docc_col.data')
+       ! open(units(3),file='phi_col.data')
+       ! open(units(4),file='n_row.data')
+       ! open(units(5),file='docc_row.data')
+       ! open(units(6),file='phi_row.data')
+       ! !
+       ! do col=1,Ncol
+       !    grid_y(col)=col
+       !    do row=1,Nrow
+       !       grid_x(row)  = row
+       !       i            = ij2site(row,col)
+       !       nij(row,col) = nii(i)
+       !       dij(row,col) = dii(i)
+       !       pij(row,col) = pii(i)
+       !    enddo
+       ! enddo
+       ! !
+       ! do row=1,Nrow
+       !    write(units(1),'(100(f18.10))') dble(row),nij(row,:)
+       !    write(units(2),'(100(f18.10))') dble(row),dij(row,:)
+       !    write(units(3),'(100(f18.10))') dble(row),pij(row,:)
+       ! end do
+       ! !
+       ! do col=1,Ncol
+       !    write(units(4),'(100(f18.10))') dble(col),nij(:,col)
+       !    write(units(5),'(100(f18.10))') dble(col),dij(:,col)
+       !    write(units(6),'(100(f18.10))') dble(col),pij(:,col)
+       ! end do
+       ! !
+       ! do i=1,6
+       !    close(units(i))
+       ! end do
        !
     end if
     !
-    do i=1,6
-       close(units(i))
-    end do
     !
+    write(*,*)"Exit print_sc_out"
   end subroutine print_sc_out
 
 
@@ -661,25 +664,10 @@ CONTAINS
     Ekin=0.d0
     Epot=0.d0
     Epot=sum(eii)/dble(Nlat)
-    Sigma_tmp=zero
-    SigmaA_tmp=zero
-    do ispin=1,Nspin
-       do jspin=1,Nspin
-          do iorb=1,Norb
-             do jorb=1,Norb
-                is = iorb + (ispin-1)*Norb  !spin-orbit stride                                                                                     
-                js = jorb + (jspin-1)*Norb  !spin-orbit stride                                                                                     
-                Sigma_tmp(:,is,js,:) =  Smats(1,:,ispin,jspin,iorb,jorb,:)
-                SigmaA_tmp(:,is,js,:)= Smats(2,:,ispin,jspin,iorb,jorb,:)
-             enddo
-          enddo
-       enddo
-    enddo
-    !
-    !    call dmft_kinetic_energy(Comm,Hk,Wt,Sigma_tmp,SigmaA_tmp,Ekin=Ekin_)
+    write(*,*)"DMFT_kinetic_energy:"
     call dmft_kinetic_energy(Comm,Hk,Wt,Smats(1,:,:,:,:,:,:),Smats(2,:,:,:,:,:,:),Ekin=Ekin_)
+    write(*,*)"done..."
     !
-    ! Eout = ed_kinetic_energy_lattice(Hk,Wt,Smats(1,:,:,:,:,:,:),Smats(2,:,:,:,:,:,:))
     Ekin = sum(Ekin_)/dble(Nlat)
     Eint=Ekin+Epot
     unit=free_unit()
