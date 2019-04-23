@@ -250,9 +250,15 @@ program ed_stripe
      !call MPI_Barrier(Comm,ierr)
      !    !
      if(cg_scheme=='weiss') then
-        call dmft_weiss(Comm,Gmats,Smats,Delta,Hloc)
+        call dmft_weiss(Comm,&
+             Gmats(1,:,:,:,:,:,:),Gmats(2,:,:,:,:,:,:),&
+             Smats(1,:,:,:,:,:,:),Smats(2,:,:,:,:,:,:),&
+             Delta,Hloc)
      else
-        call dmft_delta(Comm,Gmats,Smats,Delta,Hloc)
+        call dmft_delta(Comm,&
+             Gmats(1,:,:,:,:,:,:),Gmats(2,:,:,:,:,:,:),&
+             Smats(1,:,:,:,:,:,:),Smats(2,:,:,:,:,:,:),&
+             Delta,Hloc)
      end if
      call MPI_Barrier(Comm,ierr)
      !  
@@ -328,22 +334,14 @@ CONTAINS
     ! print*,"<phi>   =",phi
     ! print*,"<docc>  =",docc
     ! print*,"<ccdw>  =",ccdw
-    ! call splot("nVSiloop.data",grid_x,grid_y,append=.true.)
-    ! call cazzo(cazzo)   
-    ! call splot("phiVSiloop.data",iloop,phi,append=.true.)
-    ! call splot("doccVSiloop.data",iloop,docc,append=.true.)
-    ! call splot("ccdwVSiloop.data",iloop,ccdw,append=.true.)    
     !+- use splot -+!
-    call splot("nVSisite.data",nii,(/(dble(i),i=1,Nlat)/))
-    call splot("phiVSisite.data",pii,(/(dble(i),i=1,Nlat)/))
-    call splot("doccVSisite.data",dii,(/(dble(i),i=1,Nlat)/))
+    call splot("nVSisite.data",dble(arange(1,Nlat)),nii)
+    call splot("phiVSisite.data",dble(arange(1,Nlat)),pii)
+    call splot("doccVSisite.data",dble(arange(1,Nlat)),dii)
     !
     ! Plots at convergence
     if(converged)then
        ! GF & Sigma
-       ! call store_data("LDelta_iw.data",Delta(1,1:Nlat,1,1,1,1,1:Lmats),wm(1:Lmats))
-       ! call store_data("LGamma_iw.data",Delta(2,1:Nlat,1,1,1,1,1:Lmats),wm(1:Lmats))
-
        call dmft_print_gf_matsubara(Gmats(1,:,:,:,:,:,:),"LG_iw.data",4)
        call dmft_print_gf_matsubara(Gmats(2,:,:,:,:,:,:),"LF_iw.data",4)
        !

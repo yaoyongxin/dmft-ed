@@ -575,9 +575,9 @@ CONTAINS
     docc = sum(dii)/dble(Nlat)
     ccdw = sum(cdwii)/dble(Nlat)
     !+- use splot -+!
-    call splot("nVSisite.data",(/(dble(i),i=1,Nlat)/),nii)
-    call splot("phiVSisite.data",(/(dble(i),i=1,Nlat)/),pii)
-    call splot("doccVSisite.data",(/(dble(i),i=1,Nlat)/),dii)
+    call splot("nVSisite.data",dble(arange(1,Nlat)),nii)
+    call splot("phiVSisite.data",dble(arange(1,Nlat)),pii)
+    call splot("doccVSisite.data",dble(arange(1,Nlat)),dii)
     !
     ! Plots at convergence
     if(converged)then
