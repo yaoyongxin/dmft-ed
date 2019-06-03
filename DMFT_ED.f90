@@ -10,6 +10,7 @@ MODULE DMFT_ED
        nn2so_reshape                          ,&
        so2os_reshape                          ,&
        os2so_reshape                          ,&
+       ed_search_variable                     ,&
        search_chemical_potential              ,&
        search_chempot                         ,&
        atomic_SOC                             ,&
@@ -54,9 +55,7 @@ MODULE DMFT_ED
        ed_get_neigen_total                    ,&
        ed_get_quantum_SOC_operators_single    ,&
        ed_get_quantum_SOC_operators_lattice   ,&
-       ed_read_impSigma_single                ,&
-       ed_read_impSigma_lattice
-
+       ed_read_impSigma
 
   USE ED_BATH, only:                           &
        get_bath_dimension                     ,&

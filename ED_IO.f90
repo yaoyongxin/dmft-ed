@@ -265,6 +265,12 @@ MODULE ED_IO
      module procedure :: ed_get_density_matrix_lattice
   end interface ed_get_density_matrix
 
+  interface ed_read_impSigma
+     module procedure :: ed_read_impSigma_single
+     module procedure :: ed_read_impSigma_lattice
+  end interface ed_read_impSigma
+     
+  
   public :: ed_get_Smats
   public :: ed_get_SAmats
   public :: ed_get_Sreal
@@ -309,8 +315,7 @@ MODULE ED_IO
 
   public :: ed_get_neigen_total
 
-  public :: ed_read_impSigma_single
-  public :: ed_read_impSigma_lattice
+  public :: ed_read_impSigma
 
 
   !****************************************************************************************!

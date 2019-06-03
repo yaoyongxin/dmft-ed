@@ -146,16 +146,22 @@ contains
           case default       !use P-ARPACK
 #ifdef _MPI
              if(MpiStatus)then
-                call sp_eigh(MpiComm,spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,&
+                call sp_eigh(MpiComm,spHtimesV_cc,eig_values,eig_basis,&
+                     Nblock,&
+                     Nitermax,&
                      tol=lanc_tolerance,&
                      iverbose=(ed_verbose>3))
              else
-                call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,&
+                call sp_eigh(spHtimesV_cc,eig_values,eig_basis,&
+                     Nblock,&
+                     Nitermax,&
                      tol=lanc_tolerance,&
                      iverbose=(ed_verbose>3))
              endif
 #else
-             call sp_eigh(spHtimesV_cc,Dim,Neigen,Nblock,Nitermax,eig_values,eig_basis,&
+             call sp_eigh(spHtimesV_cc,eig_values,eig_basis,&
+                  Nblock,&
+                  Nitermax,&
                   tol=lanc_tolerance,&
                   iverbose=(ed_verbose>3))
 #endif
@@ -164,14 +170,14 @@ contains
           case ("lanczos")   !use Simple Lanczos
 #ifdef _MPI
              if(MpiStatus)then
-                call sp_lanc_eigh(MpiComm,spHtimesV_cc,Dim,Nitermax,eig_values(1),eig_basis(:,1),&
+                call sp_lanc_eigh(MpiComm,spHtimesV_cc,eig_values(1),eig_basis(:,1),Nitermax,&
                      iverbose=(ed_verbose>3),threshold=lanc_tolerance)
              else
-                call sp_lanc_eigh(spHtimesV_cc,Dim,Nitermax,eig_values(1),eig_basis(:,1),&
+                call sp_lanc_eigh(spHtimesV_cc,eig_values(1),eig_basis(:,1),Nitermax,&
                      iverbose=(ed_verbose>3),threshold=lanc_tolerance)
              endif
 #else
-             call sp_lanc_eigh(spHtimesV_cc,Dim,Nitermax,eig_values(1),eig_basis(:,1),&
+             call sp_lanc_eigh(spHtimesV_cc,eig_values(1),eig_basis(:,1),Nitermax,&
                   iverbose=(ed_verbose>3),threshold=lanc_tolerance)
 #endif
           end select

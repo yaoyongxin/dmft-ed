@@ -67,7 +67,7 @@
               j=binary_search(H%map,k4)
               htmp = one*Jx*sg1*sg2*sg3*sg4
               !
-              if(j==0)cycle
+              !if(j==0)cycle
               select case(MpiStatus)
               case (.true.)
                  call sp_insert_element(MpiComm,spH0,htmp,i,j)
@@ -101,7 +101,7 @@
               j=binary_search(H%map,k4)
               htmp = one*Jp*sg1*sg2*sg3*sg4
               !
-              if(j==0)cycle
+              !if(j==0)cycle
               select case(MpiStatus)
               case (.true.)
                  call sp_insert_element(MpiComm,spH0,htmp,i,j)
