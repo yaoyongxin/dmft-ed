@@ -270,12 +270,9 @@ contains
     pesoBZ = 1d0
     if(finiteT)pesoBZ = exp(-beta*(Ei-Egs))
     !
-    diag             = 0.d0
-    subdiag          = 0.d0
-    Z                = eye(Nlanc)
     diag(1:Nlanc)    = alanc(1:Nlanc)
     subdiag(2:Nlanc) = blanc(2:Nlanc)
-    call tql2(Nlanc,diag,subdiag,Z,ierr)
+    call eigh(diag(1:Nlanc),subdiag(2:Nlanc),Ev=Z(:Nlanc,:Nlanc))
     !
     select case(isign)
     case (1)
