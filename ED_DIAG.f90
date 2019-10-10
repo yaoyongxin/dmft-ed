@@ -191,7 +191,7 @@ contains
           !
           call build_Hv_sector(isector,eig_basis_tmp)
           !
-          if(MpiMaster)call eigh(eig_basis_tmp,eig_values,'V','U')
+          if(MpiMaster)call eigh(eig_basis_tmp,eig_values)
           if(dim==1)eig_basis_tmp(dim,dim)=one
           !
           call delete_Hv_sector()

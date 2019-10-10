@@ -269,8 +269,8 @@ MODULE ED_IO
      module procedure :: ed_read_impSigma_single
      module procedure :: ed_read_impSigma_lattice
   end interface ed_read_impSigma
-     
-  
+
+
   public :: ed_get_Smats
   public :: ed_get_SAmats
   public :: ed_get_Sreal
@@ -331,10 +331,6 @@ MODULE ED_IO
   !****************************************************************************************!
 
 
-
-  !Frequency and time arrays:
-  !=========================================================
-  real(8),dimension(:),allocatable :: wm,tau,wr,vm
   character(len=64)                :: suffix
 
 
@@ -355,44 +351,52 @@ contains
   !+------------------------------------------------------------------+
   include "ED_IO/print_impSigma.f90"
   subroutine ed_print_impSigma
+    call allocate_grids
     select case(ed_mode)
     case ("normal");call print_impSigma_normal
     case ("superc");call print_impSigma_superc
     case ("nonsu2");call print_impSigma_nonsu2
     case default;stop "ed_print_impSigma error: ed_mode not in the list"
     end select
+    call deallocate_grids
   end subroutine ed_print_impSigma
 
 
   include "ED_IO/print_impG.f90"
   subroutine ed_print_impG
+    call allocate_grids
     select case(ed_mode)
     case ("normal");call print_impG_normal
     case ("superc");call print_impG_superc
     case ("nonsu2");call print_impG_nonsu2
     case default;stop "ed_print_impG error: ed_mode not in the list"
     end select
+    call deallocate_grids
   end subroutine ed_print_impG
 
 
   include "ED_IO/print_impG0.f90"
   subroutine ed_print_impG0
+    call allocate_grids
     select case(ed_mode)
     case ("normal");call print_impG0_normal
     case ("superc");call print_impG0_superc
     case ("nonsu2");call print_impG0_nonsu2
     case default;stop "ed_print_impG0 error: ed_mode not in the list"
     end select
+    call deallocate_grids
   end subroutine ed_print_impG0
 
 
   include "ED_IO/print_impChi.f90"
   subroutine ed_print_impChi
+    call allocate_grids
     call print_chi_spin
     call print_chi_dens
     call print_chi_dens_mix
     call print_chi_dens_tot
     call print_chi_pair
+    call deallocate_grids
   end subroutine ed_print_impChi
 
 

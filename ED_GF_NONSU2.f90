@@ -983,10 +983,10 @@ contains
     character(len=20)                                 :: suffix
     !
     !
-    if(.not.allocated(wm))allocate(wm(Lmats))
-    if(.not.allocated(wr))allocate(wr(Lreal))
-    wm     = pi/beta*real(2*arange(1,Lmats)-1,8)
-    wr     = linspace(wini,wfin,Lreal)
+    ! if(.not.allocated(wm))allocate(wm(Lmats))
+    ! if(.not.allocated(wr))allocate(wr(Lreal))
+    ! wm     = pi/beta*real(2*arange(1,Lmats)-1,8)
+    ! wr     = linspace(wini,wfin,Lreal)
     !
     impG0mats=zero
     impG0real=zero
@@ -1131,8 +1131,8 @@ contains
     !
     !
     !
-    if(allocated(wm))deallocate(wm)
-    if(allocated(wr))deallocate(wr)
+    ! if(allocated(wm))deallocate(wm)
+    ! if(allocated(wr))deallocate(wr)
     !
   end subroutine build_sigma_nonsu2
 

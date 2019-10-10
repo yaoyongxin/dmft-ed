@@ -207,6 +207,9 @@ MODULE ED_VARS_GLOBAL
   integer,parameter,dimension(2)                     :: Szdiag = [1,-1]
 
 
+  !Frequency and time arrays:
+  !=========================================================
+  real(8),dimension(:),allocatable                   :: wm,tau,wr,vm
 
 
   !File suffixes for printing fine tuning.

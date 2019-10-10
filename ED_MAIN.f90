@@ -45,7 +45,6 @@ module ED_MAIN
 
 
 
-  real(8),dimension(:),allocatable                   :: wr,wm
   character(len=64)                                  :: suffix
 
 

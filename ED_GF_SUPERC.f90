@@ -831,10 +831,10 @@ contains
     complex(8),dimension(Nspin,Nspin,Norb,Norb,Lreal)     :: invG0real,invF0real,invGreal,invFreal
     complex(8),dimension(2*Nspin*Norb,2*Nspin*Norb)       :: invGimp
     !
-    if(.not.allocated(wm))allocate(wm(Lmats))
-    if(.not.allocated(wr))allocate(wr(Lreal))
-    wm     = pi/beta*real(2*arange(1,Lmats)-1,8)
-    wr     = linspace(wini,wfin,Lreal)
+    ! if(.not.allocated(wm))allocate(wm(Lmats))
+    ! if(.not.allocated(wr))allocate(wr(Lreal))
+    ! wm     = pi/beta*real(2*arange(1,Lmats)-1,8)
+    ! wr     = linspace(wini,wfin,Lreal)
     !
     invG0mats = zero
     invF0mats = zero
@@ -924,8 +924,8 @@ contains
     impF0real(ispin,ispin,:,:,:) = f0and_bath_real(ispin,ispin,dcmplx(wr(:),eps),dmft_bath)
     !!
     !
-    if(allocated(wm))deallocate(wm)
-    if(allocated(wr))deallocate(wr)
+    ! if(allocated(wm))deallocate(wm)
+    ! if(allocated(wr))deallocate(wr)
     !
   end subroutine build_sigma_superc
 
