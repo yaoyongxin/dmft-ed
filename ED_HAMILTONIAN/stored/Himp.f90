@@ -7,6 +7,7 @@
      htmp = htmp + impHloc(Nspin,Nspin,iorb,iorb)*ndw(iorb)
   enddo
   !
+  i = j
   select case(MpiStatus)
   case (.true.)
      call sp_insert_element(MpiComm,spH0,htmp,i,i)
@@ -30,7 +31,7 @@
         if (Jcondition) then
            call c(jorb,m,k1,sg1)
            call cdg(iorb,k1,k2,sg2)
-           j = binary_search(H%map,k2)
+           i = binary_search(H%map,k2)
            htmp = impHloc(1,1,iorb,jorb)*sg1*sg2
            !
            select case(MpiStatus)
@@ -49,7 +50,7 @@
         if (Jcondition) then
            call c(jorb+Ns,m,k1,sg1)
            call cdg(iorb+Ns,k1,k2,sg2)
-           j = binary_search(H%map,k2)
+           i = binary_search(H%map,k2)
            htmp = impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2
            !
            select case(MpiStatus)
@@ -78,7 +79,7 @@
               if(Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 i = binary_search(H%map,k2)
                  htmp = impHloc(ispin,jspin,iorb,jorb)*sg1*sg2
                  !
                  select case(MpiStatus)

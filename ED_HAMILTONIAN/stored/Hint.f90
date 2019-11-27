@@ -38,6 +38,7 @@
      endif
   endif
   !
+  i = j
   select case(MpiStatus)
   case (.true.)
      call sp_insert_element(MpiComm,spH0,htmp,i,i)
@@ -64,10 +65,9 @@
               call c(iorb+Ns,k1,k2,sg2)
               call cdg(jorb+Ns,k2,k3,sg3)
               call cdg(iorb,k3,k4,sg4)
-              j=binary_search(H%map,k4)
+              i=binary_search(H%map,k4)
               htmp = one*Jx*sg1*sg2*sg3*sg4
               !
-              !if(j==0)cycle
               select case(MpiStatus)
               case (.true.)
                  call sp_insert_element(MpiComm,spH0,htmp,i,j)
@@ -98,10 +98,9 @@
               call c(jorb+Ns,k1,k2,sg2)
               call cdg(iorb+Ns,k2,k3,sg3)
               call cdg(iorb,k3,k4,sg4)
-              j=binary_search(H%map,k4)
+              i=binary_search(H%map,k4)
               htmp = one*Jp*sg1*sg2*sg3*sg4
               !
-              !if(j==0)cycle
               select case(MpiStatus)
               case (.true.)
                  call sp_insert_element(MpiComm,spH0,htmp,i,j)

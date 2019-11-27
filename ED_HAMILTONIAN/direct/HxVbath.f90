@@ -10,7 +10,8 @@
         enddo
      enddo
      !
-     hv(impi) = hv(impi) + htmp*vin(i)
+     i = j
+     hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(i)
      !
   else
      !
@@ -25,7 +26,8 @@
         enddo
      enddo
      !
-     hv(impi) = hv(impi) + htmp*vin(i)
+     i = j
+     hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(i)
      !
      !off-diagonal elements
      !
@@ -46,10 +48,10 @@
               if (Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 i = binary_search(H%map,k2)
                  htmp = dmft_bath%h(1,1,iorb,jorb,kp)*sg1*sg2
                  !
-                 hv(impi) = hv(impi) + htmp*vin(j)
+                 hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
                  !
               endif
               !DW
@@ -62,10 +64,10 @@
               if (Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 i = binary_search(H%map,k2)
                  htmp = dmft_bath%h(Nspin,Nspin,iorb,jorb,kp)*sg1*sg2
                  !
-                 hv(impi) = hv(impi) + htmp*vin(j)
+                 hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
                  !
               endif
            enddo
@@ -88,10 +90,10 @@
                     if(Jcondition)then
                        call c(beta,m,k1,sg1)
                        call cdg(alfa,k1,k2,sg2)
-                       j = binary_search(H%map,k2)
+                       i = binary_search(H%map,k2)
                        htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*sg1*sg2
                        !
-                       hv(impi) = hv(impi) + htmp*vin(j)
+                       hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
                        !
                     endif
                  enddo
@@ -112,20 +114,20 @@
            if( (dmft_bath%d(1,iorb,kp)/=0d0) .AND. (ib(ms)==1) .AND. (ib(ms+Ns)==1) )then
               call c(ms,m,k1,sg1)
               call c(ms+Ns,k1,k2,sg2)
-              j=binary_search(H%map,k2)
+              i = binary_search(H%map,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2
               !
-              hv(impi) = hv(impi) + htmp*vin(j)
+              hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
               !
            endif
            !\Delta_l cdg_{\up,ms} cdg_{\dw,ms}
            if( (dmft_bath%d(1,iorb,kp)/=0d0) .AND. (ib(ms)==0) .AND. (ib(ms+Ns)==0) )then
               call cdg(ms+Ns,m,k1,sg1)
               call cdg(ms,k1,k2,sg2)
-              j=binary_search(H%map,k2)
+              i=binary_search(H%map,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2 !
               !
-              hv(impi) = hv(impi) + htmp*vin(j)
+              hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
               !
            endif
         enddo
@@ -133,42 +135,3 @@
   endif
 
 
-
-  ! ! CLUSTER REPLICA-HAMILTONIAN - no inter-cluster couplings
-  ! do kp=1,Nbath
-  !    do iorb=1,Norb
-  !       do jorb=1,Norb
-  !          do ispin=1,Nspin
-  !             do jspin=1,Nspin
-  !                !
-  !                if(dmft_bath%h(ispin,jspin,iorb,jorb,kp)/=zero) then
-  !                   !
-  !                   alfa = iorb + kp*Norb + (ispin-1)*Ns
-  !                   beta = jorb + kp*Norb + (jspin-1)*Ns
-  !                   !
-  !                   !diagonal elements
-  !                   if ((ispin==jspin).and.(iorb==jorb)) then
-  !                      htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*real(ib(alfa),8)
-  !                      !
-  !                      hv(impi) = hv(impi) + htmp*vin(i)
-  !                      !
-  !                   endif
-  !                   !
-  !                   !off-diagonal elements
-  !                   if ((ib(beta)==1) .AND. (ib(alfa)==0)) then
-  !                      call c(beta,m,k1,sg1)
-  !                      call cdg(alfa,k1,k2,sg2)
-  !                      j = binary_search(H%map,k2)
-  !                      htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*sg1*sg2
-  !                      !
-  !                      hv(impi) = hv(impi) + htmp*vin(j)
-  !                      !
-  !                   endif
-  !                   !
-  !                endif
-  !                !
-  !             enddo
-  !          enddo
-  !       enddo
-  !    enddo
-  ! enddo

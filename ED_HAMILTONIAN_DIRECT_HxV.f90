@@ -29,7 +29,7 @@ contains
     integer                                :: i,iup,idw
     integer                                :: m,mup,mdw
     integer                                :: ishift,ishift_up,ishift_dw
-    integer                                :: j,ms,impi
+    integer                                :: j,ms
     integer                                :: iorb,jorb,ispin,jspin,ibath
     integer                                :: kp,k1,k2,k3,k4
     integer                                :: alfa,beta
@@ -65,10 +65,9 @@ contains
     !
     Hv=zero
     !-----------------------------------------------!
-    states: do i=MpiIstart,MpiIend
-       m = H%map(i)
-       impi = i-MpiIshift
-       ib = bdecomp(m,2*Ns)
+    states: do j=MpiIstart,MpiIend
+       m    = H%map(j)
+       ib   = bdecomp(m,2*Ns)
        !
        do iorb=1,Norb
           nup(iorb)=dble(ib(iorb))
@@ -109,7 +108,7 @@ contains
     integer                                :: i,iup,idw
     integer                                :: m,mup,mdw
     integer                                :: ishift,ishift_up,ishift_dw
-    integer                                :: j,ms,impi
+    integer                                :: j,ms
     integer                                :: iorb,jorb,ispin,jspin,ibath
     integer                                :: kp,k1,k2,k3,k4
     integer                                :: alfa,beta
@@ -169,9 +168,8 @@ contains
     Hv=zero
     !
     !-----------------------------------------------!
-    states: do i=MpiIstart,MpiIend
-       m = H%map(i)
-       impi = i-MpiIshift
+    states: do j=MpiIstart,MpiIend
+       m  = H%map(j)
        ib = bdecomp(m,2*Ns)
        !
        do iorb=1,Norb

@@ -38,7 +38,8 @@
      endif
   endif
   !
-  hv(impi) = hv(impi) + htmp*vin(i)
+  i = j
+  hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(i)
   !
 
 
@@ -59,10 +60,10 @@
               call c(iorb+Ns,k1,k2,sg2)
               call cdg(jorb+Ns,k2,k3,sg3)
               call cdg(iorb,k3,k4,sg4)
-              j=binary_search(H%map,k4)
+              i=binary_search(H%map,k4)
               htmp = one*Jx*sg1*sg2*sg3*sg4
               !
-              if(j/=0)hv(impi) = hv(impi) + htmp*vin(j)
+              if(i/=0)hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
               !
            endif
         enddo
@@ -86,10 +87,10 @@
               call c(jorb+Ns,k1,k2,sg2)
               call cdg(iorb+Ns,k2,k3,sg3)
               call cdg(iorb,k3,k4,sg4)
-              j=binary_search(H%map,k4)
+              i=binary_search(H%map,k4)
               htmp = one*Jp*sg1*sg2*sg3*sg4
               !
-              if(j/=0)hv(impi) = hv(impi) + htmp*vin(j)
+              if(i/=0)hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
               !
            endif
         enddo

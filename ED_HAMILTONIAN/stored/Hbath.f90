@@ -10,6 +10,7 @@
         enddo
      enddo
      !
+     i = j
      select case(MpiStatus)
      case (.true.)
         call sp_insert_element(MpiComm,spH0,htmp,i,i)
@@ -30,6 +31,7 @@
         enddo
      enddo
      !
+     i = j
      select case(MpiStatus)
      case (.true.)
         call sp_insert_element(MpiComm,spH0,htmp,i,i)
@@ -56,7 +58,7 @@
               if (Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 i = binary_search(H%map,k2)
                  htmp = dmft_bath%h(1,1,iorb,jorb,kp)*sg1*sg2
                  !
                  select case(MpiStatus)
@@ -77,7 +79,7 @@
               if (Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 i = binary_search(H%map,k2)
                  htmp = dmft_bath%h(Nspin,Nspin,iorb,jorb,kp)*sg1*sg2
                  !
                  select case(MpiStatus)
@@ -108,7 +110,7 @@
                     if(Jcondition)then
                        call c(beta,m,k1,sg1)
                        call cdg(alfa,k1,k2,sg2)
-                       j = binary_search(H%map,k2)
+                       i = binary_search(H%map,k2)
                        htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*sg1*sg2
                        !
                        select case(MpiStatus)
@@ -137,7 +139,7 @@
            if( (dmft_bath%d(1,iorb,kp)/=0d0) .AND. (ib(ms)==1) .AND. (ib(ms+Ns)==1) )then
               call c(ms,m,k1,sg1)
               call c(ms+Ns,k1,k2,sg2)
-              j=binary_search(H%map,k2)
+              i=binary_search(H%map,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2
               !
               select case(MpiStatus)
@@ -152,7 +154,7 @@
            if( (dmft_bath%d(1,iorb,kp)/=0d0) .AND. (ib(ms)==0) .AND. (ib(ms+Ns)==0) )then
               call cdg(ms+Ns,m,k1,sg1)
               call cdg(ms,k1,k2,sg2)
-              j=binary_search(H%map,k2)
+              i=binary_search(H%map,k2)
               htmp=one*dmft_bath%d(1,iorb,kp)*sg1*sg2 !
               !
               select case(MpiStatus)
@@ -169,38 +171,3 @@
 
 
 
-  ! ! CLUSTER REPLICA-HAMILTONIAN - no inter-cluster couplings
-  ! do kp=1,Nbath
-  !    do iorb=1,Norb
-  !       do jorb=1,Norb
-  !          do ispin=1,Nspin
-  !             do jspin=1,Nspin
-  !                !
-  !                if(dmft_bath%h(ispin,jspin,iorb,jorb,kp)/=zero) then
-  !                   !
-  !                   alfa = iorb + kp*Norb + (ispin-1)*Ns
-  !                   beta = jorb + kp*Norb + (jspin-1)*Ns
-  !                   !
-  !                   !diagonal elements
-  !                   if ((ispin==jspin).and.(iorb==jorb)) then
-  !                      htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*real(ib(alfa),8)
-  !                      call sp_insert_element(spH0,htmp,impi,i)
-  !                   endif
-  !                   !
-  !                   !off-diagonal elements
-  !                   if ((ib(beta)==1) .AND. (ib(alfa)==0)) then
-  !                      call c(beta,m,k1,sg1)
-  !                      call cdg(alfa,k1,k2,sg2)
-  !                      j = binary_search(H%map,k2)
-  !                      print*,"4",iorb,jorb,ispin,jspin,j
-  !                      htmp = dmft_bath%h(ispin,jspin,iorb,jorb,kp)*sg1*sg2
-  !                      call sp_insert_element(spH0,htmp,impi,j)
-  !                   endif
-  !                   !
-  !                endif
-  !                !
-  !             enddo
-  !          enddo
-  !       enddo
-  !    enddo
-  ! enddo

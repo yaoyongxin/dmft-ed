@@ -82,9 +82,9 @@ contains
 
 
     !-----------------------------------------------!
-    states: do i=MpiIstart,MpiIend
-       m = H%map(i)
-       impi = i-MpiIshift
+    states: do j=MpiIstart,MpiIend
+       m = H%map(j)
+       impi = j-MpiIshift
        ib = bdecomp(m,2*Ns)
        !
        do iorb=1,Norb

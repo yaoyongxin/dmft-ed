@@ -7,7 +7,8 @@
      htmp = htmp + impHloc(Nspin,Nspin,iorb,iorb)*ndw(iorb)
   enddo
   !
-  hv(impi) = hv(impi) + htmp*vin(i)
+  i = j
+  hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(i)
   !
 
   !Off-diagonal elements, i.e. non-local part
@@ -25,10 +26,10 @@
         if (Jcondition) then
            call c(jorb,m,k1,sg1)
            call cdg(iorb,k1,k2,sg2)
-           j = binary_search(H%map,k2)
+           i = binary_search(H%map,k2)
            htmp = impHloc(1,1,iorb,jorb)*sg1*sg2
            !
-           hv(impi) = hv(impi) + htmp*vin(j)
+           hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
            !
         endif
         !DW
@@ -39,10 +40,10 @@
         if (Jcondition) then
            call c(jorb+Ns,m,k1,sg1)
            call cdg(iorb+Ns,k1,k2,sg2)
-           j = binary_search(H%map,k2)
+           i = binary_search(H%map,k2)
            htmp = impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2
            !
-           hv(impi) = hv(impi) + htmp*vin(j)
+           hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
            !
         endif
      enddo
@@ -63,10 +64,10 @@
               if(Jcondition)then
                  call c(beta,m,k1,sg1)
                  call cdg(alfa,k1,k2,sg2)
-                 j = binary_search(H%map,k2)
+                 i = binary_search(H%map,k2)
                  htmp = impHloc(ispin,jspin,iorb,jorb)*sg1*sg2
                  !
-                 hv(impi) = hv(impi) + htmp*vin(j)
+                 hv(i-MpiIshift) = hv(i-MpiIshift) + htmp*vin(j)
                  !
               endif
               !
