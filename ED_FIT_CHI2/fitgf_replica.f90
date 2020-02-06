@@ -104,9 +104,9 @@ subroutine chi2_fitgf_replica(fg,bath_)
   case default
      select case (cg_scheme)
      case ("weiss")
-        call fmin_cg(array_bath,chi2_weiss_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+        call fmin_cg(array_bath,chi2_weiss_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
      case ("delta")
-        call fmin_cg(array_bath,chi2_delta_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+        call fmin_cg(array_bath,chi2_delta_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
      case default
         stop "chi2_fitgf_replica error: cg_scheme != [weiss,delta]"
      end select

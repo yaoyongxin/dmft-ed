@@ -109,10 +109,10 @@ subroutine chi2_fitgf_hybrid_superc(fg,bath_,ispin)
      select case (cg_scheme)
      case ("weiss")
         call fmin_cg(array_bath,chi2_weiss_hybrid_superc,&
-             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
      case ("delta")
         call fmin_cg(array_bath,chi2_delta_hybrid_superc,grad_chi2_delta_hybrid_superc,&
-             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
      case default
         stop "chi2_fitgf_hybrid_superc error: cg_scheme != [weiss,delta]"
      end select

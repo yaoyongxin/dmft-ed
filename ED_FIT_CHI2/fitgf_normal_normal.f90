@@ -84,10 +84,10 @@ subroutine chi2_fitgf_normal_normal_AllOrb(fg,bath_,ispin)
         select case (cg_scheme)
         case ("weiss")
            call fmin_cg(array_bath,chi2_weiss_normal_normal,&
-                iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+                iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
         case ("delta")
            call fmin_cg(array_bath,chi2_delta_normal_normal,grad_chi2_delta_normal_normal,&
-                iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+                iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
         case default
            stop "chi2_fitgf_normal_normal error: cg_scheme != [weiss,delta]"
         end select
@@ -99,18 +99,6 @@ subroutine chi2_fitgf_normal_normal_AllOrb(fg,bath_,ispin)
                 iter,chi,itmax=cg_niter,ftol=cg_Ftol)
         case ("delta")
            call fmin_cgminimize(array_bath,chi2_delta_normal_normal,&
-                iter,chi,itmax=cg_niter,ftol=cg_Ftol)
-        case default
-           stop "chi2_fitgf_normal_normal error: cg_scheme != [weiss,delta]"
-        end select
-        !
-     case (2)
-        select case (cg_scheme)
-        case ("weiss")
-           call fmin_cgplus(array_bath,chi2_weiss_normal_normal,&
-                iter,chi,itmax=cg_niter,ftol=cg_Ftol)
-        case ("delta")
-           call fmin_cgplus(array_bath,chi2_delta_normal_normal,grad_chi2_delta_normal_normal,&
                 iter,chi,itmax=cg_niter,ftol=cg_Ftol)
         case default
            stop "chi2_fitgf_normal_normal error: cg_scheme != [weiss,delta]"
@@ -245,10 +233,10 @@ subroutine chi2_fitgf_normal_normal_OneOrb(fg,bath_,ispin,iorb)
      select case (cg_scheme)
      case ("weiss")
         call fmin_cg(array_bath,chi2_weiss_normal_normal,&
-             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
      case ("delta")
         call fmin_cg(array_bath,chi2_delta_normal_normal,grad_chi2_delta_normal_normal,&
-             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop,eps=cg_eps)
+             iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
      case default
         stop "chi2_fitgf_normal_normal error: cg_scheme != [weiss,delta]"
      end select
@@ -260,18 +248,6 @@ subroutine chi2_fitgf_normal_normal_OneOrb(fg,bath_,ispin,iorb)
              iter,chi,itmax=cg_niter,ftol=cg_Ftol)
      case ("delta")
         call fmin_cgminimize(array_bath,chi2_delta_normal_normal,&
-             iter,chi,itmax=cg_niter,ftol=cg_Ftol)
-     case default
-        stop "chi2_fitgf_normal_normal error: cg_scheme != [weiss,delta]"
-     end select
-     !
-  case (2)
-     select case (cg_scheme)
-     case ("weiss")
-        call fmin_cgplus(array_bath,chi2_weiss_normal_normal,&
-             iter,chi,itmax=cg_niter,ftol=cg_Ftol)
-     case ("delta")
-        call fmin_cgplus(array_bath,chi2_delta_normal_normal,grad_chi2_delta_normal_normal,&
              iter,chi,itmax=cg_niter,ftol=cg_Ftol)
      case default
         stop "chi2_fitgf_normal_normal error: cg_scheme != [weiss,delta]"
