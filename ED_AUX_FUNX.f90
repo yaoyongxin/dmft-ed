@@ -171,7 +171,7 @@ contains
   !                   RESHAPE ROUTINES
   !##################################################################
   !+-----------------------------------------------------------------------------+!
-  !PURPOSE: 
+  !PURPOSE:
   ! reshape a matrix from the [Nlso][Nlso] shape
   ! from/to the [Nlat][Nspin][Nspin][Norb][Norb] shape.
   ! _nlso2nnn : from [Nlso][Nlso] to [Nlat][Nspin][Nspin][Norb][Norb]  !
@@ -263,7 +263,7 @@ contains
 
 
   !+-----------------------------------------------------------------------------+!
-  !PURPOSE: 
+  !PURPOSE:
   ! reshape a matrix from the [Nlat][Nspin][Nspin][Norb][Norb] shape
   ! from/to the [Nlso][Nlso] shape.
   ! _nnn2nlso : from [Nlat][Nspin][Nspin][Norb][Norb] to [Nlso][Nlso]
@@ -334,7 +334,7 @@ contains
   end function d_nn2nso
 
   function c_nn2nso(Hnn,Nspin,Norb) result(Hso)
-    integer                                     :: Nspin,Norb        
+    integer                                     :: Nspin,Norb
     complex(8),dimension(Nspin,Nspin,Norb,Norb) :: Hnn
     complex(8),dimension(Nspin*Norb,Nspin*Norb) :: Hso
     integer                                     :: iorb,ispin,is
@@ -354,7 +354,7 @@ contains
   end function c_nn2nso
 
 
-  function so2os_reshape(fg,Nspin,Norb) result(g)
+  function os2so_reshape(fg,Nspin,Norb) result(g)
     integer                                     :: Nspin,Norb
     complex(8),dimension(Nspin*Norb,Nspin*Norb) :: fg
     complex(8),dimension(Nspin*Norb,Nspin*Norb) :: g
@@ -378,9 +378,9 @@ contains
           enddo
        enddo
     enddo
-  end function so2os_reshape
+  end function os2so_reshape
 
-  function os2so_reshape(fg,Nspin,Norb) result(g)
+  function so2os_reshape(fg,Nspin,Norb) result(g)
     integer                                     :: Nspin,Norb
     complex(8),dimension(Nspin*Norb,Nspin*Norb) :: fg
     complex(8),dimension(Nspin*Norb,Nspin*Norb) :: g
@@ -404,18 +404,18 @@ contains
           enddo
        enddo
     enddo
-  end function os2so_reshape
+  end function so2os_reshape
 
 
 
 
   ! !+-----------------------------------------------------------------------------+!
   ! !PURPOSE:
-  ! ! - stride_index: given an array of indices ivec=[i_1,...,i_L] and the corresponding 
-  ! !                array of ranges nvec=[N_1,...,N_L], evaluate the index of the 
-  ! !                stride corresponding the actual ivec with respect to nvec as 
+  ! ! - stride_index: given an array of indices ivec=[i_1,...,i_L] and the corresponding
+  ! !                array of ranges nvec=[N_1,...,N_L], evaluate the index of the
+  ! !                stride corresponding the actual ivec with respect to nvec as
   ! !                I_stride = i1 + \sum_{k=2}^L (i_k-1)\prod_{l=1}^{k-1}N_k
-  ! !                assuming that the  i_1 .inner. i_2 .... .inner i_L (i_1 fastest index, 
+  ! !                assuming that the  i_1 .inner. i_2 .... .inner i_L (i_1 fastest index,
   ! !                i_L slowest index)
   ! ! - lat_orb2lo: evaluate the stride for the simplest case of Norb and Nlat
   ! !+-----------------------------------------------------------------------------+!
@@ -481,7 +481,7 @@ contains
   !##################################################################
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : 
+  !PURPOSE  :
   !+------------------------------------------------------------------+
   subroutine ed_search_variable(var,ntmp,converged)
     real(8),intent(inout) :: var
@@ -501,7 +501,7 @@ contains
     !check actual value of the density *ntmp* with respect to goal value *nread*
     count=count+1
     totcount=totcount+1
-    !  
+    !
     if(count==1)then
        chich = ndelta        !~0.2
        inquire(file="var_compressibility.restart",EXIST=bool)
@@ -561,7 +561,7 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : 
+  !PURPOSE  :
   !+------------------------------------------------------------------+
   subroutine search_chemical_potential(var,ntmp,converged)
     real(8),intent(inout) :: var
@@ -641,7 +641,7 @@ contains
     if(bool)then
        nth_magnitude_old=nth_magnitude        !save old threshold magnitude
        nth_magnitude=nth_magnitude_old-1      !decrease threshold magnitude || floor(log10(abs(ntmp-nread)))
-       nth=max(nerr,10.d0**(nth_magnitude))   !set the new threshold 
+       nth=max(nerr,10.d0**(nth_magnitude))   !set the new threshold
        count=0                                !reset the counter
        converged=.false.                      !reset convergence
        ndelta=ndelta_old*nratio                  !reduce the delta step
@@ -721,7 +721,7 @@ contains
        write(LOGfile,'(A30,2I5)')    "   Adjusting xmu #",iattempt,inotbound
        write(LOGfile,'(A10,F10.6,A8,F10.6,A8,F10.6)') "    n:",dens_tmp,"!= n:",nread,"error:",abs(dens_tmp-nread)
        !vedo se la densità è troppa o troppo poca
-       if (diffdens.gt.0.d0) then  
+       if (diffdens.gt.0.d0) then
           ilarge=1
           xmularge=xmu_tmp
           denslarge=dens_tmp
@@ -776,65 +776,8 @@ contains
 
 
 
-  subroutine SOC_jz_symmetrize_old(funct)
-    !passed
-    complex(8),allocatable,intent(inout)         ::  funct(:,:,:,:,:)
-    complex(8),allocatable                       ::  symmetrized_funct(:,:,:,:,:)
-    complex(8),allocatable                       ::  a_funct(:),b_funct(:),c_funct(:),d_funct(:),e_funct(:),f_funct(:)
-    integer                                      ::  ispin,iorb
-    integer                                      ::  ifreq,Lfreq
-    if(size(funct,dim=1)/=Nspin)stop "wrong size 1 in SOC symmetrize input f"
-    if(size(funct,dim=2)/=Nspin)stop "wrong size 2 in SOC symmetrize input f"
-    if(size(funct,dim=3)/=Norb) stop "wrong size 3 in SOC symmetrize input f"
-    if(size(funct,dim=4)/=Norb) stop "wrong size 4 in SOC symmetrize input f"
-    Lfreq=size(funct,dim=5)
-    allocate(symmetrized_funct(Nspin,Nspin,Norb,Norb,Lfreq));symmetrized_funct=zero
-    allocate(a_funct(Lfreq));a_funct=zero
-    allocate(b_funct(Lfreq));b_funct=zero
-    allocate(c_funct(Lfreq));c_funct=zero
-    allocate(d_funct(Lfreq));d_funct=zero
-    allocate(e_funct(Lfreq));e_funct=zero
-    allocate(f_funct(Lfreq));f_funct=zero
-    !
-    !diagonal
-    do ispin=1,Nspin
-       do iorb=1,Norb
-          a_funct = a_funct + funct(ispin,ispin,iorb,iorb,:)
-       enddo
-    enddo
-    a_funct = a_funct / ( Nspin * Norb )
-    !
-    !cerchi bianchi
-    b_funct = ( funct(1,2,1,3,:) + funct(2,1,3,1,:) )/2.d0
-    !cerchi neri
-    c_funct = ( funct(1,2,3,1,:) + funct(2,1,1,3,:) )/2.d0
-    !quadri bianchi
-    e_funct = ( funct(1,1,2,1,:) + funct(1,2,3,2,:) + funct(2,2,1,2,:) + funct(2,1,3,2,:) )/4.d0
-    !quadri neri
-    d_funct = ( funct(1,1,1,2,:) + funct(1,2,2,3,:) + funct(2,2,2,1,:) + funct(2,1,2,3,:) )/4.d0
-    !media
-    f_funct = ( b_funct - c_funct - xi*e_funct + xi*d_funct )/4.d0
-    !
-    do ispin=1,Nspin
-       do iorb=1,Norb
-          symmetrized_funct(ispin,ispin,iorb,iorb,:) = a_funct
-       enddo
-    enddo
-    !
-    do ifreq=1,Lfreq
-       symmetrized_funct(:,:,:,:,ifreq)=symmetrized_funct(:,:,:,:,ifreq)-2.d0*f_funct(ifreq)*so2nn_reshape(atomic_SOC(),Nspin,Norb)
-    enddo
-    !
-    funct = zero
-    funct = symmetrized_funct
-    !
-    deallocate(symmetrized_funct)
-  end subroutine SOC_jz_symmetrize_old
-
-
-
-
-  subroutine SOC_jz_symmetrize(funct,mask)
+  subroutine SOC_jz_symmetrize(funct,basis)
+    implicit none
     !passed
     complex(8),allocatable,intent(inout)         ::  funct(:,:,:,:,:)
     logical(8),allocatable,intent(in)            ::  mask(:,:,:,:,:)
@@ -923,27 +866,36 @@ contains
   !PURPOSE  : Atomic SOC and j vector components
   !+-------------------------------------------------------------------+
   function atomic_SOC() result (LS)
+    implicit none
     complex(8),dimension(Nspin*Norb,Nspin*Norb)  :: LS,LS_
-    integer                                      :: i,j
-    LS_=zero;LS=zero
+    integer                                      :: io,jo
+    !
+    LS_=zero
+    LS=zero
+    !
     LS_(1:2,3:4) = +Xi * pauli_z / 2.
     LS_(1:2,5:6) = -Xi * pauli_y / 2.
     LS_(3:4,5:6) = +Xi * pauli_x / 2.
+    !
     !hermiticity
-    do i=1,Nspin*Norb
-       do j=1,Nspin*Norb
-          LS_(j,i)=conjg(LS_(i,j))
+    do io=1,Nspin*Norb
+       do jo=1,Nspin*Norb
+          LS_(jo,io)=conjg(LS_(io,jo))
        enddo
     enddo
-    LS=so2os_reshape(LS_,Nspin,Norb)
+    LS=os2so_reshape(LS_,Nspin,Norb)
+    !
   end function atomic_SOC
 
+
   function atomic_SOC_rotation() result (LS_rot)
+    implicit none
     complex(8),dimension(Nspin*Norb,Nspin*Norb)  :: LS_rot,LS_rot_
-    integer                                      :: i,j
-    LS_rot_=zero;LS_rot=zero
     !
-    ! {a,Sz}-->{J}
+    LS_rot_=zero
+    LS_rot=zero
+    !
+    ! {t2g,Sz}-->{J}
     !
     ![Norb*Norb]*Nspin notation
     !J=1/2 jz=-1/2
@@ -979,12 +931,15 @@ contains
     !
   end function atomic_SOC_rotation
 
+
   function orbital_Lz_rotation_Norb() result (U_rot)
+    implicit none
     complex(8),dimension(Norb,Norb)              :: U_rot,U_rot_
-    integer                                      :: i,j
-    U_rot=zero;U_rot_=zero
     !
-    ! {a}-->{Lz}
+    U_rot=zero
+    U_rot_=zero
+    !
+    ! {t2g}-->{Lz}
     !
     ![Norb*Norb] notation
     U_rot_(1,1)=-Xi/sqrt(2.)
@@ -997,13 +952,16 @@ contains
     !
   end function orbital_Lz_rotation_Norb
 
+
   function orbital_Lz_rotation_NorbNspin() result (U_rot)
+    implicit none
     complex(8),dimension(Norb,Norb)              :: U_rot_
     complex(8),dimension(Norb*Nspin,Norb*Nspin)  :: U_rot
-    integer                                      :: i,j
-    U_rot=zero;U_rot_=zero
     !
-    ! {a,Sz}-->{Lz,Sz}
+    U_rot=zero
+    U_rot_=zero
+    !
+    ! {t2g,Sz}-->{Lz,Sz}
     !
     ![Norb*Norb]*Nspin notation
     U_rot_(1,1)=-Xi/sqrt(2.)
@@ -1017,36 +975,47 @@ contains
     !
   end function orbital_Lz_rotation_NorbNspin
 
-  function atomic_j(component) result (ja)
+
+  function atomic_j(component,orbtype) result (ja)
+    implicit none
     complex(8),dimension(Nspin*Norb,Nspin*Norb)  :: ja,ja_
     character(len=1)                             :: component
-    integer                                      :: i,j
-    ja_=zero;ja=zero
+    character(len=1), optional                   :: orbtype
+    integer                                      :: io,jo
+    real(8)                                      :: fact
+    !
+    ja_=zero
+    ja=zero
+    !
+    fact=1.d0
+    if(present(orbtype).and.orbtype=="t2g") fact=-1.d0
     if    (component=="x")then
        ja_(1:2,1:2) = pauli_x / 2.
        ja_(3:4,3:4) = pauli_x / 2.
        ja_(5:6,5:6) = pauli_x / 2.
-       ja_(3:4,5:6) = -Xi * eye(2)
+       ja_(3:4,5:6) = -Xi * fact * eye(2)
     elseif(component=="y")then
        ja_(1:2,1:2) = pauli_y / 2.
        ja_(3:4,3:4) = pauli_y / 2.
        ja_(5:6,5:6) = pauli_y / 2.
-       ja_(1:2,5:6) = +Xi * eye(2)
+       ja_(1:2,5:6) = +Xi * fact * eye(2)
     elseif(component=="z")then
        ja_(1:2,1:2) = pauli_z / 2.
        ja_(3:4,3:4) = pauli_z / 2.
        ja_(5:6,5:6) = pauli_z / 2.
-       ja_(1:2,3:4) = -Xi * eye(2)
+       ja_(1:2,3:4) = -Xi * fact * eye(2)
     endif
+    !
     !hermiticity
-    do i=1,Nspin*Norb
-       do j=1,Nspin*Norb
-          ja_(j,i)=conjg(ja_(i,j))
+    do io=1,Nspin*Norb
+       do jo=1,Nspin*Norb
+          ja_(jo,io)=conjg(ja_(io,jo))
        enddo
     enddo
-    ja=so2os_reshape(ja_,Nspin,Norb)
+    !
+    ja=os2so_reshape(ja_,Nspin,Norb)
+    !
   end function atomic_j
-
 
 
 

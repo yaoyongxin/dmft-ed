@@ -52,7 +52,7 @@ MODULE ED_BATH
      module procedure break_symmetry_bath_site
      module procedure break_symmetry_bath_lattice
   end interface break_symmetry_bath
-  public :: break_symmetry_bath              
+  public :: break_symmetry_bath
 
 
   interface spin_symmetrize_bath
@@ -186,7 +186,7 @@ contains
   end subroutine check_type_bath
 
   !+-----------------------------------------------------------------------------+!
-  !PURPOSE: check that the input array hsa the correct dimensions specified 
+  !PURPOSE: check that the input array hsa the correct dimensions specified
   ! for the choice of itype and possiblty ispin and/or iorb.
   !+-----------------------------------------------------------------------------+!
   subroutine assert_component_size_bath(array,itype,string1,string2)

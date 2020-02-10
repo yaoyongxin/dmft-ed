@@ -324,10 +324,10 @@ contains
           enddo
        enddo
        !
-       if(ed_para)then
-          call SOC_jz_symmetrize(impGmats,dmft_bath%mask)
-          call SOC_jz_symmetrize(impGreal,dmft_bath%mask)
-       endif
+       !if(ed_para)then
+       !   call SOC_jz_symmetrize(impGmats,dmft_bath%mask)
+       !   call SOC_jz_symmetrize(impGreal,dmft_bath%mask)
+       !endif
        !
     end select
   end subroutine build_gf_nonsu2
@@ -342,7 +342,7 @@ contains
   !PURPOSE: Evaluate the same orbital IORB, same spin ISPIN impurity GF.
   subroutine lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
     complex(8),allocatable           :: vvinit(:),vvloc(:)
-    real(8),allocatable              :: alfa_(:),beta_(:)  
+    real(8),allocatable              :: alfa_(:),beta_(:)
     integer                          :: iorb,ispin,isite,isector,istate
     integer                          :: idim,jsector
     integer                          :: jdim,vecDim
@@ -360,7 +360,7 @@ contains
        state_e    =  es_return_energy(state_list,istate)
 #ifdef _MPI
        if(MpiStatus)then
-          state_cvec => es_return_cvector(MpiComm,state_list,istate) 
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
        else
           state_cvec => es_return_cvector(state_list,istate)
        endif
@@ -430,7 +430,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -493,7 +493,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -505,7 +505,7 @@ contains
   end subroutine lanc_build_gf_nonsu2_diagOrb_diagSpin_c
 
 
-  
+
 
   !PURPOSE: Evaluate the same different orbital IORB,JORB, different spin ISPIN,JSPIN impurity GF.
   subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
@@ -530,7 +530,7 @@ contains
        state_e    =  es_return_energy(state_list,istate)
 #ifdef _MPI
        if(MpiStatus)then
-          state_cvec => es_return_cvector(MpiComm,state_list,istate) 
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
        else
           state_cvec => es_return_cvector(state_list,istate)
        endif
@@ -621,7 +621,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -705,7 +705,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -790,7 +790,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -874,7 +874,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -905,7 +905,7 @@ contains
     real(8)                                    :: Ei,Egs,de
     integer                                    :: nlanc,itype
     real(8),dimension(:)                       :: alanc
-    real(8),dimension(size(alanc))             :: blanc 
+    real(8),dimension(size(alanc))             :: blanc
     integer                                    :: isign,iorb,jorb,ispin,jspin
     real(8),dimension(size(alanc),size(alanc)) :: Z
     real(8),dimension(size(alanc))             :: diag,subdiag
