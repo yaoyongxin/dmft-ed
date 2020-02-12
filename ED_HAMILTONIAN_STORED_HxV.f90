@@ -79,34 +79,22 @@ contains
 #else
     call sp_init_matrix(spH0,Dim)
 #endif
-
-
+    !
     !-----------------------------------------------!
-    states: do j=MpiIstart,MpiIend
-       m = H%map(j)
-       impi = j-MpiIshift
-       ib = bdecomp(m,2*Ns)
-       !
-       do iorb=1,Norb
-          nup(iorb)=dble(ib(iorb))
-          ndw(iorb)=dble(ib(iorb+Ns))
-       enddo
-       !
-       !
-       !IMPURITY  HAMILTONIAN
-       include "ED_HAMILTONIAN/stored/Himp.f90"
-       !
-       !LOCAL INTERACTION
-       include "ED_HAMILTONIAN/stored/Hint.f90"
-       !
-       !BATH HAMILTONIAN
-       include "ED_HAMILTONIAN/stored/Hbath.f90"
-       !
-       !IMPURITY- BATH HYBRIDIZATION
-       include "ED_HAMILTONIAN/stored/Himp_bath.f90"
-       !
-       !
-    enddo states
+    !
+    !IMPURITY  HAMILTONIAN
+    include "ED_HAMILTONIAN/stored/Himp.f90"
+    !
+    !LOCAL INTERACTION
+    include "ED_HAMILTONIAN/stored/Hint.f90"
+    !
+    !BATH HAMILTONIAN
+    include "ED_HAMILTONIAN/stored/Hbath.f90"
+    !
+    !IMPURITY- BATH HYBRIDIZATION
+    include "ED_HAMILTONIAN/stored/Himp_bath.f90"
+    !
+    !
     !-----------------------------------------------!
     !
     !
