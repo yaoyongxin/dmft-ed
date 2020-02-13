@@ -17,7 +17,8 @@ MODULE DMFT_ED
        atomic_SOC_rotation                    ,&
        orbital_Lz_rotation_Norb               ,&
        orbital_Lz_rotation_NorbNspin          ,&
-       atomic_j
+       atomic_j                               ,&
+       SOC_symmetrize
 
 
   USE ED_IO,      only:                        &
@@ -64,7 +65,7 @@ MODULE DMFT_ED
        get_orb_component_bath_dimension       ,&
        get_spin_orb_component_bath_dimension  ,&
        get_component_bath                     ,&
-       set_component_bath                     ,&      
+       set_component_bath                     ,&
        copy_component_bath                    ,&
        spin_symmetrize_bath                   ,&
        orb_symmetrize_bath                    ,&
@@ -85,4 +86,3 @@ MODULE DMFT_ED
 
 
 END MODULE DMFT_ED
-

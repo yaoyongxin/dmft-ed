@@ -51,7 +51,7 @@ program ed_SOC_bethe
   character(len=32)                              :: lattice
   !Observables
   real(8),dimension(:),allocatable               :: dens
-  complex(8),dimension(:),allocatable            :: rho
+  complex(8),dimension(:,:),allocatable          :: rho
   !Miscellaneous:
   logical                                        :: socsym,calcG0
   logical                                        :: symtest
@@ -68,7 +68,7 @@ program ed_SOC_bethe
 
 
   !#########    VARIABLE PARSING    #########
-  call parse_cmd_variable(finput,      "FINPUT",              default='inputED_SOC.in')
+  call parse_cmd_variable(finput,      "FINPUT",  default='inputED_SOC.in')
   !
   call parse_input_variable(nk,        "NK",      finput,default=10)
   call parse_input_variable(nkpath,    "NKPATH",  finput,default=500)
@@ -106,6 +106,21 @@ program ed_SOC_bethe
   if ((dum.ne.0d0).and.(lambda_soc.ne.0d0)) stop "Crystal field and SOC are not compatible"
 
 
+  !#########   FIELDS ALLOCATION    #########
+  allocate(Smats(Nspin,Nspin,Norb,Norb,Lmats)    ); Smats=zero
+  allocate(Gmats(Nspin,Nspin,Norb,Norb,Lmats)    ); Gmats=zero
+  allocate(Sreal(Nspin,Nspin,Norb,Norb,Lreal)    ); Sreal=zero
+  allocate(Greal(Nspin,Nspin,Norb,Norb,Lreal)    ); Greal=zero
+  allocate(Field(Nspin,Nspin,Norb,Norb,Lmats)    ); Field=zero
+  !
+  allocate(Field_old(Nspin,Nspin,Norb,Norb,Lmats)); Field_old=zero
+  allocate(Ftest(Lmats)); Ftest=zero
+  allocate(dens(Norb)); dens=0d0
+  allocate(rho(Nspin*Norb,Nspin*Norb)); rho=zero
+  allocate(wr(Lreal)); wr=linspace(wini,wfin,Lreal,mesh=dw)
+  allocate(wm(Lmats)); wm = pi/beta*dble(2*arange(1,Lmats)-1)
+
+
   !######### LATTICE INITIALIZATION #########
   Nso=Nspin*Norb
   !
@@ -127,7 +142,7 @@ program ed_SOC_bethe
      do ispin=1,Nspin
         do iorb=1,Norb
            io = iorb + (ispin-1)*Norb
-           er(io,:) = linspace(-Dband(io),Dband(io),Le,mesh=de(io)) + Eloc(io)
+           er(io,:) = linspace(-Dband(io),Dband(io),Le,mesh=de(io))! + Eloc(io)
            DoS(io,:) = dens_bethe(er(io,:),Dband(io))*de(io)
         enddo
      enddo
@@ -143,21 +158,17 @@ program ed_SOC_bethe
   !
   Hloc_nn = so2nn_reshape(Hloc_so,Nspin,Norb)
   if (master) call TB_write_Hloc(Hloc_so)
-  if (calcG0) call print_G("0")
-
-
-  !#########   FIELDS ALLOCATION    #########
-  allocate(Smats(Nspin,Nspin,Norb,Norb,Lmats)    ); Smats=zero
-  allocate(Gmats(Nspin,Nspin,Norb,Norb,Lmats)    ); Gmats=zero
-  allocate(Sreal(Nspin,Nspin,Norb,Norb,Lreal)    ); Sreal=zero
-  allocate(Greal(Nspin,Nspin,Norb,Norb,Lreal)    ); Greal=zero
-  allocate(Field(Nspin,Nspin,Norb,Norb,Lmats)    ); Field=zero
   !
-  allocate(Field_old(Nspin,Nspin,Norb,Norb,Lmats)); Field_old=zero
-  allocate(Ftest(Lmats)); Ftest=zero
-  allocate(dens(Norb)); dens=0d0
-  allocate(wr(Lreal)); wr=linspace(wini,wfin,Lreal,mesh=dw)
-  allocate(wm(Lmats)); wm = pi/beta*dble(2*arange(1,Lmats)-1)
+  if (calcG0) then
+     if (lattice.eq."Bethe") then
+        call dmft_gloc_matsubara(Comm,er,DoS,Hloc_so,Gmats,Smats)               !provides only diagonal one
+        call dmft_gloc_realaxis(Comm,er,DoS,Hloc_so,Greal,Sreal)                !provides only diagonal one
+     else
+        call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
+        call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
+     endif
+     call print_G("0")
+  endif
 
 
   !######### SOLVER INITIALIZATION  #########
@@ -190,16 +201,17 @@ program ed_SOC_bethe
      !get sigmas
      call ed_get_sigma_matsubara(Smats)
      call ed_get_sigma_real(Sreal)
-     if ((lambda_soc.ne.0d0).and.ed_para.and.socsym) then
-        !SOC_symmetrize(Smats)
-        !SOC_symmetrize(Sreal)
+     if ((lambda_soc.ne.0d0).and.socsym) then
+        call SOC_symmetrize(Smats,"Y",ed_para)
+        call SOC_symmetrize(Sreal,"Y",ed_para)
      endif
 
 
      !get Gloc
      if (lattice.eq."Bethe") then
-        call dmft_gloc_matsubara(Comm,er,DoS,Hloc_so,Gmats,Smats)              !provides only diagonal one
-        call dmft_gloc_realaxis(Comm,er,DoS,Hloc_so,Greal,Sreal)               !provides only diagonal one
+        !these two are providing only diagonal entries but that's only for check.
+        call dmft_gloc_matsubara(Comm,er,DoS,Hloc_so,Gmats,Smats)
+        call dmft_gloc_realaxis(Comm,er,DoS,Hloc_so,Greal,Sreal)
      else
         call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
         call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
@@ -207,10 +219,8 @@ program ed_SOC_bethe
 
 
      !print everything to check for the correct symmetry in {Y} basis
-     if (symtest) then
-        call print_G()
-        call print_Sigma()
-     endif
+     call print_G()
+     call print_Sigma()
 
 
      !Get the Weiss field/Delta function to be fitted
@@ -236,11 +246,20 @@ program ed_SOC_bethe
 
      !Perform the SELF-CONSISTENCY by fitting the new bath
      if (bath_type=="normal") then
-        call ed_chi2_fitgf(Comm,Field,bath,ispin=1)
-        call spin_symmetrize_bath(bath,save=.true.)
+        if (ed_para) then
+           call ed_chi2_fitgf(Comm,Field,bath,ispin=1)
+           call spin_symmetrize_bath(bath,save=.true.)
+        else
+           call ed_chi2_fitgf(Comm,Field,bath)
+        endif
      else
         call ed_chi2_fitgf(Comm,Field,bath)
      endif
+
+
+     !Get observables
+     call ed_get_density_matrix(rho)
+     call ed_get_quantum_SOC_operators_single()
 
 
      !Check convergence (if required change chemical potential)
@@ -488,23 +507,41 @@ contains
    subroutine print_G(suff)
      implicit none
      character(len=*),optional,intent(in)        :: suff
-     !internal
-     character(len=1)                            :: suff_
-     suff_=""
-     if (present(suff)) suff_=suff
-     suff_=reg(suff_)
-     if (master) then
-        call dmft_print_gf_matsubara(Gmats,"G"//suff_//"mats",iprint=3)
-        call dmft_print_gf_realaxis(Greal,"G"//suff_//"real",iprint=3)
+     character(len=32)                           :: Gm,Gr
+     !
+     if (present(suff)) then
+        Gm=reg("G"//suff//"mats")
+        Gr=reg("G"//suff//"real")
+     else
+        Gm=reg("Gmats")
+        Gr=reg("Greal")
      endif
+     !
+     if (master) then
+        if (symtest) then
+           call dmft_print_gf_matsubara(Gmats,Gm,iprint=3)
+           call dmft_print_gf_realaxis(Greal,Gr,iprint=3)
+        else
+           call dmft_print_gf_matsubara(Gmats,Gm,iprint=1)
+           call dmft_print_gf_realaxis(Greal,Gr,iprint=1)
+        endif
+     endif
+     !
    end subroutine print_G
 
    subroutine print_Sigma()
      implicit none
+     !
      if (master) then
-        call dmft_print_gf_matsubara(Smats,"Smats",iprint=3)
-        call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=3)
+        if (symtest) then
+           call dmft_print_gf_matsubara(Smats,"Smats",iprint=3)
+           call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=3)
+        else
+           call dmft_print_gf_matsubara(Smats,"Smats",iprint=1)
+           call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=1)
+        endif
      endif
+     !
    end subroutine print_Sigma
 
 

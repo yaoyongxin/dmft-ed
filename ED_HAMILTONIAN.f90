@@ -12,14 +12,14 @@ MODULE ED_HAMILTONIAN
   public  :: vecDim_Hv_sector
 
 
-  !>Sparse Mat-Vec product using stored sparse matrix 
+  !>Sparse Mat-Vec product using stored sparse matrix
   public  :: spMatVec_cc
 #ifdef _MPI
   public  :: spMatVec_MPI_cc
 #endif
 
 
-  !>Sparse Mat-Vec direct on-the-fly product 
+  !>Sparse Mat-Vec direct on-the-fly product
   public  :: directMatVec_cc
 #ifdef _MPI
   public  :: directMatVec_MPI_cc
@@ -57,7 +57,7 @@ contains
     MpiR = 0
     if(MpiRank==(MpiSize-1))MpiR=mod(Dim,MpiSize)
     !
-    MpiIshift = MpiRank*mpiQ
+    MpiIshift = MpiRank*mpiQ! + mpiR
     MpiIstart = MpiRank*mpiQ + 1
     MpiIend   = (MpiRank+1)*mpiQ + mpiR
     !

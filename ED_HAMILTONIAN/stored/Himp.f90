@@ -1,98 +1,106 @@
-  !Diagonal Elements, i.e. local part
-  htmp = zero
-  htmp = htmp - xmu*(sum(nup)+sum(ndw))
-  !
-  do iorb=1,Norb
-     htmp = htmp + impHloc(1,1,iorb,iorb)*nup(iorb)
-     htmp = htmp + impHloc(Nspin,Nspin,iorb,iorb)*ndw(iorb)
-  enddo
-  !
-  i = j
-  select case(MpiStatus)
-  case (.true.)
-     call sp_insert_element(MpiComm,spH0,htmp,i,i)
-  case (.false.)
-     call sp_insert_element(spH0,htmp,i,i)
-  end select
-  !
-
-  !Off-diagonal elements, i.e. non-local part
-  !1. same spin:
-  do iorb=1,Norb
-     do jorb=1,Norb
-        !this loop considers only the orbital off-diagonal terms
-        !because iorb=jorb can not have simultaneously
-        !occupation 0 and 1, as required by this if Jcondition:
-        !UP
-        Jcondition = &
-             (impHloc(1,1,iorb,jorb)/=zero) .AND. &
-             (ib(jorb)==1)                  .AND. &
-             (ib(iorb)==0)
-        if (Jcondition) then
-           call c(jorb,m,k1,sg1)
-           call cdg(iorb,k1,k2,sg2)
-           i = binary_search(H%map,k2)
-           htmp = impHloc(1,1,iorb,jorb)*sg1*sg2
-           !
-           select case(MpiStatus)
-           case (.true.)
-              call sp_insert_element(MpiComm,spH0,htmp,i,j)
-           case (.false.)
-              call sp_insert_element(spH0,htmp,i,j)
-           end select
-           !
-        endif
-        !DW
-        Jcondition = &
-             (impHloc(Nspin,Nspin,iorb,jorb)/=zero) .AND. &
-             (ib(jorb+Ns)==1)                       .AND. &
-             (ib(iorb+Ns)==0)
-        if (Jcondition) then
-           call c(jorb+Ns,m,k1,sg1)
-           call cdg(iorb+Ns,k1,k2,sg2)
-           i = binary_search(H%map,k2)
-           htmp = impHloc(Nspin,Nspin,iorb,jorb)*sg1*sg2
-           !
-           select case(MpiStatus)
-           case (.true.)
-              call sp_insert_element(MpiComm,spH0,htmp,i,j)
-           case (.false.)
-              call sp_insert_element(spH0,htmp,i,j)
-           end select
-           !
-        endif
+  do i=MpiIstart,MpiIend
+     m = H%map(i)
+     ib = bdecomp(m,2*Ns)
+     !
+     do iorb=1,Norb
+        nup(iorb)=dble(ib(iorb))
+        ndw(iorb)=dble(ib(iorb+Ns))
      enddo
-  enddo
-  !
-  !2. spin-flip part (only for the nonSU2 channel!)
-  if(ed_mode=="nonsu2")then
-     do ispin=1,Nspin
-        jspin = 3-ispin !ispin=1,jspin=2, ispin=2,jspin=1
-        !
-        do iorb=1,Norb
-           do jorb=1,Norb
-              alfa = iorb + (ispin-1)*Ns
-              beta = jorb + (jspin-1)*Ns
-              Jcondition=&
-                   (impHloc(ispin,jspin,iorb,jorb)/=zero) .AND. &
-                   (ib(beta)==1) .AND. (ib(alfa)==0)
-              if(Jcondition)then
-                 call c(beta,m,k1,sg1)
-                 call cdg(alfa,k1,k2,sg2)
-                 i = binary_search(H%map,k2)
-                 htmp = impHloc(ispin,jspin,iorb,jorb)*sg1*sg2
-                 !
-                 select case(MpiStatus)
-                 case (.true.)
-                    call sp_insert_element(MpiComm,spH0,htmp,i,j)
-                 case (.false.)
-                    call sp_insert_element(spH0,htmp,i,j)
-                 end select
-                 !
-              endif
+
+     !> H_Imp: Diagonal Elements, i.e. local part
+     htmp = zero
+     do iorb=1,Norb
+        htmp = htmp + impHloc(1,1,iorb,iorb)*nup(iorb)
+        htmp = htmp + impHloc(Nspin,Nspin,iorb,iorb)*ndw(iorb)
+        htmp = htmp - xmu*(nup(iorb)+ndw(iorb))
+     enddo
+     !
+     select case(MpiStatus)
+     case (.true.)
+        call sp_insert_element(MpiComm,spH0,htmp,i,i)
+     case (.false.)
+        call sp_insert_element(spH0,htmp,i,i)
+     end select
+     !
+
+     !Off-diagonal elements, i.e. non-local part
+     !1. same spin:
+     do iorb=1,Norb
+        do jorb=1,Norb
+           !this loop considers only the orbital off-diagonal terms
+           !because iorb=jorb can not have simultaneously
+           !occupation 0 and 1, as required by this if Jcondition:
+           !UP
+           Jcondition = &
+                (impHloc(1,1,iorb,jorb)/=zero) .AND. &
+                (ib(jorb)==1)                  .AND. &
+                (ib(iorb)==0)
+           if (Jcondition) then
+              call c(jorb,m,k1,sg1)
+              call cdg(iorb,k1,k2,sg2)
+              j = binary_search(H%map,k2)
+              htmp = conjg(impHloc(1,1,iorb,jorb))*sg1*sg2
               !
-           enddo
+              select case(MpiStatus)
+              case (.true.)
+                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
+              case (.false.)
+                 call sp_insert_element(spH0,htmp,i,j)
+              end select
+              !
+           endif
+           !DW
+           Jcondition = &
+                (impHloc(Nspin,Nspin,iorb,jorb)/=zero) .AND. &
+                (ib(jorb+Ns)==1)                       .AND. &
+                (ib(iorb+Ns)==0)
+           if (Jcondition) then
+              call c(jorb+Ns,m,k1,sg1)
+              call cdg(iorb+Ns,k1,k2,sg2)
+              j = binary_search(H%map,k2)
+              htmp = conjg(impHloc(Nspin,Nspin,iorb,jorb))*sg1*sg2
+              !
+              select case(MpiStatus)
+              case (.true.)
+                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
+              case (.false.)
+                 call sp_insert_element(spH0,htmp,i,j)
+              end select
+              !
+           endif
         enddo
      enddo
-  endif
+     !
+     !2. spin-flip part (only for the nonSU2 channel!)
+     if(ed_mode=="nonsu2")then
+        do ispin=1,Nspin
+           jspin = 3-ispin !ispin=1,jspin=2, ispin=2,jspin=1
+           !
+           do iorb=1,Norb
+              do jorb=1,Norb
+                 alfa = iorb + (ispin-1)*Ns
+                 beta = jorb + (jspin-1)*Ns
+                 Jcondition=&
+                      (impHloc(ispin,jspin,iorb,jorb)/=zero) .AND. &
+                      (ib(beta)==1) .AND. (ib(alfa)==0)
+                 if(Jcondition)then
+                    call c(beta,m,k1,sg1)
+                    call cdg(alfa,k1,k2,sg2)
+                    j = binary_search(H%map,k2)
+                    htmp = conjg(impHloc(ispin,jspin,iorb,jorb))*sg1*sg2
+                    !
+                    select case(MpiStatus)
+                    case (.true.)
+                       call sp_insert_element(MpiComm,spH0,htmp,i,j)
+                    case (.false.)
+                       call sp_insert_element(spH0,htmp,i,j)
+                    end select
+                    !
+                 endif
+                 !
+              enddo
+           enddo
+        enddo
+     endif
 
+  enddo

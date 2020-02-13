@@ -57,7 +57,7 @@ MODULE ED_AUX_FUNX
   public :: search_chemical_potential
   public :: search_chempot
   !
-  public :: SOC_jz_symmetrize
+  public :: SOC_symmetrize
   public :: atomic_SOC
   public :: atomic_SOC_rotation
   public :: orbital_Lz_rotation_NorbNspin
@@ -776,88 +776,85 @@ contains
 
 
 
-  subroutine SOC_jz_symmetrize(funct,basis)
-    implicit none
+  subroutine SOC_symmetrize(funct,basis,para)
+    !implicit none
     !passed
     complex(8),allocatable,intent(inout)         ::  funct(:,:,:,:,:)
-    logical(8),allocatable,intent(in)            ::  mask(:,:,:,:,:)
+    character(len=1),intent(in)                  ::  basis
+    logical,intent(in)                           ::  para
+    !internal
+    integer                                      ::  io,ndx,ifreq,Lfreq
     complex(8),allocatable                       ::  funct_in(:,:,:),funct_out(:,:,:)
-    complex(8),allocatable                       ::  a_funct(:),b_funct(:)
-    integer                                      ::  ispin,io
-    integer                                      ::  ifreq,Lfreq
-    logical(8)                                   ::  boolmask
+    complex(8),allocatable                       ::  J12_funct(:),J32_funct(:)
     complex(8),allocatable                       ::  U(:,:),Udag(:,:)
-    if(size(funct,dim=1)/=Nspin)stop "wrong size 1 in SOC symmetrize input f"
-    if(size(funct,dim=2)/=Nspin)stop "wrong size 2 in SOC symmetrize input f"
-    if(size(funct,dim=3)/=Norb) stop "wrong size 3 in SOC symmetrize input f"
-    if(size(funct,dim=4)/=Norb) stop "wrong size 4 in SOC symmetrize input f"
+    !
     Lfreq=size(funct,dim=5)
+    call assert_shape(funct,[Nspin,Nspin,Norb,Norb,Lfreq],"SOC_symmetrize","function")
+    !
     allocate(funct_in(Nspin*Norb,Nspin*Norb,Lfreq)); funct_in=zero
     allocate(funct_out(Nspin*Norb,Nspin*Norb,Lfreq));funct_out=zero
     allocate(U(Nspin*Norb,Nspin*Norb));U=zero
     allocate(Udag(Nspin*Norb,Nspin*Norb));Udag=zero
-    allocate(a_funct(Lfreq));a_funct=zero
-    allocate(b_funct(Lfreq));b_funct=zero
+    allocate(J12_funct(Lfreq));J12_funct=zero
+    allocate(J32_funct(Lfreq));J32_funct=zero
     !
     !function intake
     do ifreq=1,Lfreq
        funct_in(:,:,ifreq)=nn2so_reshape(funct(:,:,:,:,ifreq),Nspin,Norb)
     enddo
     !
-    !function diagonalization
-    if(Jz_basis)then
-       U=matmul(transpose(conjg(orbital_Lz_rotation_NorbNspin())),atomic_SOC_rotation())
-       Udag=transpose(conjg(U))
-    else
+    !we bring function to {J} depending on the input basis
+    if (basis=="C") then
        U=atomic_SOC_rotation()
-       Udag=transpose(conjg(U))
+    elseif (basis=="Y") then
+       U=matmul(transpose(conjg(orbital_Lz_rotation_NorbNspin())),atomic_SOC_rotation())
     endif
+    Udag=transpose(conjg(U))
     !
     do ifreq=1,Lfreq
-       funct_out(:,:,ifreq)=matmul(Udag,matmul(funct_in(:,:,ifreq),U))
+       funct_in(:,:,ifreq)=matmul(Udag,matmul(funct_in(:,:,ifreq),U))
     enddo
     !
-    !function symmetrization in the rotated basis
-    do io=1,2
-       a_funct(:)=a_funct(:)+funct_out(io,io,:)
-    enddo
-    a_funct = a_funct/2.d0
-    do io=3,6
-       b_funct(:)=b_funct(:)+funct_out(io,io,:)
-    enddo
-    b_funct = b_funct/4.d0
-    !
-    boolmask = .false.
-    if(Jz_basis)then
-       boolmask = (.not.mask(1,2,3,2,1)).and.(.not.mask(1,2,3,2,2))
-    else
-       boolmask = (.not.mask(1,2,3,1,1)).and.(.not.mask(1,2,3,1,2))
-    endif
-    if(boolmask)then
-       a_funct = ( a_funct + b_funct ) / 2.d0
-       b_funct = a_funct
-    endif
-    !
+    !function symmetrization in {J}
     funct_out=zero
-    do io=1,2
-       funct_out(io,io,:)=a_funct(:)
-    enddo
-    do io=3,6
-       funct_out(io,io,:)=b_funct(:)
-    enddo
+    if (para) then
+      !
+       do io=1,2
+          J12_funct = J12_funct + funct_in(io,io,:)/2.d0
+       enddo
+       do io=3,6
+          J32_funct = J32_funct + funct_in(io,io,:)/4.d0
+       enddo
+       !
+       do io=1,Nspin*Norb
+          if (io.le.2) funct_out(io,io,:) = J12_funct
+          if (io.gt.2) funct_out(io,io,:) = J32_funct
+       enddo
+       !
+    else
+       !J=1/2 jz=-1/2{1,1} & jz=+1/2{2,2}
+       !J=3/2 jz=-3/2{3,3} & jz=+3/2{4,4}
+       !J=3/2 jz=-1/2{5,5} & jz=+1/2{6,6}
+       do io=1,Norb
+          ndx=2*io-1
+          J12_funct = funct_in(ndx,ndx,:)-conjg(funct_in(ndx+1,ndx+1,:))/2.d0
+          funct_out(ndx,ndx,:) = J12_funct
+          funct_out(ndx+1,ndx+1,:) = -conjg(J12_funct)
+       enddo
+       !
+    endif
     !
-    !function rotation in the non-diagonal basis
-    funct_in=zero
+    !we bring function in {J} to the original input basis
     do ifreq=1,Lfreq
-       funct_in(:,:,ifreq)=matmul(U,matmul(funct_out(:,:,ifreq),Udag))
+       funct_out(:,:,ifreq)=matmul(U,matmul(funct_out(:,:,ifreq),Udag))
     enddo
     !
-    !founction out
     funct=zero
     do ifreq=1,Lfreq
        funct(:,:,:,:,ifreq)=so2nn_reshape(funct_in(:,:,ifreq),Nspin,Norb)
     enddo
-  end subroutine SOC_jz_symmetrize
+    !
+  end subroutine SOC_symmetrize
 
 
 
