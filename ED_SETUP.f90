@@ -53,10 +53,10 @@ contains
     !CHECKS:
     if(Lfit>Lmats)Lfit=Lmats
     if(Nspin>2)stop "ED ERROR: Nspin > 2 is currently not supported"
-    if(Norb>3)stop "ED ERROR: Norb > 3 is currently not supported" 
+    if(Norb>3)stop "ED ERROR: Norb > 3 is currently not supported"
     !
     if(ed_mode=="superc")then
-       if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ." 
+       if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ."
     endif
     if(ed_mode=="nonsu2")then
        if(Nspin/=2)then
@@ -91,7 +91,7 @@ contains
   ! Norb    = # of impurity orbitals
   ! Nbath   = # of bath levels (depending on bath_type)
   ! Ns      = # of levels (per spin)
-  ! Nlevels = 2*Ns = Total # of levels (counting spin degeneracy 2) 
+  ! Nlevels = 2*Ns = Total # of levels (counting spin degeneracy 2)
   !+------------------------------------------------------------------+
   subroutine ed_setup_dimensions()
     integer                                           :: maxtwoJz,inJz,dimJz
@@ -150,7 +150,7 @@ contains
   subroutine init_ed_structure(MpiComm)
     integer,optional                                  :: MpiComm
     logical                                           :: control
-    real(8),dimension(Nspin,Nspin,Norb,Norb)          :: reHloc         !local hamiltonian, real part 
+    real(8),dimension(Nspin,Nspin,Norb,Norb)          :: reHloc         !local hamiltonian, real part
     real(8),dimension(Nspin,Nspin,Norb,Norb)          :: imHloc         !local hamiltonian, imag part
     integer                                           :: i,dim_sector_max(2),iorb,jorb,ispin,jspin
     logical                                           :: MPI_MASTER=.true.
@@ -493,7 +493,7 @@ contains
     enddo
   end subroutine setup_pointers_normal
 
-  ! 
+  !
   !SUPERCONDUCTING
   !
   subroutine setup_pointers_superc
@@ -581,7 +581,7 @@ contains
           enddo
        enddo
     end select
-    !    
+    !
     getCsector=0
     !c_up
     do isector=1,Nsectors
@@ -832,7 +832,7 @@ contains
     integer :: i,dim,Nb
     dim=0
     Nb=Ns-mz
-    do i=0,Nb/2 
+    do i=0,Nb/2
        dim=dim + 2**(Nb-2*i)*binomial(ns,Nb-2*i)*binomial(ns-Nb+2*i,i)
     enddo
   end function get_superc_sector_dimension
@@ -877,7 +877,7 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : constructs the sectors by storing the map to the 
+  !PURPOSE  : constructs the sectors by storing the map to the
   !states i\in Hilbert_space from the states count in H_sector.
   !|ImpUP,BathUP>|ImpDW,BathDW >
   !+------------------------------------------------------------------+
@@ -1014,7 +1014,7 @@ contains
     if(allocated(Jz))deallocate(Jz);allocate(Jz(dim));Jz=0.d0
 
     dim=0
-    !mi guardo tutti i possibili valori di nup,ndw 
+    !mi guardo tutti i possibili valori di nup,ndw
     !anche quelli con la densità diversa da quella del settore
     do idw=0,2**Ns-1
        jvec = bdecomp(idw,Ns)
@@ -1071,15 +1071,15 @@ contains
 
 
   !+-------------------------------------------------------------------+
-  !PURPOSE: input state |in> of the basis and calculates 
-  !   |out>=C_pos|in>  OR  |out>=C^+_pos|in> ; 
+  !PURPOSE: input state |in> of the basis and calculates
+  !   |out>=C_pos|in>  OR  |out>=C^+_pos|in> ;
   !   the sign of |out> has the phase convention, pos labels the sites
   !+-------------------------------------------------------------------+
   subroutine c(pos,in,out,fsgn)
     integer,intent(in)    :: pos
     integer,intent(in)    :: in
     integer,intent(inout) :: out
-    real(8),intent(inout) :: fsgn    
+    real(8),intent(inout) :: fsgn
     integer               :: l
     if(.not.btest(in,pos-1))stop "C error: C_i|...0_i...>"
     fsgn=1d0
@@ -1093,7 +1093,7 @@ contains
     integer,intent(in)    :: pos
     integer,intent(in)    :: in
     integer,intent(inout) :: out
-    real(8),intent(inout) :: fsgn    
+    real(8),intent(inout) :: fsgn
     integer               :: l
     if(btest(in,pos-1))stop "C^+ error: C^+_i|...1_i...>"
     fsgn=1d0
@@ -1116,7 +1116,7 @@ contains
 
   !+------------------------------------------------------------------+
   !PURPOSE  : Build the re-ordering map to go from sector A(nup,ndw)
-  ! to its twin sector B(ndw,nup), with nup!=ndw. 
+  ! to its twin sector B(ndw,nup), with nup!=ndw.
   !+------------------------------------------------------------------+
   subroutine twin_sector_order(isector,order)
     integer                          :: isector
@@ -1128,7 +1128,7 @@ contains
     !- build the map from the A-sector to \HHH
     !- get the list of states in \HHH corresponding to sector B twin of A
     !- return the ordering of B-states in \HHH with respect to those of A
-    select case(ed_mode)        
+    select case(ed_mode)
     case default
        call build_sector(isector,H)
        do i=1,dim
@@ -1185,8 +1185,8 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : get the twin of a given sector (the one with opposite 
-  ! quantum numbers): 
+  !PURPOSE  : get the twin of a given sector (the one with opposite
+  ! quantum numbers):
   ! nup,ndw ==> ndw,nup (spin-exchange)
   ! sz      ==> -sz     (total spin flip)
   ! n       ==> 2*Ns-n  (particle hole)
@@ -1244,7 +1244,7 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : input a vector ib(Nlevels) with the binary sequence 
+  !PURPOSE  : input a vector ib(Nlevels) with the binary sequence
   ! and output the corresponding state |i>
   !(corresponds to the recomposition of the number i-1)
   !+------------------------------------------------------------------+
@@ -1530,7 +1530,7 @@ end MODULE ED_SETUP
 ! !+------------------------------------------------------------------+
 ! !PURPOSE  : return the Number of sectors using local variables
 ! ! This is similar to setup Dimensions but does only return Nsectors
-! ! It is used in initialization to allocate arrays which require 
+! ! It is used in initialization to allocate arrays which require
 ! ! to know Nsectors before really initializing ED
 ! !+------------------------------------------------------------------+
 ! function get_Nsectors() result(Nsectors)

@@ -381,7 +381,7 @@ contains
                       do iorb=1,Norb
                          do jorb=1,Norb
                             Delta(ispin,jspin,iorb,jorb,i)=Delta(ispin,jspin,iorb,jorb,i)+ &
-                                 conjg(dmft_bath_%vr(ibath)) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_%vr(ibath)
+                                 dmft_bath_%t(ibath) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_%t(ibath)
                          enddo
                       enddo
                    enddo
@@ -774,7 +774,7 @@ contains
                       do iorb=1,Norb
                          do jorb=1,Norb
                             Delta(ispin,jspin,iorb,jorb,i)=Delta(ispin,jspin,iorb,jorb,i)+ &
-                                 conjg(dmft_bath_%vr(ibath)) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_%vr(ibath)
+                                 dmft_bath_%t(ibath) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_%t(ibath)
                          enddo
                       enddo
                    enddo

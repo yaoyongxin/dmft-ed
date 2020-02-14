@@ -8,7 +8,7 @@ MODULE ED_HAMILTONIAN_STORED_HxV
   public :: ed_buildH_c
 
 
-  !>Sparse Mat-Vec product using stored sparse matrix 
+  !>Sparse Mat-Vec product using stored sparse matrix
   public  :: spMatVec_cc
 #ifdef _MPI
   public  :: spMatVec_MPI_cc
@@ -63,7 +63,7 @@ contains
              if(bath_type/="replica")then
                 diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
              else
-                diag_hybr(ispin,iorb,ibath)=dmft_bath%vr(ibath)
+                diag_hybr(ispin,iorb,ibath)=dmft_bath%t(ibath)
              endif
           enddo
        enddo
@@ -107,7 +107,7 @@ contains
        endif
 #else
        call sp_dump_matrix(spH0,Hmat)
-#endif          
+#endif
     endif
     !
   end subroutine ed_buildH_c
@@ -122,7 +122,7 @@ contains
 
 
   !####################################################################
-  !        SPARSE MAT-VEC PRODUCT USING STORED SPARSE MATRIX 
+  !        SPARSE MAT-VEC PRODUCT USING STORED SPARSE MATRIX
   !####################################################################
   !+------------------------------------------------------------------+
   !PURPOSE: Perform the matrix-vector product H*v used in the

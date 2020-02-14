@@ -4,6 +4,8 @@ MODULE DMFT_ED
 
   USE ED_AUX_FUNX, only:                       &
        set_Hloc                               ,&
+       print_Hloc                             ,&
+       set_replica_operators                  ,&
        lso2nnn_reshape                        ,&
        nnn2lso_reshape                        ,&
        so2nn_reshape                          ,&
@@ -74,6 +76,7 @@ MODULE DMFT_ED
        ph_trans_bath                          ,&
        break_symmetry_bath                    ,&
        enforce_normal_bath
+
 
 
 

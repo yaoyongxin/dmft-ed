@@ -141,6 +141,7 @@ program hm_Nbands_bethe
      if(symOrbs)then
         call ed_chi2_fitgf(comm,Weiss,bath,ispin=1)
         call orb_equality_bath(bath,save=.true.)
+        call orb_symmetrize_bath(bath,save=.true.)
      else
         call ed_chi2_fitgf(comm,Weiss,bath,ispin=1)
      endif

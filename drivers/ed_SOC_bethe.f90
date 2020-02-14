@@ -52,6 +52,7 @@ program ed_SOC_bethe
   !Observables
   real(8),dimension(:),allocatable               :: dens
   complex(8),dimension(:,:),allocatable          :: rho
+  complex(8),dimension(:,:),allocatable          :: Op
   !Miscellaneous:
   logical                                        :: socsym,calcG0
   logical                                        :: symtest
@@ -116,6 +117,7 @@ program ed_SOC_bethe
   allocate(Field_old(Nspin,Nspin,Norb,Norb,Lmats)); Field_old=zero
   allocate(Ftest(Lmats)); Ftest=zero
   allocate(dens(Norb)); dens=0d0
+  allocate(Op(Nspin*Norb,Nspin*Norb)); Op=zero
   allocate(rho(Nspin*Norb,Nspin*Norb)); rho=zero
   allocate(wr(Lreal)); wr=linspace(wini,wfin,Lreal,mesh=dw)
   allocate(wm(Lmats)); wm = pi/beta*dble(2*arange(1,Lmats)-1)
@@ -157,7 +159,12 @@ program ed_SOC_bethe
   endif
   !
   Hloc_nn = so2nn_reshape(Hloc_so,Nspin,Norb)
-  if (master) call TB_write_Hloc(Hloc_so)
+  if (master) then
+     call TB_write_Hloc(Hloc_so,"Hloc")
+     call Ybasis_to_Jbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_J")
+     call Jbasis_to_Cbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_C")
+     call Cbasis_to_Ybasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_Y")
+  endif
   !
   if (calcG0) then
      if (lattice.eq."Bethe") then
@@ -168,7 +175,15 @@ program ed_SOC_bethe
         call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
      endif
      call print_G("0")
+     do iw=1,Lreal
+        rho=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
+        call Ybasis_to_Jbasis(rho,"Greal")
+        Greal(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
+     enddo
+     call print_G("0J")
   endif
+  !
+
 
 
   !######### SOLVER INITIALIZATION  #########
@@ -179,7 +194,15 @@ program ed_SOC_bethe
   else
      Jz_basis = .true.
      bath_type = "replica"
+     ed_mode = "nonsu2"
      Nb=get_bath_dimension(Hloc_nn)
+     !
+     Op = eye(Nso)
+     call set_replica_operators(Op,1)
+     Op=atomic_SOC()
+     call Cbasis_to_Ybasis(Op,"SOC")
+     call set_replica_operators(Op,2)
+     !
   endif
   if(master)write(LOGfile,*)"Bath_size:",Nb
   allocate(Bath(Nb));Bath=0.0d0
@@ -249,6 +272,7 @@ program ed_SOC_bethe
         if (ed_para) then
            call ed_chi2_fitgf(Comm,Field,bath,ispin=1)
            call spin_symmetrize_bath(bath,save=.true.)
+           call orb_symmetrize_bath(bath,save=.true.)
         else
            call ed_chi2_fitgf(Comm,Field,bath)
         endif
@@ -258,8 +282,17 @@ program ed_SOC_bethe
 
 
      !Get observables
-     call ed_get_density_matrix(rho)
-     call ed_get_quantum_SOC_operators_single()
+     if (master) then
+        call ed_get_density_matrix(rho)
+        if (lambda_soc.ne.0d0) then
+           call Ybasis_to_Cbasis(rho,"imp_density_matrix_Y.dat")
+           call print_Hloc(rho,"imp_density_matrix_C.dat")
+           call Cbasis_to_Jbasis(rho,"imp_density_matrix_C.dat")
+           call print_Hloc(rho,"imp_density_matrix_J.dat")
+        endif
+        !
+       call ed_get_quantum_SOC_operators_single()
+    endif
 
 
      !Check convergence (if required change chemical potential)
@@ -305,7 +338,7 @@ contains
      bk_y = [0.d0,1.d0,0.d0]*2*pi
      bk_z = [0.d0,0.d0,1.d0]*2*pi
      !
-     if (lattice.eq."Sqaure") then
+     if (lattice.eq."Square") then
         call TB_set_bk(bk_x,bk_y)
         Lk=Nk*Nk
         allocate(Hk(Nso,Nso,Lk));Hk=zero
@@ -397,6 +430,12 @@ contains
      !
      A=matmul(Udag,matmul(B,U))
      !
+     do io=1,Nso
+        do jo=1,Nso
+           if (abs(A(io,jo))<1e-4) A(io,jo)=zero
+        enddo
+     enddo
+     !
    end subroutine Cbasis_to_Ybasis
    !
    subroutine Ybasis_to_Cbasis(A,varname)
@@ -416,6 +455,12 @@ contains
      Udag=transpose(conjg(U))
      !
      A=matmul(Udag,matmul(B,U))
+     !
+     do io=1,Nso
+        do jo=1,Nso
+           if (abs(A(io,jo))<1e-4) A(io,jo)=zero
+        enddo
+     enddo
      !
   end subroutine Ybasis_to_Cbasis
   !
@@ -437,6 +482,12 @@ contains
     !
     A=matmul(Udag,matmul(B,U))
     !
+    do io=1,Nso
+      do jo=1,Nso
+          if (abs(A(io,jo))<1e-4) A(io,jo)=zero
+      enddo
+    enddo
+    !
   end subroutine Cbasis_to_Jbasis
   !
   subroutine Jbasis_to_Cbasis(A,varname)
@@ -456,6 +507,12 @@ contains
     Udag=transpose(conjg(U))
     !
     A=matmul(Udag,matmul(B,U))
+    !
+    do io=1,Nso
+      do jo=1,Nso
+          if (abs(A(io,jo))<1e-4) A(io,jo)=zero
+      enddo
+    enddo
     !
   end subroutine Jbasis_to_Cbasis
   !
@@ -477,6 +534,12 @@ contains
     !
     A=matmul(Udag,matmul(B,U))
     !
+    do io=1,Nso
+      do jo=1,Nso
+          if (abs(A(io,jo))<1e-4) A(io,jo)=zero
+      enddo
+    enddo
+    !
   end subroutine Ybasis_to_Jbasis
   !
   subroutine Jbasis_to_Ybasis(A,varname)
@@ -496,6 +559,12 @@ contains
     Udag=transpose(conjg(U))
     !
     A=matmul(Udag,matmul(B,U))
+    !
+    do io=1,Nso
+      do jo=1,Nso
+          if (abs(A(io,jo))<1e-4) A(io,jo)=zero
+      enddo
+    enddo
     !
   end subroutine Jbasis_to_Ybasis
 

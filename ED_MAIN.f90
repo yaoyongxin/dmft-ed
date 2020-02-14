@@ -61,7 +61,7 @@ contains
   subroutine ed_init_solver_single(bath,Hloc)
     real(8),dimension(:),intent(inout) :: bath
     complex(8),intent(in)              :: Hloc(Nspin,Nspin,Norb,Norb)
-    logical                            :: check 
+    logical                            :: check
     logical,save                       :: isetup=.true.
     integer                            :: i
     logical                            :: MPI_MASTER=.true.
@@ -105,7 +105,7 @@ contains
     integer                            :: MpiComm
     real(8),dimension(:),intent(inout) :: bath
     complex(8),intent(in)              :: Hloc(Nspin,Nspin,Norb,Norb)
-    logical                            :: check 
+    logical                            :: check
     logical,save                       :: isetup=.true.
     integer                            :: i
     logical                            :: MPI_MASTER=.true.
@@ -131,8 +131,9 @@ contains
     call allocate_dmft_bath(dmft_bath)
     if(bath_type=="replica")call init_dmft_bath_mask(dmft_bath)
     call init_dmft_bath(dmft_bath)
-    !call write_dmft_bath(dmft_bath,LOGfile)
     call get_dmft_bath(dmft_bath,bath)
+    !call write_dmft_bath(dmft_bath,LOGfile)
+    !write(*,*)bath
     !
     if(isetup)then
        select case(ed_mode)
@@ -245,7 +246,7 @@ contains
 
   !+-----------------------------------------------------------------------------+!
   !PURPOSE: solve the impurity problems for a single or many independent
-  ! lattice site using ED. 
+  ! lattice site using ED.
   !+-----------------------------------------------------------------------------+!
   !+-----------------------------------------------------------------------------+!
   !                              SINGLE SITE                                      !
@@ -272,10 +273,10 @@ contains
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call buildgf_impurity()             !build the one-particle impurity Green's functions  & Self-energy
     call buildchi_impurity()            !build the local susceptibilities (spin [todo charge])
-    call observables_impurity()         !obtain impurity observables as thermal averages.          
+    call observables_impurity()         !obtain impurity observables as thermal averages.
     call local_energy_impurity()        !obtain the local energy of the effective impurity problem.
     !
-    call deallocate_dmft_bath(dmft_bath)   
+    call deallocate_dmft_bath(dmft_bath)
     call es_delete_espace(state_list)
     !
     nullify(spHtimesV_cc)
@@ -313,10 +314,10 @@ contains
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
     call buildgf_impurity()             !build the one-particle impurity Green's functions  & Self-energy
     call buildchi_impurity()            !build the local susceptibilities (spin [todo charge])
-    call observables_impurity()         !obtain impurity observables as thermal averages.          
+    call observables_impurity()         !obtain impurity observables as thermal averages.
     call local_energy_impurity()        !obtain the local energy of the effective impurity problem.
     !
-    call deallocate_dmft_bath(dmft_bath)   
+    call deallocate_dmft_bath(dmft_bath)
     call es_delete_espace(state_list)
     !
     !DELETE THE LOCAL MPI COMMUNICATOR:
@@ -350,7 +351,7 @@ contains
     real(8),optional :: Jh_ii(size(bath,1))
     real(8),optional :: Jp_ii(size(bath,1))
     real(8),optional :: Jx_ii(size(bath,1))
-    ! 
+    !
     integer          :: i,j,ilat,iorb,jorb,ispin,jspin
     integer          :: Nsites
     logical          :: check_dim
@@ -410,20 +411,20 @@ contains
        check_dim = check_bath_dimension(bath(ilat,:))
        if(.not.check_dim) stop "init_lattice_bath: wrong bath size dimension 1 or 2 "
     end do
-    Smatsii  = zero 
-    Srealii  = zero 
-    SAmatsii = zero 
-    SArealii = zero 
-    Gmatsii  = zero 
-    Grealii  = zero 
-    Fmatsii  = zero 
-    Frealii  = zero 
-    nii      = 0d0  
-    dii      = 0d0  
-    mii      = 0d0  
-    pii      = 0d0  
-    eii      = 0d0  
-    ddii     = 0d0 
+    Smatsii  = zero
+    Srealii  = zero
+    SAmatsii = zero
+    SArealii = zero
+    Gmatsii  = zero
+    Grealii  = zero
+    Fmatsii  = zero
+    Frealii  = zero
+    nii      = 0d0
+    dii      = 0d0
+    mii      = 0d0
+    pii      = 0d0
+    eii      = 0d0
+    ddii     = 0d0
     imp_density_matrix_ii = zero
     !
     call start_timer
@@ -507,7 +508,7 @@ contains
     !
     integer          :: neigen_sectortmp(size(bath,1),Nsectors)
     integer          :: neigen_totaltmp(size(bath,1))
-    ! 
+    !
     integer          :: i,j,ilat,iorb,jorb,ispin,jspin
     integer          :: Nsites
     logical          :: check_dim
@@ -517,7 +518,7 @@ contains
     integer          :: MPI_SIZE=1
     logical          :: MPI_MASTER=.true.
     !
-    integer          :: mpi_err 
+    integer          :: mpi_err
     !
     MPI_ID     = get_Rank_MPI(MpiComm)
     MPI_SIZE   = get_Size_MPI(MpiComm)
@@ -644,20 +645,20 @@ contains
     neigen_sectorii=0
     neigen_totalii =0
     !
-    Smatsii  = zero 
-    Srealii  = zero 
-    SAmatsii = zero 
-    SArealii = zero 
-    Gmatsii  = zero 
-    Grealii  = zero 
-    Fmatsii  = zero 
-    Frealii  = zero 
-    nii      = 0d0  
-    dii      = 0d0  
-    mii      = 0d0  
-    pii      = 0d0  
-    eii      = 0d0  
-    ddii     = 0d0  
+    Smatsii  = zero
+    Srealii  = zero
+    SAmatsii = zero
+    SArealii = zero
+    Gmatsii  = zero
+    Grealii  = zero
+    Fmatsii  = zero
+    Frealii  = zero
+    nii      = 0d0
+    dii      = 0d0
+    mii      = 0d0
+    pii      = 0d0
+    eii      = 0d0
+    ddii     = 0d0
     imp_density_matrix_ii = zero
     call MPI_ALLREDUCE(neigen_sectortmp,neigen_sectorii,Nsites*Nsectors,MPI_INTEGER,MPI_SUM,MpiComm,mpi_err)
     call MPI_ALLREDUCE(neigen_totaltmp,neigen_totalii,Nsites,MPI_INTEGER,MPI_SUM,MpiComm,mpi_err)

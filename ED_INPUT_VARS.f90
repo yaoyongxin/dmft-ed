@@ -16,9 +16,9 @@ MODULE ED_INPUT_VARS
   integer              :: nloop               !max dmft loop variables
   real(8),dimension(3) :: Uloc                !local interactions
   real(8)              :: Ust                 !intra-orbitals interactions
-  real(8)              :: Jh                  !J_Hund: Hunds' coupling constant 
+  real(8)              :: Jh                  !J_Hund: Hunds' coupling constant
   real(8)              :: Jx                  !J_X: coupling constant for the spin-eXchange interaction term
-  real(8)              :: Jp                  !J_P: coupling constant for the Pair-hopping interaction term 
+  real(8)              :: Jp                  !J_P: coupling constant for the Pair-hopping interaction term
   real(8)              :: xmu                 !chemical potential
   real(8)              :: deltasc             !breaking symmetry field
   real(8)              :: beta                !inverse temperature
@@ -37,7 +37,7 @@ MODULE ED_INPUT_VARS
   !
   integer              :: ed_verbose          !
   logical              :: ed_sparse_H         !flag to select  storage of sparse matrix H (mem--, cpu++) if TRUE, or direct on-the-fly H*v product (mem++, cpu--) if FALSE
-  logical              :: ed_solve_offdiag_gf !flag to select the calculation of the off-diagonal impurity GF. this is T by default if bath_type/=normal 
+  logical              :: ed_solve_offdiag_gf !flag to select the calculation of the off-diagonal impurity GF. this is T by default if bath_type/=normal
   logical              :: ed_print_Sigma      !flag to print impurity Self-energies
   logical              :: ed_print_G          !flag to print impurity Green`s functions
   logical              :: ed_print_G0         !flag to print impurity non-interacting Green`s functions
@@ -49,8 +49,8 @@ MODULE ED_INPUT_VARS
   real(8)              :: ed_vsf_ratio        !
   real(8)              :: ed_bath_noise_thr   !
   !
-  character(len=12)    :: lanc_method         !select the lanczos method to be used in the determination of the spectrum. ARPACK (default), LANCZOS (T=0 only) 
-  real(8)              :: lanc_tolerance      !Tolerance for the Lanczos iterations as used in Arpack and plain lanczos. 
+  character(len=12)    :: lanc_method         !select the lanczos method to be used in the determination of the spectrum. ARPACK (default), LANCZOS (T=0 only)
+  real(8)              :: lanc_tolerance      !Tolerance for the Lanczos iterations as used in Arpack and plain lanczos.
   integer              :: lanc_niter          !Max number of Lanczos iterations
   integer              :: lanc_ngfiter        !Max number of iteration in resolvant tri-diagonalization
   integer              :: lanc_ncv_factor     !Set the size of the block used in Lanczos-Arpack by multiplying the required Neigen (Ncv=lanc_ncv_factor*Neigen+lanc_ncv_add)
@@ -75,9 +75,12 @@ MODULE ED_INPUT_VARS
   real(8)              :: ndelta              !initial chemical potential step
   real(8)              :: ncoeff              !multiplier for the initial ndelta read from a file (ndelta-->ndelta*ncoeff)
   integer              :: niter               !
-  logical              :: Jz_basis
-  logical              :: Jz_max
-  real(8)              :: Jz_max_value
+  logical              :: Jz_basis            !switch to spherical harmonics basis (Interaction need to be rotated)
+  logical              :: Jz_max              !limit the number of sectorn spanned by the solver (like ed_sectors_shift)
+  real(8)              :: Jz_max_value        !maximum Jz reached by sector scan
+  !
+  logical              :: replica_operators   !flag to set the bath representation via user provided fixed operators
+  integer              :: Nop                 !number of user provided fixed operators
 
 
   !Some parameters for function dimension:
@@ -137,7 +140,7 @@ contains
     call parse_input_variable(ed_sectors,"ED_SECTORS",INPUTunit,default=.false.,comment="flag to reduce sector scan for the spectrum to specific sectors +/- ed_sectors_shift.")
     call parse_input_variable(ed_sectors_shift,"ED_SECTORS_SHIFT",INPUTunit,1,comment="shift to ed_sectors")
     call parse_input_variable(ed_sparse_H,"ED_SPARSE_H",INPUTunit,default=.true.,comment="flag to select  storage of sparse matrix H (mem--, cpu++) if TRUE, or direct on-the-fly H*v product (mem++, cpu--) if FALSE ")
-    call parse_input_variable(ed_solve_offdiag_gf,"ED_SOLVE_OFFDIAG_GF",INPUTunit,default=.false.,comment="flag to select the calculation of the off-diagonal impurity GF. this is T by default if bath_type/=normal") 
+    call parse_input_variable(ed_solve_offdiag_gf,"ED_SOLVE_OFFDIAG_GF",INPUTunit,default=.false.,comment="flag to select the calculation of the off-diagonal impurity GF. this is T by default if bath_type/=normal")
     call parse_input_variable(ed_print_Sigma,"ED_PRINT_SIGMA",INPUTunit,default=.true.,comment="flag to print impurity Self-energies")
     call parse_input_variable(ed_print_G,"ED_PRINT_G",INPUTunit,default=.true.,comment="flag to print impurity Greens function")
     call parse_input_variable(ed_print_G0,"ED_PRINT_G0",INPUTunit,default=.true.,comment="flag to print non-interacting impurity Greens function")
@@ -150,7 +153,7 @@ contains
     call parse_input_variable(nread,"NREAD",INPUTunit,default=0.d0,comment="Objective density for fixed density calculations.")
     call parse_input_variable(nerr,"NERR",INPUTunit,default=1.d-4,comment="Error threshold for fixed density calculations.")
     call parse_input_variable(ndelta,"NDELTA",INPUTunit,default=0.1d0,comment="Initial step for fixed density calculations.")
-    call parse_input_variable(ncoeff,"NCOEFF",INPUTunit,default=1d0,comment="multiplier for the initial ndelta read from a file (ndelta-->ndelta*ncoeff).")    
+    call parse_input_variable(ncoeff,"NCOEFF",INPUTunit,default=1d0,comment="multiplier for the initial ndelta read from a file (ndelta-->ndelta*ncoeff).")
     call parse_input_variable(wini,"WINI",INPUTunit,default=-5.d0,comment="Smallest real-axis frequency")
     call parse_input_variable(wfin,"WFIN",INPUTunit,default=5.d0,comment="Largest real-axis frequency")
     call parse_input_variable(chispin_flag,"CHISPIN_FLAG",INPUTunit,default=.false.,comment="Flag to activate spin susceptibility calculation.")
@@ -190,10 +193,13 @@ contains
     call parse_input_variable(Hfile,"HFILE",INPUTunit,default="hamiltonian",comment="File where to retrieve/store the bath parameters.")
     call parse_input_variable(HLOCfile,"impHfile",INPUTunit,default="inputHLOC.in",comment="File read the input local H.")
     call parse_input_variable(LOGfile,"LOGFILE",INPUTunit,default=6,comment="LOG unit.")
-    call parse_input_variable(Jz_basis,"JZ_BASIS",INPUTunit,default=.false.,comment="")
-    call parse_input_variable(Jz_max,"JZ_MAX",INPUTunit,default=.false.,comment="")
-    call parse_input_variable(Jz_max_value,"JZ_MAX_VALUE",INPUTunit,default=1000.d0,comment="")
+    call parse_input_variable(Jz_basis,"JZ_BASIS",INPUTunit,default=.false.,comment="switch to spherical harmonics basis (Interaction need to be rotated)")
+    call parse_input_variable(Jz_max,"JZ_MAX",INPUTunit,default=.false.,comment="limit the number of sectorn spanned by the solver (like ed_sectors_shift)")
+    call parse_input_variable(Jz_max_value,"JZ_MAX_VALUE",INPUTunit,default=1000.d0,comment="maximum Jz reached by sector scan")
     call parse_input_variable(ed_verbose,"ED_VERBOSE",INPUTunit,default=3,comment="Verbosity level: 0=almost nothing --> 3:all.")
+    !
+    call parse_input_variable(replica_operators,"REPLICA_OPERATORS",INPUTunit,default=.false.,comment="Flag to set the bath representation via user provided fixed operators")
+    call parse_input_variable(Nop,"NOP",INPUTunit,default=0,comment="Number of user provided fixed operators")
     !
 #ifdef _MPI
     if(present(comm))then

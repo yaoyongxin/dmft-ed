@@ -1,11 +1,11 @@
-! > SPARSE MAT-VEC DIRECT ON-THE-FLY PRODUCT 
+! > SPARSE MAT-VEC DIRECT ON-THE-FLY PRODUCT
 MODULE ED_HAMILTONIAN_DIRECT_HxV
   USE ED_HAMILTONIAN_SHARED
   implicit none
   private
 
 
-  !>Sparse Mat-Vec direct on-the-fly product 
+  !>Sparse Mat-Vec direct on-the-fly product
   public  :: directMatVec_cc
 #ifdef _MPI
   public  :: directMatVec_MPI_cc
@@ -57,7 +57,7 @@ contains
              if(bath_type/="replica")then
                 diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
              else
-                diag_hybr(ispin,iorb,ibath)=dmft_bath%vr(ibath)
+                diag_hybr(ispin,iorb,ibath)=dmft_bath%t(ibath)
              endif
           enddo
        enddo
@@ -139,7 +139,7 @@ contains
              if(bath_type/="replica")then
                 diag_hybr(ispin,iorb,ibath)=dcmplx(dmft_bath%v(ispin,iorb,ibath),00d0)
              else
-                diag_hybr(ispin,iorb,ibath)=dmft_bath%vr(ibath)
+                diag_hybr(ispin,iorb,ibath)=dmft_bath%t(ibath)
              endif
           enddo
        enddo
@@ -200,9 +200,3 @@ contains
 
 
 end MODULE ED_HAMILTONIAN_DIRECT_HXV
-
-
-
-
-
-

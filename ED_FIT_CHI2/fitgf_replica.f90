@@ -1,7 +1,7 @@
 !##################################################################
-! THE CALCULATION OF THE \chi^2 FUNCTIONS USE PROCEDURES FURTHER 
+! THE CALCULATION OF THE \chi^2 FUNCTIONS USE PROCEDURES FURTHER
 ! BELOW TO EVALUATE INDEPENDENTLY THE ANDERSON MODEL:
-!  - DELTA, 
+!  - DELTA,
 !  -\GRAD DELTA
 !  - G0
 ! THE LATTER ARE ADAPTED FROM THE PROCEDURES:
@@ -197,7 +197,7 @@ end subroutine chi2_fitgf_replica
 
 
 !##################################################################
-! THESE PROCEDURES EVALUATES THE \chi^2 FUNCTIONS TO MINIMIZE. 
+! THESE PROCEDURES EVALUATES THE \chi^2 FUNCTIONS TO MINIMIZE.
 !##################################################################
 !+-------------------------------------------------------------+
 !PURPOSE: Evaluate the \chi^2 distance of \Delta_Anderson function.
@@ -225,9 +225,9 @@ end function chi2_delta_replica
 
 
 !+-------------------------------------------------------------+
-!PURPOSE: Evaluate the \chi^2 distance of G_0_Anderson function 
-! The Gradient is not evaluated, so the minimization requires 
-! a numerical estimate of the gradient. 
+!PURPOSE: Evaluate the \chi^2 distance of G_0_Anderson function
+! The Gradient is not evaluated, so the minimization requires
+! a numerical estimate of the gradient.
 !+-------------------------------------------------------------+
 function chi2_weiss_replica(a) result(chi2)
   real(8),dimension(:)                               :: a
@@ -253,10 +253,10 @@ end function chi2_weiss_replica
 
 
 !##################################################################
-! THESE PROCEDURES EVALUATES THE 
+! THESE PROCEDURES EVALUATES THE
 ! - \delta
 ! - g0
-! FUNCTIONS. 
+! FUNCTIONS.
 !##################################################################
 function delta_replica(a) result(Delta)
   real(8),dimension(:)                                :: a
@@ -302,7 +302,7 @@ function delta_replica(a) result(Delta)
               do iorb=1,Norb
                  do jorb=1,Norb
                     Delta(ispin,jspin,iorb,jorb,i)=Delta(ispin,jspin,iorb,jorb,i)+ &
-                      conjg(dmft_bath_tmp%vr(ibath))*invH_knn(ispin,jspin,iorb,jorb,ibath)*dmft_bath_tmp%vr(ibath)
+                      dmft_bath_tmp%t(ibath) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_tmp%t(ibath)
                 enddo
               enddo
            enddo
@@ -354,5 +354,3 @@ function g0and_replica(a) result(G0and)
   enddo
   !
 end function g0and_replica
-
-

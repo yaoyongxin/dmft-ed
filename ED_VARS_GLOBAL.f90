@@ -4,7 +4,7 @@ MODULE ED_VARS_GLOBAL
 #ifdef _MPI
   USE MPI
   USE SF_MPI
-#endif  
+#endif
   implicit none
 
 
@@ -14,12 +14,17 @@ MODULE ED_VARS_GLOBAL
      real(8),dimension(:,:,:),allocatable        :: d     !SC amplitues   [Nspin][Norb][Nbath]/[Nspin][1][Nbath]
      real(8),dimension(:,:,:),allocatable        :: v     !spin-keep hyb. [Nspin][Norb][Nbath]
      real(8),dimension(:,:,:),allocatable        :: u     !spin-flip hyb. [Nspin][Norb][Nbath]
-     complex(8),dimension(:),allocatable         :: vr    !diagonal hyb.  [Nbath]
+     real(8),dimension(:),allocatable            :: t     !diagonal hyb.  [Nbath]
+     real(8),dimension(:,:),allocatable          :: o     !OpMat coupling [Nop][Nbath]
      complex(8),dimension(:,:,:,:,:),allocatable :: h     !Replica hamilt [Nspin][Nspin][Norb][Norb][Nbath]
      logical(8),dimension(:,:,:,:,:),allocatable :: mask  !impHloc mask   [Nspin][Nspin][Norb][Norb][Re,Im]
-     complex(8),dimension(:,:,:,:,:),allocatable :: LS    !Replica hamilt [Nspin][Nspin][Norb][Norb][LS,LSrot]
      logical                                     :: status=.false.
   end type effective_bath
+
+  !operatorial representation of the replica bath structure
+  !INTERNAL USE (accessed thru functions)
+  !=========================================================
+  complex(8),dimension(:,:,:,:,:),allocatable    :: OpMat !operators      [Nspin][Nspin][Norb][Norb][Nop]
 
 
 
@@ -39,6 +44,7 @@ MODULE ED_VARS_GLOBAL
      module procedure :: map_deallocate_scalar
      module procedure :: map_deallocate_vector
   end interface map_deallocate
+
 
 
 
@@ -100,16 +106,16 @@ MODULE ED_VARS_GLOBAL
 
   !Variables for DIAGONALIZATION
   !PRIVATE
-  !=========================================================  
+  !=========================================================
   type(sparse_matrix_csr)                            :: spH0
   procedure(cc_sparse_HxV),pointer                   :: spHtimesV_cc=>null()
 
 
   !Variables for DIAGONALIZATION
   !PRIVATE
-  !=========================================================  
+  !=========================================================
   integer,allocatable,dimension(:)                   :: neigen_sector
-  !--------------- LATTICE WRAP VARIABLES -----------------!  
+  !--------------- LATTICE WRAP VARIABLES -----------------!
   integer,allocatable,dimension(:,:)                 :: neigen_sectorii
   integer,allocatable,dimension(:)                   :: neigen_totalii
   logical                                            :: trim_state_list=.false.
@@ -147,7 +153,7 @@ MODULE ED_VARS_GLOBAL
 
 
   !Diagonal/Off-diagonal charge-charge Susceptibilities
-  !=========================================================  
+  !=========================================================
   real(8),allocatable,dimension(:,:,:)               :: densChi_tau
   complex(8),allocatable,dimension(:,:,:)            :: densChi_w
   complex(8),allocatable,dimension(:,:,:)            :: densChi_iv

@@ -20,6 +20,15 @@ MODULE ED_AUX_FUNX
      module procedure print_Hloc_nn
   end interface print_Hloc
 
+  interface set_replica_operators
+     module procedure set_replica_operators_so
+     module procedure set_replica_operators_nn
+  end interface set_replica_operators
+
+  interface print_replica_operators
+     module procedure print_replica_operators_so
+     module procedure print_replica_operators_nn
+  end interface print_replica_operators
 
   interface lso2nnn_reshape
      module procedure d_nlso2nnn
@@ -45,6 +54,9 @@ MODULE ED_AUX_FUNX
 
   public :: set_Hloc
   public :: print_Hloc
+  !
+  public :: set_replica_operators
+  public :: print_replica_operators
   !
   public :: lso2nnn_reshape
   public :: so2nn_reshape
@@ -125,7 +137,6 @@ contains
     !
     if(present(file))close(unit)
   end subroutine print_Hloc_so
-  !
 
 
 
@@ -158,6 +169,136 @@ contains
 
 
 
+
+  !##################################################################
+  !                   REPLICA OPERATORS ROUTINES
+  !##################################################################
+  !+------------------------------------------------------------------+
+  !PURPOSE  : Print replica_operators
+  !+------------------------------------------------------------------+
+  subroutine print_replica_operators_nn(Operator,file)
+    complex(8),dimension(Nspin,Nspin,Norb,Norb) :: Operator
+    character(len=*),optional                   :: file
+    integer                                     :: iorb,jorb,ispin,jspin,Nso,unit
+    character(len=32)                           :: fmt
+    !
+    unit=LOGfile
+    !
+    if(present(file))then
+       open(free_unit(unit),file=reg(file))
+       write(LOGfile,"(A)")"print_replica_operators on file :"//reg(file)
+    endif
+    !
+    Nso = Nspin*Norb
+    write(fmt,"(A,I0,A)")"(",Nso,"A)"
+    do ispin=1,Nspin
+       do iorb=1,Norb
+          write(unit,fmt)((str(Operator(ispin,jspin,iorb,jorb)),jorb=1,Norb),jspin=1,Nspin)
+       enddo
+    enddo
+    write(unit,*)""
+    !
+    if(present(file))close(unit)
+  end subroutine print_replica_operators_nn
+  !
+  subroutine print_replica_operators_so(Operator,file)
+    complex(8),dimension(Nspin*Norb,Nspin*Norb) :: Operator
+    character(len=*),optional                   :: file
+    integer                                     :: is,js,Nso,unit
+    character(len=32)                           :: fmt
+    !
+    unit=LOGfile
+    !
+    if(present(file))then
+       open(free_unit(unit),file=reg(file))
+       write(LOGfile,"(A)")"print_replica_operators on file :"//reg(file)
+    endif
+    !
+    Nso = Nspin*Norb
+    write(fmt,"(A,I0,A)")"(",Nso,"A)"
+    do is=1,Nso
+       write(unit,fmt)(str(Operator(is,js),d=4),js =1,Nso)
+    enddo
+    write(unit,*)""
+    !
+    if(present(file))close(unit)
+  end subroutine print_replica_operators_so
+
+
+
+
+
+
+  !+------------------------------------------------------------------+
+  !PURPOSE  : Set replica_operators to impreplica_operators
+  !+------------------------------------------------------------------+
+  subroutine set_replica_operators_nn(Operator,index)
+    complex(8),dimension(:,:,:,:) :: Operator
+    integer                       :: index
+    integer                       :: io,jo
+    complex(8),allocatable        :: Otmp(:,:)
+    call assert_shape(Operator,[Nspin,Nspin,Norb,Norb],"set_replica_operators_nn","Operator")
+    !
+    if (.not.allocated(OpMat)) then
+      allocate(OpMat(Nspin,Nspin,Norb,Norb,Nop)); OpMat=zero
+      write(LOGfile,"(A)")"OpMat allocated at index: "//str(index)
+    endif
+    !
+    OpMat(:,:,:,:,index) = Operator
+    !
+    !Important checks
+    if (bath_type=="normal".and.Nspin==2) then
+       if (any(abs(OpMat(1,2,:,:,index))/=0d0)) stop "bath_type=normal buth nonsu2 operator is provided"
+    endif
+    !
+    allocate(Otmp(Nspin*Norb,Nspin*Norb));Otmp=zero
+    Otmp=nn2so_reshape(Operator,Nspin,Norb)
+    do io=1,Nspin*Norb
+       do jo=io+1,Nspin*Norb
+          if (Otmp(jo,io)/=conjg(Otmp(io,jo))) then
+             write(LOGfile,*)io,jo,Otmp(io,jo)
+             write(LOGfile,*)jo,io,Otmp(jo,io)
+             stop "the user provided a non-Hermitian operator at index: "//str(index)
+          endif
+       enddo
+    enddo
+    deallocate(Otmp)
+    !
+    write(LOGfile,"(A)")"Updated OpMat at index: "//str(index)
+    if(ed_verbose>2)call print_replica_operators(OpMat(:,:,:,:,index))
+  end subroutine set_replica_operators_nn
+  !
+  subroutine set_replica_operators_so(Operator,index)
+    complex(8),dimension(:,:)     :: Operator
+    integer                       :: index
+    integer                       :: io,jo
+    call assert_shape(Operator,[Nspin*Norb,Nspin*Norb],"set_replica_operators_so","Operator")
+    !
+    if (.not.allocated(OpMat)) then
+      allocate(OpMat(Nspin,Nspin,Norb,Norb,Nop)); OpMat=zero
+      write(LOGfile,"(A)")"OpMat allocated at index: "//str(index)
+    endif
+    !
+    OpMat(:,:,:,:,index) = so2nn_reshape(Operator,Nspin,Norb)
+    !
+    !Important checks
+    if (bath_type=="normal".and.Nspin==2) then
+       if (any(abs(OpMat(1,2,:,:,index))/=0d0)) stop "bath_type=normal buth nonsu2 operator is provided"
+    endif
+    !
+    do io=1,Nspin*Norb
+       do jo=io+1,Nspin*Norb
+          if (Operator(jo,io)/=conjg(Operator(io,jo))) then
+             write(LOGfile,*)io,jo,Operator(io,jo)
+             write(LOGfile,*)jo,io,Operator(jo,io)
+             stop "the user provided a non-Hermitian operator at index: "//str(index)
+          endif
+       enddo
+    enddo
+    !
+    write(LOGfile,"(A)")"Updated OpMat at index: "//str(index)
+    if(ed_verbose>2)call print_replica_operators(OpMat(:,:,:,:,index))
+  end subroutine set_replica_operators_so
 
 
 
@@ -870,9 +1011,9 @@ contains
     LS_=zero
     LS=zero
     !
-    LS_(1:2,3:4) = +Xi * pauli_z / 2.
-    LS_(1:2,5:6) = -Xi * pauli_y / 2.
-    LS_(3:4,5:6) = +Xi * pauli_x / 2.
+    LS_(1:2,3:4) = +Xi * pauli_z / 2.d0
+    LS_(1:2,5:6) = -Xi * pauli_y / 2.d0
+    LS_(3:4,5:6) = +Xi * pauli_x / 2.d0
     !
     !hermiticity
     do io=1,Nspin*Norb

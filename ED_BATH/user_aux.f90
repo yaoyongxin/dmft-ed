@@ -1,8 +1,8 @@
 !+-------------------------------------------------------------------+
-!PURPOSE  : Inquire the correct bath size to allocate the 
+!PURPOSE  : Inquire the correct bath size to allocate the
 ! the bath array in the calling program.
 !
-! Get size of each dimension of the component array. 
+! Get size of each dimension of the component array.
 ! The Result is an rank 1 integer array Ndim with dimension:
 ! 3 for get_component_size_bath
 ! 2 for get_spin_component_size_bath & get_orb_component_size_bath
@@ -86,7 +86,11 @@ function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
         !real diagonal hybridizations
         ndx = ndx + Nbath
         !
-        bath_size = ndx
+        if(replica_operators)then
+           bath_size = ( 1 + Nop ) * Nbath
+        else
+           bath_size = ndx
+        endif
         !
      case("nonsu2")
         !
@@ -118,11 +122,12 @@ function get_bath_dimension(Hloc_nn,ispin_) result(bath_size)
         !real diagonal hybridizations
         ndx = ndx + Nbath
         !
-        if(ed_para)then
-           bath_size = ( 1+1+1 ) * Nbath
+        if(replica_operators)then
+           bath_size = ( 1 + Nop ) * Nbath
         else
            bath_size = ndx
         endif
+        !
      end select
      !
   end select
@@ -160,7 +165,7 @@ function get_component_bath_dimension(itype) result(Ndim)
   end select
 end function get_component_bath_dimension
 !
-function get_spin_component_bath_dimension(itype) result(Ndim) 
+function get_spin_component_bath_dimension(itype) result(Ndim)
   integer                  :: itype
   integer                  :: Ndim(2)
   call check_type_bath(itype)
@@ -207,10 +212,6 @@ end function get_spin_orb_component_bath_dimension
 
 
 
-
-
-
-
 !+-----------------------------------------------------------------------------+!
 !PURPOSE: Get a specified itype,ispin,iorb component of the user bath.
 ! The component is returned into an Array of rank D
@@ -240,7 +241,7 @@ subroutine get_full_component_bath(array,bath_,itype)
      endif
   case ("superc")
      if(itype==1)then
-        Array = dmft_bath_%e(:,:,:)           
+        Array = dmft_bath_%e(:,:,:)
      elseif(itype==2)then
         Array = dmft_bath_%d(:,:,:)
      else
@@ -248,7 +249,7 @@ subroutine get_full_component_bath(array,bath_,itype)
      endif
   case ("nonsu2")
      if(itype==1)then
-        Array = dmft_bath_%e(:,:,:)           
+        Array = dmft_bath_%e(:,:,:)
      elseif(itype==2)then
         Array = dmft_bath_%v(:,:,:)
      else
@@ -281,7 +282,7 @@ subroutine get_spin_component_bath(array,bath_,itype,ispin)
      endif
   case ("superc")
      if(itype==1)then
-        Array = dmft_bath_%e(ispin,:,:)           
+        Array = dmft_bath_%e(ispin,:,:)
      elseif(itype==2)then
         Array = dmft_bath_%d(ispin,:,:)
      else
@@ -289,7 +290,7 @@ subroutine get_spin_component_bath(array,bath_,itype,ispin)
      endif
   case ("nonsu2")
      if(itype==1)then
-        Array = dmft_bath_%e(ispin,:,:)           
+        Array = dmft_bath_%e(ispin,:,:)
      elseif(itype==2)then
         Array = dmft_bath_%v(ispin,:,:)
      else
@@ -325,7 +326,7 @@ subroutine get_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("superc")
         if(itype==1)then
-           Array = dmft_bath_%e(ispin,iorb,:)           
+           Array = dmft_bath_%e(ispin,iorb,:)
         elseif(itype==2)then
            Array = dmft_bath_%d(ispin,iorb,:)
         else
@@ -333,7 +334,7 @@ subroutine get_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("nonsu2")
         if(itype==1)then
-           Array = dmft_bath_%e(ispin,iorb,:)           
+           Array = dmft_bath_%e(ispin,iorb,:)
         elseif(itype==2)then
            Array = dmft_bath_%v(ispin,iorb,:)
         else
@@ -350,7 +351,7 @@ subroutine get_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("superc")
         if(itype==1)then
-           Array = dmft_bath_%e(ispin,1,:)           
+           Array = dmft_bath_%e(ispin,1,:)
         elseif(itype==2)then
            Array = dmft_bath_%d(ispin,1,:)
         else
@@ -358,7 +359,7 @@ subroutine get_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("nonsu2")
         if(itype==1)then
-           Array = dmft_bath_%e(ispin,1,:)           
+           Array = dmft_bath_%e(ispin,1,:)
         elseif(itype==2)then
            Array = dmft_bath_%v(ispin,iorb,:)
         else
@@ -395,7 +396,7 @@ end subroutine get_spin_orb_component_bath
 !           endif
 !        case ("superc")
 !           if(itype==1)then
-!              Array = dmft_bath_%e(:,iorb,:)           
+!              Array = dmft_bath_%e(:,iorb,:)
 !           elseif(itype==2)then
 !              Array = dmft_bath_%d(:,iorb,:)
 !           else
@@ -403,7 +404,7 @@ end subroutine get_spin_orb_component_bath
 !           endif
 !        case ("nonsu2")
 !           if(itype==1)then
-!              Array = dmft_bath_%e(:,iorb,:)           
+!              Array = dmft_bath_%e(:,iorb,:)
 !           elseif(itype==2)then
 !              Array = dmft_bath_%v(:,iorb,:)
 !           else
@@ -420,7 +421,7 @@ end subroutine get_spin_orb_component_bath
 !           endif
 !        case ("superc")
 !           if(itype==1)then
-!              Array = dmft_bath_%e(:,1,:)           
+!              Array = dmft_bath_%e(:,1,:)
 !           elseif(itype==2)then
 !              Array = dmft_bath_%d(:,1,:)
 !           else
@@ -428,7 +429,7 @@ end subroutine get_spin_orb_component_bath
 !           endif
 !        case ("nonsu2")
 !           if(itype==1)then
-!              Array = dmft_bath_%e(:,1,:)           
+!              Array = dmft_bath_%e(:,1,:)
 !           elseif(itype==2)then
 !              Array = dmft_bath_%v(:,iorb,:)
 !           else
@@ -486,7 +487,7 @@ subroutine set_full_component_bath(array,bath_,itype)
      endif
   case ("superc")
      if(itype==1)then
-        dmft_bath_%e(:,:,:)  = Array           
+        dmft_bath_%e(:,:,:)  = Array
      elseif(itype==2)then
         dmft_bath_%d(:,:,:)  = Array
      else
@@ -494,7 +495,7 @@ subroutine set_full_component_bath(array,bath_,itype)
      endif
   case ("nonsu2")
      if(itype==1)then
-        dmft_bath_%e(:,:,:)  = Array           
+        dmft_bath_%e(:,:,:)  = Array
      elseif(itype==2)then
         dmft_bath_%v(:,:,:)  = Array
      else
@@ -528,7 +529,7 @@ subroutine set_spin_component_bath(array,bath_,itype,ispin)
      endif
   case ("superc")
      if(itype==1)then
-        dmft_bath_%e(ispin,:,:)  = Array           
+        dmft_bath_%e(ispin,:,:)  = Array
      elseif(itype==2)then
         dmft_bath_%d(ispin,:,:)  = Array
      else
@@ -536,7 +537,7 @@ subroutine set_spin_component_bath(array,bath_,itype,ispin)
      endif
   case ("nonsu2")
      if(itype==1)then
-        dmft_bath_%e(ispin,:,:)  = Array           
+        dmft_bath_%e(ispin,:,:)  = Array
      elseif(itype==2)then
         dmft_bath_%v(ispin,:,:)  = Array
      else
@@ -573,7 +574,7 @@ subroutine set_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("superc")
         if(itype==1)then
-           dmft_bath_%e(ispin,iorb,:)  = Array           
+           dmft_bath_%e(ispin,iorb,:)  = Array
         elseif(itype==2)then
            dmft_bath_%d(ispin,iorb,:)  = Array
         else
@@ -581,7 +582,7 @@ subroutine set_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("nonsu2")
         if(itype==1)then
-           dmft_bath_%e(ispin,iorb,:)  = Array           
+           dmft_bath_%e(ispin,iorb,:)  = Array
         elseif(itype==2)then
            dmft_bath_%v(ispin,iorb,:)  = Array
         else
@@ -598,7 +599,7 @@ subroutine set_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("superc")
         if(itype==1)then
-           dmft_bath_%e(ispin,1,:)  = Array           
+           dmft_bath_%e(ispin,1,:)  = Array
         elseif(itype==2)then
            dmft_bath_%d(ispin,1,:)  = Array
         else
@@ -606,7 +607,7 @@ subroutine set_spin_orb_component_bath(array,bath_,itype,ispin,iorb)
         endif
      case ("nonsu2")
         if(itype==1)then
-           dmft_bath_%e(ispin,1,:)  = Array           
+           dmft_bath_%e(ispin,1,:)  = Array
         elseif(itype==2)then
            dmft_bath_%v(ispin,iorb,:)  = Array
         else
@@ -645,7 +646,7 @@ end subroutine set_spin_orb_component_bath
 !         endif
 !      case ("superc")
 !         if(itype==1)then
-!            dmft_bath_%e(:,iorb,:)  = Array           
+!            dmft_bath_%e(:,iorb,:)  = Array
 !         elseif(itype==2)then
 !            dmft_bath_%d(:,iorb,:)  = Array
 !         else
@@ -653,7 +654,7 @@ end subroutine set_spin_orb_component_bath
 !         endif
 !      case ("nonsu2")
 !         if(itype==1)then
-!            dmft_bath_%e(:,iorb,:)  = Array           
+!            dmft_bath_%e(:,iorb,:)  = Array
 !         elseif(itype==2)then
 !            dmft_bath_%v(:,iorb,:)  = Array
 !         else
@@ -670,7 +671,7 @@ end subroutine set_spin_orb_component_bath
 !         endif
 !      case ("superc")
 !         if(itype==1)then
-!            dmft_bath_%e(:,1,:)  = Array           
+!            dmft_bath_%e(:,1,:)  = Array
 !         elseif(itype==2)then
 !            dmft_bath_%d(:,1,:)  = Array
 !         else
@@ -678,7 +679,7 @@ end subroutine set_spin_orb_component_bath
 !         endif
 !      case ("nonsu2")
 !         if(itype==1)then
-!            dmft_bath_%e(:,1,:)  = Array           
+!            dmft_bath_%e(:,1,:)  = Array
 !         elseif(itype==2)then
 !            dmft_bath_%v(:,iorb,:)  = Array
 !         else
@@ -774,7 +775,7 @@ subroutine copy_spin_component_bath(bathIN,ispin,bathOUT,jspin,itype)
   if(ispin>Norb.OR.jspin>Nspin)stop "copy_spin_component_bath error: ispin/jspin > Nspin"
   select case(ed_mode)
   case default
-     if(present(itype))then          
+     if(present(itype))then
         if(itype==1)then
            dOUT%e(jspin,:,:)  = dIN%e(ispin,:,:)
         else
@@ -838,7 +839,7 @@ subroutine copy_spin_orb_component_bath(bathIN,ispin,iorb,bathOUT,jspin,jorb,ity
   if(ispin>Norb.OR.jspin>Nspin)stop "copy_spin_orb_component_bath error: ispin/jspin > Nspin"
   if(iorb>Norb.OR.jorb>Norb)stop "copy_spin_orb_component_bath error: iorb/jorb > Norb"
   !
-  select case(bath_type)      
+  select case(bath_type)
   case default
      select case(ed_mode)
      case default
@@ -1091,16 +1092,16 @@ end subroutine copy_spin_orb_component_bath
 !##################################################################
 
 !+-------------------------------------------------------------------+
-!PURPOSE  : given a bath array apply a specific transformation or 
+!PURPOSE  : given a bath array apply a specific transformation or
 ! impose a given symmetry:
 ! - break spin symmetry by applying a symmetry breaking field
-! - given a bath array set both spin components to have 
+! - given a bath array set both spin components to have
 !    the same bath, i.e. impose non-magnetic solution
-! - given a bath array enforces the particle-hole symmetry 
+! - given a bath array enforces the particle-hole symmetry
 !    by setting the positive energies in modulo identical to the negative
 !    ones.
 ! - given a bath enforce normal (i.e. non superconducting) solution
-! - given a dmft bath pull/push the components W^{ss'}_\a(l) of the Hybridization 
+! - given a dmft bath pull/push the components W^{ss'}_\a(l) of the Hybridization
 !    matrix
 ! - given a dmft bath pull/push the nonsu2 components
 !+-------------------------------------------------------------------+
@@ -1358,7 +1359,7 @@ subroutine ph_trans_bath_site(bath_,save)
         tmp_dmft_bath%v(:,1,i) = dmft_bath_%v(:,2,i)
         tmp_dmft_bath%v(:,2,i) = dmft_bath_%v(:,1,i)
         dmft_bath_%v(:,:,i)    = tmp_dmft_bath%v(:,:,i)
-        if(ed_mode=="superc")dmft_bath_%d(:,:,i)=dmft_bath_%d(:,:,i)          
+        if(ed_mode=="superc")dmft_bath_%d(:,:,i)=dmft_bath_%d(:,:,i)
      end select
   end do
   if(save_)call save_dmft_bath(dmft_bath_)
