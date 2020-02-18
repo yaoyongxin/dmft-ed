@@ -169,12 +169,21 @@ program ed_SOC_bethe
   if (calcG0) then
      if (lattice.eq."Bethe") then
         call dmft_gloc_matsubara(Comm,er,DoS,Hloc_so,Gmats,Smats)               !provides only diagonal one
+        Gmats(1,2,1,3,:)=-(Gmats(1,1,2,2,:)-Gmats(1,1,1,1,:))/sqrt(2.d0) ; Gmats(2,1,3,1,:)=Gmats(1,2,1,3,:)
+        Gmats(1,2,3,2,:)=+(Gmats(1,1,2,2,:)-Gmats(1,1,1,1,:))/sqrt(2.d0) ; Gmats(2,1,2,3,:)=Gmats(1,2,3,2,:)
         call dmft_gloc_realaxis(Comm,er,DoS,Hloc_so,Greal,Sreal)                !provides only diagonal one
+        Greal(1,2,1,3,:)=-(Greal(1,1,2,2,:)-Greal(1,1,1,1,:))/sqrt(2.d0) ; Greal(2,1,3,1,:)=Greal(1,2,1,3,:)
+        Greal(1,2,3,2,:)=+(Greal(1,1,2,2,:)-Greal(1,1,1,1,:))/sqrt(2.d0) ; Greal(2,1,2,3,:)=Greal(1,2,3,2,:)
      else
         call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
         call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
      endif
-     call print_G("0")
+     call print_G("0Y")
+     do iw=1,Lmats
+        rho=nn2so_reshape(Gmats(:,:,:,:,iw),Nspin,Norb)
+        call Ybasis_to_Jbasis(rho,"Gmats")
+        Gmats(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
+     enddo
      do iw=1,Lreal
         rho=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
         call Ybasis_to_Jbasis(rho,"Greal")

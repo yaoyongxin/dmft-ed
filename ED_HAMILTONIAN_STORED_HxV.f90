@@ -36,6 +36,7 @@ contains
     integer                                :: ishift,ishift_up,ishift_dw
     integer                                :: j,ms,impi
     integer                                :: iorb,jorb,ispin,jspin,ibath
+    integer                                :: korb,lorb
     integer                                :: kp,k1,k2,k3,k4
     integer                                :: alfa,beta
     real(8)                                :: sg1,sg2,sg3,sg4

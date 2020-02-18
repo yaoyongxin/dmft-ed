@@ -302,11 +302,11 @@ subroutine init_dmft_bath_mask(dmft_bath_)
                     jo = jorb + (jspin-1)*Norb
                     if(io/=jo)then
                        !Re
-                       if( abs(real(OpMat(ispin,ispin,iorb,iorb,iop))).gt.1e-6)then
+                       if( abs(real(OpMat(ispin,jspin,iorb,jorb,iop))).gt.1e-6)then
                           dmft_bath_%mask(ispin,jspin,iorb,jorb,1)=.true.
                        endif
                        !Im
-                       if(abs(aimag(OpMat(ispin,ispin,iorb,iorb,iop))).gt.1e-6)then
+                       if(abs(aimag(OpMat(ispin,jspin,iorb,jorb,iop))).gt.1e-6)then
                           dmft_bath_%mask(ispin,jspin,iorb,jorb,2)=.true.
                        endif
                     endif

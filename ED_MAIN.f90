@@ -133,7 +133,7 @@ contains
     call init_dmft_bath(dmft_bath)
     call get_dmft_bath(dmft_bath,bath)
     !call write_dmft_bath(dmft_bath,LOGfile)
-    !write(*,*)bath
+    write(LOGfile,*)bath
     !
     if(isetup)then
        select case(ed_mode)

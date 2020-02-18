@@ -4,6 +4,7 @@ MODULE ED_SETUP
   USE ED_AUX_FUNX
   USE SF_TIMER
   USE SF_IOTOOLS, only:free_unit,reg,file_length
+  USE DMFT_INTERACTION
 #ifdef _MPI
   USE MPI
   USE SF_MPI
@@ -186,6 +187,8 @@ contains
     write(LOGfile,"(A)")"--------------------------------------------"
     call sleep(1)
     !
+    !
+    !Allocate indexing impHloc
     allocate(impHloc(Nspin,Nspin,Norb,Norb))
     impHloc = zero
     reHloc = 0d0 ; imHloc = 0d0
@@ -215,6 +218,30 @@ contains
     if(control)then
        write(LOGfile,"(A)")"H_local:"
        call print_Hloc(impHloc)
+    endif
+    !
+    !
+    !Search and read interaction matrix
+    if(Utensor)then
+       !
+       allocate(Umat(Norb,Norb,Norb,Norb,2))
+       Umat = 0d0
+       !
+       inquire(file=trim(UTENSfile),exist=control)
+       if(control)then
+          call dmft_interaction_read(Umat,trim(UTENSfile))
+       else
+          write(LOGfile,*)"interaction matrix file not found, setting to deafault Kanamori."
+          if(present(MpiComm))then
+             call dmft_interaction_setKanamori(MpiComm,Umat)
+          else
+             call dmft_interaction_setKanamori(Umat)
+          endif
+          call sleep(2)
+       endif
+       !
+       if(MPI_MASTER)call dmft_interaction_print(Umat,"Utensor.in")
+       !
     endif
     !
     !

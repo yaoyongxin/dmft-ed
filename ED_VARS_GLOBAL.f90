@@ -73,6 +73,13 @@ MODULE ED_VARS_GLOBAL
   integer                                            :: Nsectors
   integer                                            :: Nhel
 
+  !Rank-4 Tensor containing the matrix element of the interaction
+  !deafult is Kanamori
+  !INTERNAL USE (accessed thru functions)
+  !=========================================================
+  real(8),allocatable,dimension(:,:,:,:,:)           :: Umat
+
+
   !local part of the Hamiltonian
   !INTERNAL USE (accessed thru functions)
   !=========================================================

@@ -81,6 +81,8 @@ MODULE ED_INPUT_VARS
   !
   logical              :: replica_operators   !flag to set the bath representation via user provided fixed operators
   integer              :: Nop                 !number of user provided fixed operators
+  !
+  logical              :: Utensor             !flag to use tensorial representation of the interaction
 
 
   !Some parameters for function dimension:
@@ -92,7 +94,7 @@ MODULE ED_INPUT_VARS
 
   !LOG AND Hamiltonian UNITS
   !=========================================================
-  character(len=100)   :: Hfile,HLOCfile
+  character(len=100)   :: Hfile,HLOCfile,UTENSfile
   integer,save         :: LOGfile
 
 
@@ -200,6 +202,9 @@ contains
     !
     call parse_input_variable(replica_operators,"REPLICA_OPERATORS",INPUTunit,default=.false.,comment="Flag to set the bath representation via user provided fixed operators")
     call parse_input_variable(Nop,"NOP",INPUTunit,default=0,comment="Number of user provided fixed operators")
+    !
+    call parse_input_variable(Utensor,"UTENSOR",INPUTunit,default=.false.,comment="Flag to use tensorial representation of the interaction")
+    call parse_input_variable(UTENSfile,"UTENSfile",INPUTunit,default="Utensor.in",comment="File read the input tensorial representation of the interaction")
     !
 #ifdef _MPI
     if(present(comm))then
