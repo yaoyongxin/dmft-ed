@@ -233,11 +233,11 @@ contains
        else
           write(LOGfile,*)"interaction matrix file not found, setting to deafault Kanamori."
           if(present(MpiComm))then
-             call dmft_interaction_setKanamori(MpiComm,Umat)
+             call dmft_interaction_setKanamori(MpiComm,Umat,Uloc,Ust,Jh,Jx,Jp,test=.FALSE.)
           else
-             call dmft_interaction_setKanamori(Umat)
+             call dmft_interaction_setKanamori(Umat,Uloc,Ust,Jh,Jx,Jp,test=.FALSE.)
           endif
-          call sleep(2)
+          call sleep(1)
        endif
        !
        if(MPI_MASTER)call dmft_interaction_print(Umat,"Utensor.in")

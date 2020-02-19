@@ -161,9 +161,11 @@ program ed_SOC_bethe
   Hloc_nn = so2nn_reshape(Hloc_so,Nspin,Norb)
   if (master) then
      call TB_write_Hloc(Hloc_so,"Hloc")
-     call Ybasis_to_Jbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_J")
-     call Jbasis_to_Cbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_C")
-     call Cbasis_to_Ybasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_Y")
+     if(lambda_soc.ne.0d0) then
+        call Ybasis_to_Jbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_J")
+        call Jbasis_to_Cbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_C")
+        call Cbasis_to_Ybasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_Y")
+     endif
   endif
   !
   if (calcG0) then
@@ -178,18 +180,22 @@ program ed_SOC_bethe
         call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
         call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
      endif
-     call print_G("0Y")
-     do iw=1,Lmats
-        rho=nn2so_reshape(Gmats(:,:,:,:,iw),Nspin,Norb)
-        call Ybasis_to_Jbasis(rho,"Gmats")
-        Gmats(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
-     enddo
-     do iw=1,Lreal
-        rho=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
-        call Ybasis_to_Jbasis(rho,"Greal")
-        Greal(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
-     enddo
-     call print_G("0J")
+     if(lambda_soc.ne.0d0) then
+        call print_G("0Y")
+        do iw=1,Lmats
+           rho=nn2so_reshape(Gmats(:,:,:,:,iw),Nspin,Norb)
+           call Ybasis_to_Jbasis(rho,"Gmats")
+           Gmats(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
+        enddo
+        do iw=1,Lreal
+           rho=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
+           call Ybasis_to_Jbasis(rho,"Greal")
+           Greal(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
+        enddo
+        call print_G("0J")
+     else
+        call print_G("0J")
+     endif
   endif
   !
 

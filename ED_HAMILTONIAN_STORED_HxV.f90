@@ -88,6 +88,7 @@ contains
     !
     !LOCAL INTERACTION
     include "ED_HAMILTONIAN/stored/Hint.f90"
+    include "ED_HAMILTONIAN/stored/Hint_tensor.f90"
     !
     !BATH HAMILTONIAN
     include "ED_HAMILTONIAN/stored/Hbath.f90"
