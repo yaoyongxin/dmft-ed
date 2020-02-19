@@ -11,6 +11,7 @@ module ED_MAIN
   USE ED_DIAG
   USE SF_IOTOOLS, only: str,reg
   USE SF_TIMER,only: start_timer,stop_timer
+  USE DMFT_INTERACTION
   implicit none
   private
 
@@ -27,6 +28,19 @@ module ED_MAIN
   end interface ed_init_solver
   !>
   public :: ed_init_solver
+
+
+  !
+  !>USER DEFINED MANIPULATION OF UMAT
+  !
+  interface ed_rotate_interaction
+     module procedure :: ed_rotate_interaction_serial
+#ifdef _MPI
+     module procedure :: ed_rotate_interaction_mpi
+#endif
+  end interface ed_rotate_interaction
+  !>
+  public :: ed_rotate_interaction
 
 
   !
@@ -133,7 +147,7 @@ contains
     call init_dmft_bath(dmft_bath)
     call get_dmft_bath(dmft_bath,bath)
     !call write_dmft_bath(dmft_bath,LOGfile)
-    write(LOGfile,*)bath
+    !write(LOGfile,*)bath
     !
     if(isetup)then
        select case(ed_mode)
@@ -682,6 +696,50 @@ contains
 #endif
 
 
+
+
+subroutine ed_rotate_interaction_serial(rot)
+  complex(8),dimension(:,:),intent(in) :: rot
+  !
+  logical                              :: MPI_MASTER=.true.
+  integer                              :: MPI_ERR
+  !
+  if(.not.Utensor) stop "Interaction rotation is available only with tensor flag set to true"
+  if(.not.allocated(Umat)) stop "The interaction tensor is not allocated (check position of ed_init_solver)"
+  !
+  call dmft_interaction_rotate(Umat,rot)
+  !
+  write(LOGfile,*)
+  write(LOGfile,*)"Interaction matrix has been rotated."
+  call dmft_interaction_print(Umat,"Utensor_rot.in")
+  !
+end subroutine ed_rotate_interaction_serial
+
+#ifdef _MPI
+subroutine ed_rotate_interaction_mpi(MpiComm,rot)
+  integer                              :: MpiComm
+  complex(8),dimension(:,:),intent(in) :: rot
+  !
+  logical                              :: MPI_MASTER=.true.
+  integer                              :: MPI_ERR
+  !
+  MPI_MASTER = get_Master_MPI(MpiComm)
+  !
+  if(.not.Utensor) stop "Interaction rotation is available only with tensor flag set to true"
+  if(.not.allocated(Umat)) stop "The interaction tensor is not allocated (check position of ed_init_solver)"
+  !
+  call dmft_interaction_rotate(MpiComm,Umat,rot)
+  !
+  if(MPI_MASTER) then
+     write(LOGfile,*)
+     write(LOGfile,*)"Interaction matrix has been rotated."
+     call dmft_interaction_print(Umat,"Utensor_rot.in")
+  endif
+  !
+  call MPI_Barrier(MpiComm,MPI_ERR)
+  !
+end subroutine ed_rotate_interaction_mpi
+#endif
 
 
 end module ED_MAIN

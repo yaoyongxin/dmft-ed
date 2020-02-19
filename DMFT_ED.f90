@@ -82,7 +82,8 @@ MODULE DMFT_ED
 
   USE ED_MAIN,      only:                      &
        ed_init_solver                         ,&
-       ed_solve
+       ed_solve                               ,&
+       ed_rotate_interaction
 
 
   USE ED_FIT_CHI2,  only: ed_chi2_fitgf

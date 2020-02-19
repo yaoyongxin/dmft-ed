@@ -231,11 +231,11 @@ contains
        if(control)then
           call dmft_interaction_read(Umat,trim(UTENSfile))
        else
-          write(LOGfile,*)"interaction matrix file not found, setting to deafault Kanamori."
+          write(LOGfile,*)"Interaction matrix file not found, setting to deafault Kanamori."
           if(present(MpiComm))then
-             call dmft_interaction_setKanamori(MpiComm,Umat,Uloc,Ust,Jh,Jx,Jp,test=.FALSE.)
+             call dmft_interaction_setKanamori(MpiComm,Umat,Uloc,Ust,Jh,Jx,Jp)
           else
-             call dmft_interaction_setKanamori(Umat,Uloc,Ust,Jh,Jx,Jp,test=.FALSE.)
+             call dmft_interaction_setKanamori(Umat,Uloc,Ust,Jh,Jx,Jp)
           endif
           call sleep(1)
        endif

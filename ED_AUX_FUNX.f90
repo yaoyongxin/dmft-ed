@@ -1040,30 +1040,30 @@ contains
     LS_rot_(1,1)=+1.d0
     LS_rot_(2,1)=-Xi
     LS_rot_(6,1)=-1.d0
-    LS_rot_(:,1)=LS_rot_(:,1)/sqrt(3.)
+    LS_rot_(:,1)=LS_rot_(:,1)/sqrt(3.d0)
     !J=1/2 jz=+1/2
     LS_rot_(4,2)=+1.d0
     LS_rot_(5,2)=+Xi
     LS_rot_(3,2)=+1.d0
-    LS_rot_(:,2)=LS_rot_(:,2)/sqrt(3.)
+    LS_rot_(:,2)=LS_rot_(:,2)/sqrt(3.d0)
     !J=3/2 jz=-3/2
     LS_rot_(4,3)=+1.d0
     LS_rot_(5,3)=-Xi
-    LS_rot_(:,3)=LS_rot_(:,3)/sqrt(2.)
+    LS_rot_(:,3)=LS_rot_(:,3)/sqrt(2.d0)
     !J=3/2 jz=+3/2
     LS_rot_(1,4)=-1.d0
     LS_rot_(2,4)=-Xi
-    LS_rot_(:,4)=LS_rot_(:,4)/sqrt(2.)
+    LS_rot_(:,4)=LS_rot_(:,4)/sqrt(2.d0)
     !J=3/2 jz=-1/2
     LS_rot_(1,5)=+1.d0
     LS_rot_(2,5)=-Xi
     LS_rot_(6,5)=+2.d0
-    LS_rot_(:,5)=LS_rot_(:,5)/sqrt(6.)
+    LS_rot_(:,5)=LS_rot_(:,5)/sqrt(6.d0)
     !J=3/2 jz=+1/2
     LS_rot_(4,6)=-1.d0
     LS_rot_(5,6)=-Xi
     LS_rot_(3,6)=+2.d0
-    LS_rot_(:,6)=LS_rot_(:,6)/sqrt(6.)
+    LS_rot_(:,6)=LS_rot_(:,6)/sqrt(6.d0)
     !
     LS_rot=LS_rot_
     !
@@ -1080,11 +1080,11 @@ contains
     ! {t2g}-->{Lz}
     !
     ![Norb*Norb] notation
-    U_rot_(1,1)=-Xi/sqrt(2.)
-    U_rot_(2,2)=+1.d0/sqrt(2.)
+    U_rot_(1,1)=-Xi/sqrt(2.d0)
+    U_rot_(2,2)=+1.d0/sqrt(2.d0)
     U_rot_(3,3)=+Xi
-    U_rot_(1,2)=-Xi/sqrt(2.)
-    U_rot_(2,1)=-1.d0/sqrt(2.)
+    U_rot_(1,2)=-Xi/sqrt(2.d0)
+    U_rot_(2,1)=-1.d0/sqrt(2.d0)
     !
     U_rot=U_rot_
     !
@@ -1102,11 +1102,11 @@ contains
     ! {t2g,Sz}-->{Lz,Sz}
     !
     ![Norb*Norb]*Nspin notation
-    U_rot_(1,1)=-Xi/sqrt(2.)
-    U_rot_(2,2)=+1.d0/sqrt(2.)
+    U_rot_(1,1)=-Xi/sqrt(2.d0)
+    U_rot_(2,2)=+1.d0/sqrt(2.d0)
     U_rot_(3,3)=+Xi
-    U_rot_(1,2)=-Xi/sqrt(2.)
-    U_rot_(2,1)=-1.d0/sqrt(2.)
+    U_rot_(1,2)=-Xi/sqrt(2.d0)
+    U_rot_(2,1)=-1.d0/sqrt(2.d0)
     !
     U_rot(1:Norb,1:Norb)=U_rot_
     U_rot(1+Norb:2*Norb,1+Norb:2*Norb)=U_rot_
@@ -1128,19 +1128,19 @@ contains
     fact=1.d0
     if(present(orbtype).and.orbtype=="t2g") fact=-1.d0
     if    (component=="x")then
-       ja_(1:2,1:2) = pauli_x / 2.
-       ja_(3:4,3:4) = pauli_x / 2.
-       ja_(5:6,5:6) = pauli_x / 2.
+       ja_(1:2,1:2) = pauli_x / 2.d0
+       ja_(3:4,3:4) = pauli_x / 2.d0
+       ja_(5:6,5:6) = pauli_x / 2.d0
        ja_(3:4,5:6) = -Xi * fact * eye(2)
     elseif(component=="y")then
-       ja_(1:2,1:2) = pauli_y / 2.
-       ja_(3:4,3:4) = pauli_y / 2.
-       ja_(5:6,5:6) = pauli_y / 2.
+       ja_(1:2,1:2) = pauli_y / 2.d0
+       ja_(3:4,3:4) = pauli_y / 2.d0
+       ja_(5:6,5:6) = pauli_y / 2.d0
        ja_(1:2,5:6) = +Xi * fact * eye(2)
     elseif(component=="z")then
-       ja_(1:2,1:2) = pauli_z / 2.
-       ja_(3:4,3:4) = pauli_z / 2.
-       ja_(5:6,5:6) = pauli_z / 2.
+       ja_(1:2,1:2) = pauli_z / 2.d0
+       ja_(3:4,3:4) = pauli_z / 2.d0
+       ja_(5:6,5:6) = pauli_z / 2.d0
        ja_(1:2,3:4) = -Xi * fact * eye(2)
     endif
     !

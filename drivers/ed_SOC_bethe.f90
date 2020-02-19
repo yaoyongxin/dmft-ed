@@ -53,11 +53,13 @@ program ed_SOC_bethe
   real(8),dimension(:),allocatable               :: dens
   complex(8),dimension(:,:),allocatable          :: rho
   complex(8),dimension(:,:),allocatable          :: Op
+  complex(8),dimension(:,:),allocatable          :: Gtmp
   !Miscellaneous:
   logical                                        :: socsym,calcG0
   logical                                        :: symtest
   !Dummy variables:
-  real(8)                                        :: dum
+  real(8)                                        :: dum,cum
+  complex(8),dimension(:,:),allocatable          :: Odum
 
 
   !#########   MPI INITIALIZATION   #########
@@ -119,8 +121,11 @@ program ed_SOC_bethe
   allocate(dens(Norb)); dens=0d0
   allocate(Op(Nspin*Norb,Nspin*Norb)); Op=zero
   allocate(rho(Nspin*Norb,Nspin*Norb)); rho=zero
+  allocate(Gtmp(Nspin*Norb,Nspin*Norb)); Gtmp=zero
   allocate(wr(Lreal)); wr=linspace(wini,wfin,Lreal,mesh=dw)
   allocate(wm(Lmats)); wm = pi/beta*dble(2*arange(1,Lmats)-1)
+  !
+  allocate(Odum(Norb,Norb)); Odum=zero
 
 
   !######### LATTICE INITIALIZATION #########
@@ -169,6 +174,7 @@ program ed_SOC_bethe
   endif
   !
   if (calcG0) then
+     !
      if (lattice.eq."Bethe") then
         call dmft_gloc_matsubara(Comm,er,DoS,Hloc_so,Gmats,Smats)               !provides only diagonal one
         Gmats(1,2,1,3,:)=-(Gmats(1,1,2,2,:)-Gmats(1,1,1,1,:))/sqrt(2.d0) ; Gmats(2,1,3,1,:)=Gmats(1,2,1,3,:)
@@ -180,22 +186,24 @@ program ed_SOC_bethe
         call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
         call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
      endif
+     !
      if(lambda_soc.ne.0d0) then
         call print_G("0Y")
         do iw=1,Lmats
-           rho=nn2so_reshape(Gmats(:,:,:,:,iw),Nspin,Norb)
-           call Ybasis_to_Jbasis(rho,"Gmats")
-           Gmats(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
+           Gtmp=nn2so_reshape(Gmats(:,:,:,:,iw),Nspin,Norb)
+           call Ybasis_to_Jbasis(Gtmp,"Gmats")
+           Gmats(:,:,:,:,iw)=so2nn_reshape(Gtmp,Nspin,Norb)
         enddo
         do iw=1,Lreal
-           rho=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
-           call Ybasis_to_Jbasis(rho,"Greal")
-           Greal(:,:,:,:,iw)=so2nn_reshape(rho,Nspin,Norb)
+           Gtmp=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
+           call Ybasis_to_Jbasis(Gtmp,"Greal")
+           Greal(:,:,:,:,iw)=so2nn_reshape(Gtmp,Nspin,Norb)
         enddo
         call print_G("0J")
      else
         call print_G("0J")
      endif
+     !
   endif
   !
 
@@ -223,7 +231,19 @@ program ed_SOC_bethe
   allocate(Bath(Nb));Bath=0.0d0
   !
   call ed_init_solver(Comm,Bath,Hloc_nn)
-
+  !
+  if (lambda_soc.ne.0d0) call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
+  !
+  !Odum=zero
+  dum=cos(pi/5.d0)
+  cum=sin(pi/5.d0)
+  !Odum(1,1)=cmplx(+dum,0d0)
+  !Odum(1,2)=cmplx(-cum,0d0)
+  !Odum(2,1)=cmplx(+cum,0d0)
+  !Odum(2,2)=cmplx(+dum,0d0)
+  !Odum(3,3)=cmplx(1.d0,0d0)
+  call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
+  !
 
   !#########       DMFT CYCLE       #########
   iloop=0 ; converged=.false.
