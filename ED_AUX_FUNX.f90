@@ -125,7 +125,7 @@ contains
     !
     if(present(file))then
        open(free_unit(unit),file=reg(file))
-       write(LOGfile,"(A)")"print_Hloc on file :"//reg(file)
+       write(LOGfile,"(A)")"print_Hloc on file: "//reg(file)
     endif
     !
     Nso = Nspin*Norb
@@ -186,7 +186,7 @@ contains
     !
     if(present(file))then
        open(free_unit(unit),file=reg(file))
-       write(LOGfile,"(A)")"print replica operators on file :"//reg(file)
+       write(LOGfile,"(A)")"print replica operators on file: "//reg(file)
     endif
     !
     Nso = Nspin*Norb
@@ -211,7 +211,7 @@ contains
     !
     if(present(file))then
        open(free_unit(unit),file=reg(file))
-       write(LOGfile,"(A)")"print replica operators on file :"//reg(file)
+       write(LOGfile,"(A)")"print replica operators on file: "//reg(file)
     endif
     !
     Nso = Nspin*Norb

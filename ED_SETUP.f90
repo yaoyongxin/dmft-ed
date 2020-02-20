@@ -224,6 +224,8 @@ contains
     !Search and read interaction matrix
     if(Utensor)then
        !
+       write(LOGfile,*)
+       write(LOGfile,*)"Tensor representation fo the interaction asked. Beware, HFMODE is uneffective."
        allocate(Umat(Norb,Norb,Norb,Norb,2))
        Umat = 0d0
        !

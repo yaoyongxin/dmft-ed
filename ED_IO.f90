@@ -181,7 +181,7 @@ MODULE ED_IO
   end interface ed_get_fimp_real
 
 
-  !Retrieve static common observables  
+  !Retrieve static common observables
   interface ed_get_dens
      module procedure ed_get_dens_1
      module procedure ed_get_dens_2
@@ -299,7 +299,7 @@ MODULE ED_IO
 
   public :: ed_get_eimp
   public :: ed_get_epot
-  public :: ed_get_eint 
+  public :: ed_get_eint
   public :: ed_get_ehartree
   public :: ed_get_eknot
 
@@ -310,6 +310,7 @@ MODULE ED_IO
   public :: ed_get_dph
 
   public :: ed_get_density_matrix
+  public :: ed_print_density_matrix
   public :: ed_get_quantum_SOC_operators_single
   public :: ed_get_quantum_SOC_operators_lattice
 
@@ -407,7 +408,7 @@ contains
 
 
   !+-----------------------------------------------------------------------------+!
-  ! PURPOSE: Retrieve measured values of the impurity self-energy 
+  ! PURPOSE: Retrieve measured values of the impurity self-energy
   !+-----------------------------------------------------------------------------+!
   include "ED_IO/get_all_sigma_matsubara.f90"
   include "ED_IO/get_all_sigma_realaxis.f90"
@@ -418,7 +419,7 @@ contains
 
 
   !+-----------------------------------------------------------------------------+!
-  ! PURPOSE: Retrieve measured values of the impurity green's functions 
+  ! PURPOSE: Retrieve measured values of the impurity green's functions
   !+-----------------------------------------------------------------------------+!
   include "ED_IO/get_all_gimp_matsubara.f90"
   include "ED_IO/get_all_gimp_realaxis.f90"
@@ -484,9 +485,9 @@ contains
     allocate(Srealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
     allocate(SAmatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
     allocate(SArealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
-    Smatsii  = zero 
-    Srealii  = zero 
-    SAmatsii = zero 
+    Smatsii  = zero
+    Srealii  = zero
+    SAmatsii = zero
     SArealii = zero
     !
     do ilat=1,Nineq
@@ -548,9 +549,9 @@ END MODULE ED_IO
 !   allocate(Srealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
 !   allocate(SAmatsii(Nineq,Nspin,Nspin,Norb,Norb,Lmats))
 !   allocate(SArealii(Nineq,Nspin,Nspin,Norb,Norb,Lreal))
-!   Smatsii  = zero 
-!   Srealii  = zero 
-!   SAmatsii = zero 
+!   Smatsii  = zero
+!   Srealii  = zero
+!   SAmatsii = zero
 !   SArealii = zero
 !   !
 !   do ilat=1,Nineq

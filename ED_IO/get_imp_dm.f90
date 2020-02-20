@@ -27,9 +27,9 @@ subroutine ed_get_density_matrix_single(dm_,dm_eig_,dm_rot_)
      if(diag_dm)then
         dm_rot_=eye(Nspin*Norb)
         dm_eig_=diagonal(dm_)
-        call print_dm(dm_,dm_rot_,dm_eig_)
+        call ed_print_density_matrix(dm_,dm_rot_,dm_eig_)
      else
-        call print_dm(dm_)
+        call ed_print_density_matrix(dm_)
      endif
      !
   else
@@ -37,9 +37,9 @@ subroutine ed_get_density_matrix_single(dm_,dm_eig_,dm_rot_)
      if(diag_dm)then
         dm_rot_=dm_
         call eigh(dm_rot_,dm_eig_,'V','U')
-        call print_dm(dm_,dm_rot_,dm_eig_)
+        call ed_print_density_matrix(dm_,dm_rot_,dm_eig_)
     else
-       call print_dm(dm_)
+       call ed_print_density_matrix(dm_)
     endif
     !
   endif
@@ -88,9 +88,9 @@ subroutine ed_get_density_matrix_lattice(dm_,dm_eig_,dm_rot_)
         if(diag_dm)then
            dm_rot_site=eye(Nspin*Norb)
            dm_eig_site=diagonal(dm_site)
-           call print_dm(dm_site,dm_rot_site,dm_eig_site,site=ilat)
+           call ed_print_density_matrix(dm_site,dm_rot_site,dm_eig_site,suff=str(ilat))
         else
-           call print_dm(dm_site,site=ilat)
+           call ed_print_density_matrix(dm_site,suff=str(ilat))
         endif
         !
      else
@@ -98,9 +98,9 @@ subroutine ed_get_density_matrix_lattice(dm_,dm_eig_,dm_rot_)
         if(diag_dm)then
            dm_rot_site=dm_site
            call eigh(dm_rot_site,dm_eig_site,'V','U')
-           call print_dm(dm_site,dm_rot_site,dm_eig_site,site=ilat)
+           call ed_print_density_matrix(dm_site,dm_rot_site,dm_eig_site,suff=str(ilat))
        else
-          call print_dm(dm_site,site=ilat)
+          call ed_print_density_matrix(dm_site,suff=str(ilat))
        endif
        !
      endif
@@ -114,20 +114,20 @@ subroutine ed_get_density_matrix_lattice(dm_,dm_eig_,dm_rot_)
 end subroutine ed_get_density_matrix_lattice
 
 
-subroutine print_dm(dm_,dm_rot_,dm_eig_,site)
+subroutine ed_print_density_matrix(dm_,dm_rot_,dm_eig_,suff)
   implicit none
 
   complex(8),allocatable,intent(in)            :: dm_(:,:)
   complex(8),allocatable,intent(in),optional   :: dm_rot_(:,:)
   real(8),allocatable   ,intent(in),optional   :: dm_eig_(:)
-  integer               ,intent(in),optional   :: site
+  character(len=*)      ,intent(in),optional   :: suff
   !internal
   integer                                      :: unit
   character(len=24)                            :: suffix
   integer                                      :: iorb,jorb,ispin,jspin,io,jo
   !
   suffix="imp_density_matrix.dat"
-  if(present(site))suffix="imp_density_matrix_"//reg(str(site))//".dat"
+  if(present(suff))suffix="imp_density_matrix_"//reg(suff)//".dat"
   !
   unit = free_unit()
   open(unit,file=suffix,action="write",position="rewind",status='unknown')
@@ -164,4 +164,4 @@ subroutine print_dm(dm_,dm_rot_,dm_eig_,site)
   !
   close(unit)
   !
-end subroutine print_dm
+end subroutine ed_print_density_matrix

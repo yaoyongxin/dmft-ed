@@ -87,8 +87,11 @@ contains
     include "ED_HAMILTONIAN/stored/Himp.f90"
     !
     !LOCAL INTERACTION
-    include "ED_HAMILTONIAN/stored/Hint.f90"
-    include "ED_HAMILTONIAN/stored/Hint_tensor.f90"
+    if (Utensor) then
+       include "ED_HAMILTONIAN/stored/Hint_tensor.f90"
+    else
+       include "ED_HAMILTONIAN/stored/Hint.f90"
+    endif
     !
     !BATH HAMILTONIAN
     include "ED_HAMILTONIAN/stored/Hbath.f90"

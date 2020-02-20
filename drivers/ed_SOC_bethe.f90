@@ -84,6 +84,7 @@ program ed_SOC_bethe
   call parse_input_variable(symtest,   "SYMTEST", finput,default=.true.)
   call parse_input_variable(calcG0,    "CALCG0",  finput,default=.true.)
   call parse_input_variable(lattice,   "LATTICE", finput,default="Bethe")
+  call parse_input_variable(Utensor,   "UTENSOR", finput,default=.false.)
   !
   call ed_read_input(trim(finput),comm)
   lattice=reg(lattice)
@@ -155,7 +156,7 @@ program ed_SOC_bethe
      enddo
      !
      Hloc_so = diag(Eloc) + lambda_soc * atomic_SOC()
-     if (lambda_soc.ne.0d0) call Cbasis_to_Ybasis(Hloc_so,"Hloc")
+     if (lambda_soc.ne.0d0) call Cbasis_to_Ybasis(Hloc_so,"Hloc_Bethe")
      !
   else
      !
@@ -167,9 +168,9 @@ program ed_SOC_bethe
   if (master) then
      call TB_write_Hloc(Hloc_so,"Hloc")
      if(lambda_soc.ne.0d0) then
-        call Ybasis_to_Jbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_J")
-        call Jbasis_to_Cbasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_C")
-        call Cbasis_to_Ybasis(Hloc_so,"Hloc") ; call TB_write_Hloc(Hloc_so,"Hloc_Y")
+        call Ybasis_to_Jbasis(Hloc_so) ; call TB_write_Hloc(Hloc_so,"Hloc_J")
+        call Jbasis_to_Cbasis(Hloc_so) ; call TB_write_Hloc(Hloc_so,"Hloc_C")
+        call Cbasis_to_Ybasis(Hloc_so) ; call TB_write_Hloc(Hloc_so,"Hloc_Y")
      endif
   endif
   !
@@ -232,7 +233,7 @@ program ed_SOC_bethe
   !
   call ed_init_solver(Comm,Bath,Hloc_nn)
   !
-  if (lambda_soc.ne.0d0) call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
+  if (lambda_soc.ne.0d0.and.Utensor) call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
   !
   !Odum=zero
   dum=cos(pi/5.d0)
@@ -242,7 +243,7 @@ program ed_SOC_bethe
   !Odum(2,1)=cmplx(+cum,0d0)
   !Odum(2,2)=cmplx(+dum,0d0)
   !Odum(3,3)=cmplx(1.d0,0d0)
-  call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
+  !call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
   !
 
   !#########       DMFT CYCLE       #########
@@ -277,8 +278,16 @@ program ed_SOC_bethe
 
 
      !print everything to check for the correct symmetry in {Y} basis
-     call print_G()
-     call print_Sigma()
+     call print_G("Y")
+     call print_Sigma("Y")
+     if(lambda_soc.ne.0d0) then
+        do iw=1,Lreal
+           Gtmp=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
+           call Ybasis_to_Jbasis(Gtmp)
+           Greal(:,:,:,:,iw)=so2nn_reshape(Gtmp,Nspin,Norb)
+        enddo
+        call print_G("J")
+     endif
 
 
      !Get the Weiss field/Delta function to be fitted
@@ -320,13 +329,13 @@ program ed_SOC_bethe
      if (master) then
         call ed_get_density_matrix(rho)
         if (lambda_soc.ne.0d0) then
-           call Ybasis_to_Cbasis(rho,"imp_density_matrix_Y.dat")
-           call print_Hloc(rho,"imp_density_matrix_C.dat")
-           call Cbasis_to_Jbasis(rho,"imp_density_matrix_C.dat")
-           call print_Hloc(rho,"imp_density_matrix_J.dat")
+           call Ybasis_to_Cbasis(rho)
+           call ed_print_density_matrix(rho,suff="C")
+           call Cbasis_to_Jbasis(rho)
+           call ed_print_density_matrix(rho,suff="J")
         endif
         !
-       call ed_get_quantum_SOC_operators_single()
+       !call ed_get_quantum_SOC_operators_single()
     endif
 
 
@@ -395,7 +404,7 @@ contains
         do ik=1,Lk
            call Cbasis_to_Ybasis(Hk(:,:,ik),"Hk_"//str(ik))
         enddo
-        call Cbasis_to_Ybasis(Hloc_so,"Hloc")
+        call Cbasis_to_Ybasis(Hloc_so,"Hloc_"//lattice)
      endif
      !
    end subroutine build_hk
@@ -450,12 +459,15 @@ contains
    subroutine Cbasis_to_Ybasis(A,varname)
      implicit none
      complex(8),dimension(:,:),intent(inout)     :: A
-     character(len=*),intent(in)                 :: varname
+     character(len=*),intent(in),optional        :: varname
      !iternal
      complex(8),dimension(size(A,1),size(A,2))   :: B
      complex(8),dimension(6,6)                   :: U,Udag
+     character(len=32)                           :: assertname
      !
-     call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Ybasis",varname)
+     assertname="--"
+     if(present(varname))assertname=varname
+     call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Ybasis",reg(assertname))
      !
      B=A
      A=zero
@@ -476,12 +488,15 @@ contains
    subroutine Ybasis_to_Cbasis(A,varname)
      implicit none
      complex(8),dimension(:,:),intent(inout)     :: A
-     character(len=*),intent(in)                 :: varname
+     character(len=*),intent(in),optional        :: varname
      !iternal
      complex(8),dimension(size(A,1),size(A,2))   :: B
      complex(8),dimension(6,6)                   :: U,Udag
+     character(len=32)                           :: assertname
      !
-     call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Ybasis_to_Cbasis",varname)
+     assertname="--"
+     if(present(varname))assertname=varname
+     call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Ybasis_to_Cbasis",reg(assertname))
      !
      B=A
      A=zero
@@ -502,12 +517,15 @@ contains
   subroutine Cbasis_to_Jbasis(A,varname)
     implicit none
     complex(8),dimension(:,:),intent(inout)     :: A
-    character(len=*),intent(in)                 :: varname
+    character(len=*),intent(in),optional        :: varname
     !iternal
     complex(8),dimension(size(A,1),size(A,2))   :: B
     complex(8),dimension(6,6)                   :: U,Udag
+    character(len=32)                           :: assertname
     !
-    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Jbasis",varname)
+    assertname="--"
+    if(present(varname))assertname=varname
+    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Jbasis",reg(assertname))
     !
     B=A
     A=zero
@@ -528,12 +546,15 @@ contains
   subroutine Jbasis_to_Cbasis(A,varname)
     implicit none
     complex(8),dimension(:,:),intent(inout)     :: A
-    character(len=*),intent(in)                 :: varname
+    character(len=*),intent(in),optional        :: varname
     !iternal
     complex(8),dimension(size(A,1),size(A,2))   :: B
     complex(8),dimension(6,6)                   :: U,Udag
+    character(len=32)                           :: assertname
     !
-    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Jbasis_to_Cbasis",varname)
+    assertname="--"
+    if(present(varname))assertname=varname
+    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Jbasis_to_Cbasis",reg(assertname))
     !
     B=A
     A=zero
@@ -554,12 +575,15 @@ contains
   subroutine Ybasis_to_Jbasis(A,varname)
     implicit none
     complex(8),dimension(:,:),intent(inout)     :: A
-    character(len=*),intent(in)                 :: varname
+    character(len=*),intent(in),optional        :: varname
     !iternal
     complex(8),dimension(size(A,1),size(A,2))   :: B
     complex(8),dimension(6,6)                   :: U,Udag
+    character(len=32)                           :: assertname
     !
-    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Jbasis",varname)
+    assertname="--"
+    if(present(varname))assertname=varname
+    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Jbasis",reg(assertname))
     !
     B=A
     A=zero
@@ -580,12 +604,15 @@ contains
   subroutine Jbasis_to_Ybasis(A,varname)
     implicit none
     complex(8),dimension(:,:),intent(inout)     :: A
-    character(len=*),intent(in)                 :: varname
+    character(len=*),intent(in),optional        :: varname
     !iternal
     complex(8),dimension(size(A,1),size(A,2))   :: B
     complex(8),dimension(6,6)                   :: U,Udag
+    character(len=32)                           :: assertname
     !
-    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Jbasis",varname)
+    assertname="--"
+    if(present(varname))assertname=varname
+    call assert_shape(A,[Nspin*Norb,Nspin*Norb],"Cbasis_to_Jbasis",reg(assertname))
     !
     B=A
     A=zero
@@ -633,16 +660,26 @@ contains
      !
    end subroutine print_G
 
-   subroutine print_Sigma()
+   subroutine print_Sigma(suff)
      implicit none
+     character(len=*),optional,intent(in)        :: suff
+     character(len=32)                           :: Sm,Sr
+     !
+     if (present(suff)) then
+        Sm=reg("S"//suff//"mats")
+        Sr=reg("S"//suff//"real")
+     else
+        Sm=reg("Smats")
+        Sr=reg("Sreal")
+     endif
      !
      if (master) then
         if (symtest) then
-           call dmft_print_gf_matsubara(Smats,"Smats",iprint=3)
-           call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=3)
+           call dmft_print_gf_matsubara(Smats,Sm,iprint=3)
+           call dmft_print_gf_realaxis(Sreal,Sr,iprint=3)
         else
-           call dmft_print_gf_matsubara(Smats,"Smats",iprint=1)
-           call dmft_print_gf_realaxis(Sreal,"Sreal",iprint=1)
+           call dmft_print_gf_matsubara(Smats,Sm,iprint=1)
+           call dmft_print_gf_realaxis(Sreal,Sr,iprint=1)
         endif
      endif
      !
