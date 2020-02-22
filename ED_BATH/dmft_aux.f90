@@ -144,7 +144,7 @@ subroutine init_dmft_bath(dmft_bath_)
      if (replica_operators) then
         do i=1,Nbath
            do iop=1,Nop
-              dmft_bath_%o(iop,i)=0.1d0+noise_m(iop)+noise_b(i)
+              dmft_bath_%o(iop,i)=1.d0*((-1)**iop)+noise_m(iop)+noise_b(i)
               dmft_bath_%h(:,:,:,:,i) = dmft_bath_%h(:,:,:,:,i) + dmft_bath_%o(iop,i) * OpMat(:,:,:,:,iop)
            enddo
         enddo
@@ -159,7 +159,7 @@ subroutine init_dmft_bath(dmft_bath_)
      dmft_bath_%t=zero
      do i=1,Nbath
         noise_tot=noise_b(i)
-        dmft_bath_%t(i)=0.2d0+noise_b(i)
+        dmft_bath_%t(i)=0.5d0+noise_b(i)
      enddo
      !
      deallocate(noise_b,noise_s,noise_o)

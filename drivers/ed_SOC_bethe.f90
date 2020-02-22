@@ -11,7 +11,7 @@ program ed_SOC_bethe
   integer                                        :: Nlat,ilat
   integer                                        :: Nso,io,jo
   integer                                        :: iorb,jorb,ispin,jspin
-  logical                                        :: converged
+  logical                                        :: converged,converged_n
   real(8)                                        :: wmixing
   character(len=60)                              :: finput
   character(len=32)                              :: hkfile
@@ -248,7 +248,7 @@ program ed_SOC_bethe
   !
 
   !#########       DMFT CYCLE       #########
-  iloop=0 ; converged=.false.
+  iloop=0 ; converged=.false. ; converged_n=.false.
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
      if (master) call start_loop(iloop,nloop,"DMFT-loop")
@@ -354,8 +354,10 @@ program ed_SOC_bethe
         converged = check_convergence(Ftest,dmft_error,nsuccess,nloop,reset=.false.)
         if (nread/=0d0) then
            call ed_get_dens(dens)
-           call ed_search_variable(xmu,sum(dens),converged)
+           !call ed_search_variable(xmu,sum(dens),converged)
+           call search_chempot(xmu,sum(dens),converged_n)
         endif
+        converged = converged .and. converged_n
      endif
      call Bcast_MPI(comm,converged)
      call Bcast_MPI(comm,xmu)
