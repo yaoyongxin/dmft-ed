@@ -258,7 +258,8 @@ contains
           if (Otmp(jo,io)/=conjg(Otmp(io,jo))) then
              write(LOGfile,*)io,jo,Otmp(io,jo)
              write(LOGfile,*)jo,io,Otmp(jo,io)
-             stop "the user provided a non-Hermitian operator at index: "//str(index)
+             write(LOGfile,'(A)') "the user provided a non-Hermitian operator at index: "//str(index)
+             stop
           endif
        enddo
     enddo
@@ -291,7 +292,8 @@ contains
           if (Operator(jo,io)/=conjg(Operator(io,jo))) then
              write(LOGfile,*)io,jo,Operator(io,jo)
              write(LOGfile,*)jo,io,Operator(jo,io)
-             stop "the user provided a non-Hermitian operator at index: "//str(index)
+             write(LOGfile,'(A)') "the user provided a non-Hermitian operator at index: "//str(index)
+             stop
           endif
        enddo
     enddo

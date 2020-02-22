@@ -71,20 +71,20 @@ program ed_SOC_bethe
 
 
   !#########    VARIABLE PARSING    #########
-  call parse_cmd_variable(finput,      "FINPUT",  default='inputED_SOC.in')
+  call parse_cmd_variable(finput,      "FINPUT",  default='inputED_S.in')
   !
-  call parse_input_variable(nk,        "NK",      finput,default=10)
-  call parse_input_variable(nkpath,    "NKPATH",  finput,default=500)
-  call parse_input_variable(Le,        "LE",      finput,default=1000)
-  call parse_input_variable(semiW,     "SEMIW",   finput,default=[1d0,1d0,1d0,1d0,1d0])
-  call parse_input_variable(Elevels,   "ELEVELS", finput,default=[0d0,0d0,0d0,0d0,0d0])
-  call parse_input_variable(wmixing,   "WMIXING", finput,default=0.5d0)
-  call parse_input_variable(lambda_soc,"SOC",     finput,default=0.0d0)
-  call parse_input_variable(socsym,    "SOCSYM",  finput,default=.false.)
-  call parse_input_variable(symtest,   "SYMTEST", finput,default=.true.)
-  call parse_input_variable(calcG0,    "CALCG0",  finput,default=.true.)
-  call parse_input_variable(lattice,   "LATTICE", finput,default="Bethe")
-  call parse_input_variable(Utensor,   "UTENSOR", finput,default=.false.)
+  call parse_input_variable(nk,        "NK",       finput,default=10)
+  call parse_input_variable(nkpath,    "NKPATH",   finput,default=500)
+  call parse_input_variable(Le,        "LE",       finput,default=1000)
+  call parse_input_variable(semiW,     "SEMIW",    finput,default=[1d0,1d0,1d0,1d0,1d0])
+  call parse_input_variable(Elevels,   "ELEVELS",  finput,default=[0d0,0d0,0d0,0d0,0d0])
+  call parse_input_variable(wmixing,   "WMIXING",  finput,default=0.5d0)
+  call parse_input_variable(lambda_soc,"SOC",      finput,default=0.0d0)
+  call parse_input_variable(socsym,    "SOCSYM",   finput,default=.false.)
+  call parse_input_variable(symtest,   "SYMTEST",  finput,default=.true.)
+  call parse_input_variable(calcG0,    "CALCG0LOC",finput,default=.true.)
+  call parse_input_variable(lattice,   "LATTICE",  finput,default="Bethe")
+  call parse_input_variable(Utensor,   "UTENSOR",  finput,default=.false.)
   !
   call ed_read_input(trim(finput),comm)
   lattice=reg(lattice)
@@ -226,6 +226,7 @@ program ed_SOC_bethe
      Op=atomic_SOC()
      call Cbasis_to_Ybasis(Op,"SOC")
      call set_replica_operators(Op,2)
+     call set_replica_operators(-1.d0*Op,3)
      !
   endif
   if(master)write(LOGfile,*)"Bath_size:",Nb
@@ -235,14 +236,14 @@ program ed_SOC_bethe
   !
   if (lambda_soc.ne.0d0.and.Utensor) call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
   !
-  !Odum=zero
+  Odum=zero
   dum=cos(pi/5.d0)
   cum=sin(pi/5.d0)
-  !Odum(1,1)=cmplx(+dum,0d0)
-  !Odum(1,2)=cmplx(-cum,0d0)
-  !Odum(2,1)=cmplx(+cum,0d0)
-  !Odum(2,2)=cmplx(+dum,0d0)
-  !Odum(3,3)=cmplx(1.d0,0d0)
+  Odum(1,1)=cmplx(+dum,0d0)
+  Odum(1,2)=cmplx(-cum,0d0)
+  Odum(2,1)=cmplx(+cum,0d0)
+  Odum(2,2)=cmplx(+dum,0d0)
+  Odum(3,3)=cmplx(1.d0,0d0)
   !call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
   !
 
