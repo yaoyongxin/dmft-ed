@@ -100,6 +100,7 @@ program ed_SOC_bethe
   call add_ctrl_var(ed_para,  "ED_PARA")
   call add_ctrl_var(bath_type,"BATH_TYPE")
   call add_ctrl_var(Jz_basis, "JZ_BASIS")
+  call add_ctrl_var(replica_operators, "REPLICA_OPERATORS")
 
 
   !#########      CONTROL FLAGS     #########
@@ -221,12 +222,14 @@ program ed_SOC_bethe
      ed_mode = "nonsu2"
      Nb=get_bath_dimension(Hloc_nn)
      !
-     Op = eye(Nso)
-     call set_replica_operators(Op,1)
-     Op=atomic_SOC()
-     call Cbasis_to_Ybasis(Op,"SOC")
-     call set_replica_operators(Op,2)
-     call set_replica_operators(-1.d0*Op,3)
+     if (replica_operators) then
+        Op = eye(Nso)
+        call set_replica_operators(Op,1)
+        Op=atomic_SOC()
+        call Cbasis_to_Ybasis(Op,"SOC")
+        call set_replica_operators(Op,2)
+        call set_replica_operators(-1.d0*Op,3)
+     endif
      !
   endif
   if(master)write(LOGfile,*)"Bath_size:",Nb

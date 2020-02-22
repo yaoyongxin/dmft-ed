@@ -746,7 +746,7 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
                     do jorb=1,Norb
                        io = iorb + (ispin-1)*Norb
                        jo = jorb + (ispin-1)*Norb
-                       if(io.gt.jo)cycle !only upper triangular saved. Hermiticity imposed here
+                       if(io.ge.jo)cycle !only upper triangular saved. Hermiticity imposed here
                        element_R=0.0d0;element_I=0.0d0
                        if(dmft_bath_%mask(ispin,ispin,iorb,jorb,1)) then
                           i=i+1
@@ -809,7 +809,7 @@ subroutine set_dmft_bath(bath_,dmft_bath_)
                        do jorb=1,Norb
                           io = iorb + (ispin-1)*Norb
                           jo = jorb + (jspin-1)*Norb
-                          if(io.gt.jo)cycle !only upper triangular saved. Hermiticity imposed here
+                          if(io.ge.jo)cycle !only upper triangular saved. Hermiticity imposed here
                           element_R=0.0d0;element_I=0.0d0
                           if(dmft_bath_%mask(ispin,jspin,iorb,jorb,1)) then
                              i=i+1
@@ -1057,7 +1057,7 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
                     do jorb=1,Norb
                        io = iorb + (ispin-1)*Norb
                        jo = jorb + (ispin-1)*Norb
-                       if(io.gt.jo)cycle !only upper triangular saved. Hermiticity imposed in set_dmft_bath
+                       if(io.ge.jo)cycle !only upper triangular saved. Hermiticity imposed in set_dmft_bath
                        if(dmft_bath_%mask(ispin,ispin,iorb,jorb,1)) then
                           i=i+1
                           bath_(i)=real(dmft_bath_%h(ispin,ispin,iorb,jorb,ibath))
@@ -1110,7 +1110,7 @@ subroutine get_dmft_bath(dmft_bath_,bath_)
                        do jorb=1,Norb
                           io = iorb + (ispin-1)*Norb
                           jo = jorb + (jspin-1)*Norb
-                          if(io.gt.jo)cycle !only upper triangular saved. Hermiticity imposed in set_dmft_bath
+                          if(io.ge.jo)cycle !only upper triangular saved. Hermiticity imposed in set_dmft_bath
                           if(dmft_bath_%mask(ispin,jspin,iorb,jorb,1)) then
                              i=i+1
                              bath_(i)=real(dmft_bath_%h(ispin,jspin,iorb,jorb,ibath))
