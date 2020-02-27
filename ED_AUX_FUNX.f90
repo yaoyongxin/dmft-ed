@@ -1121,8 +1121,8 @@ contains
   function atomic_j(component,orbtype) result (ja)
     implicit none
     complex(8),dimension(Nspin*Norb,Nspin*Norb)  :: ja,ja_
-    character(len=1)                             :: component
-    character(len=1), optional                   :: orbtype
+    character(len=*)                             :: component
+    character(len=*), optional                   :: orbtype
     integer                                      :: io,jo
     real(8)                                      :: fact
     !
@@ -1130,18 +1130,18 @@ contains
     ja=zero
     !
     fact=1.d0
-    if(present(orbtype).and.orbtype=="t2g") fact=-1.d0
-    if    (component=="x")then
+    if(present(orbtype).and.reg(orbtype)=="t2g") fact=-1.d0
+    if    (reg(component)=="x")then
        ja_(1:2,1:2) = pauli_x / 2.d0
        ja_(3:4,3:4) = pauli_x / 2.d0
        ja_(5:6,5:6) = pauli_x / 2.d0
        ja_(3:4,5:6) = -Xi * fact * eye(2)
-    elseif(component=="y")then
+    elseif(reg(component)=="y")then
        ja_(1:2,1:2) = pauli_y / 2.d0
        ja_(3:4,3:4) = pauli_y / 2.d0
        ja_(5:6,5:6) = pauli_y / 2.d0
        ja_(1:2,5:6) = +Xi * fact * eye(2)
-    elseif(component=="z")then
+    elseif(reg(component)=="z")then
        ja_(1:2,1:2) = pauli_z / 2.d0
        ja_(3:4,3:4) = pauli_z / 2.d0
        ja_(5:6,5:6) = pauli_z / 2.d0

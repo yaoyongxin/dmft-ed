@@ -390,8 +390,9 @@ contains
           !
           jdim  = getdim(jsector)
           !
+          allocate(vvinit(jdim)) ; vvinit=zero
           if(MpiMaster)then
-             allocate(vvinit(jdim)) ; vvinit=zero
+             !allocate(vvinit(jdim)) ; vvinit=zero
              !
              call build_sector(jsector,HJ)
              do m=1,idim
@@ -453,8 +454,9 @@ contains
           !
           jdim  = getdim(jsector)
           !
+          allocate(vvinit(jdim)) ; vvinit=zero
           if(MpiMaster)then
-             allocate(vvinit(jdim)) ; vvinit=zero
+             !allocate(vvinit(jdim)) ; vvinit=zero
              !
              call build_sector(jsector,HJ)
              do m=1,idim
@@ -561,8 +563,9 @@ contains
           jdim_old  = getdim(jsector)
           jdim  = getdim(jsector)
           !
+          allocate(vvinit(jdim)) ; vvinit=zero
           if(MpiMaster)then
-             allocate(vvinit(jdim)) ; vvinit=zero
+             !allocate(vvinit(jdim)) ; vvinit=zero
              !
              call build_sector(jsector,HJ)
              do m=1,idim
@@ -644,8 +647,9 @@ contains
           jdim_old  = getdim(jsector)
           jdim  = getdim(jsector)
           !
+          allocate(vvinit(jdim)) ; vvinit=zero
           if(MpiMaster)then
-             allocate(vvinit(jdim)) ; vvinit=zero
+             !allocate(vvinit(jdim)) ; vvinit=zero
              !
              call build_sector(jsector,HJ)
              do m=1,idim
@@ -729,8 +733,9 @@ contains
           jdim_old  = getdim(jsector)
           jdim  = getdim(jsector)
           !
+          allocate(vvinit(jdim)) ; vvinit=zero
           if(MpiMaster)then
-             allocate(vvinit(jdim)) ; vvinit=zero
+             !allocate(vvinit(jdim)) ; vvinit=zero
              !
              call build_sector(jsector,HJ)
              do m=1,idim
@@ -813,8 +818,9 @@ contains
           jdim_old  = getdim(jsector)
           jdim  = getdim(jsector)
           !
+          allocate(vvinit(jdim)) ; vvinit=zero
           if(MpiMaster)then
-             allocate(vvinit(jdim)) ; vvinit=zero
+             !allocate(vvinit(jdim)) ; vvinit=zero
              !
              call build_sector(jsector,HJ)
              do m=1,idim

@@ -85,17 +85,17 @@
     !#                    < j_{x,y,z} >                  #
     !#####################################################
     !
-    jimp(1) = trace(matmul(rho_so,atomic_j("x")))
-    jimp(2) = trace(matmul(rho_so,atomic_j("y")))
-    jimp(3) = trace(matmul(rho_so,atomic_j("z")))
+    jimp(1) = trace(matmul(rho_so,atomic_j(component="x",orbtype="t2g")))
+    jimp(2) = trace(matmul(rho_so,atomic_j(component="y",orbtype="t2g")))
+    jimp(3) = trace(matmul(rho_so,atomic_j(component="z",orbtype="t2g")))
     !
     !#####################################################
     !#                   < j^2_{x,y,z} >                 #
     !#####################################################
     !
-    jimp_sq(1) = trace(matmul(rho_so,matmul(atomic_j("x"),atomic_j("x"))))
-    jimp_sq(2) = trace(matmul(rho_so,matmul(atomic_j("y"),atomic_j("y"))))
-    jimp_sq(3) = trace(matmul(rho_so,matmul(atomic_j("z"),atomic_j("z"))))
+    jimp_sq(1) = trace(matmul(rho_so,matmul(atomic_j(component="x",orbtype="t2g"),atomic_j(component="x",orbtype="t2g"))))
+    jimp_sq(2) = trace(matmul(rho_so,matmul(atomic_j(component="y",orbtype="t2g"),atomic_j(component="y",orbtype="t2g"))))
+    jimp_sq(3) = trace(matmul(rho_so,matmul(atomic_j(component="z",orbtype="t2g"),atomic_j(component="z",orbtype="t2g"))))
     !
     !#####################################################
     !#                        < LS >                     #
@@ -212,17 +212,17 @@
        !#                    < j_{x,y,z} >                  #
        !#####################################################
        !
-       jimp(ilat,1) = trace(matmul(rho_so(ilat,:,:),atomic_j("x")))
-       jimp(ilat,2) = trace(matmul(rho_so(ilat,:,:),atomic_j("y")))
-       jimp(ilat,3) = trace(matmul(rho_so(ilat,:,:),atomic_j("z")))
+       jimp(ilat,1) = trace(matmul(rho_so(ilat,:,:),atomic_j(component="x",orbtype="t2g")))
+       jimp(ilat,2) = trace(matmul(rho_so(ilat,:,:),atomic_j(component="y",orbtype="t2g")))
+       jimp(ilat,3) = trace(matmul(rho_so(ilat,:,:),atomic_j(component="z",orbtype="t2g")))
        !
        !#####################################################
        !#                   < j^2_{x,y,z} >                 #
        !#####################################################
        !
-       jimp_sq(ilat,1) = trace(matmul(rho_so(ilat,:,:),matmul(atomic_j("x"),atomic_j("x"))))
-       jimp_sq(ilat,2) = trace(matmul(rho_so(ilat,:,:),matmul(atomic_j("y"),atomic_j("y"))))
-       jimp_sq(ilat,3) = trace(matmul(rho_so(ilat,:,:),matmul(atomic_j("z"),atomic_j("z"))))
+       jimp_sq(ilat,1) = trace(matmul(rho_so(ilat,:,:),matmul(atomic_j(component="x",orbtype="t2g"),atomic_j(component="x",orbtype="t2g"))))
+       jimp_sq(ilat,2) = trace(matmul(rho_so(ilat,:,:),matmul(atomic_j(component="y",orbtype="t2g"),atomic_j(component="y",orbtype="t2g"))))
+       jimp_sq(ilat,3) = trace(matmul(rho_so(ilat,:,:),matmul(atomic_j(component="z",orbtype="t2g"),atomic_j(component="z",orbtype="t2g"))))
        !
        !#####################################################
        !#                        < LS >                     #
@@ -317,4 +317,3 @@
     close(unit_)
     !
   end subroutine print_operators
-

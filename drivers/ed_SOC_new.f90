@@ -8,13 +8,11 @@ program ed_SOC_bethe
 
   !#########   VARIABLES DECLARATION   #########
   integer                                        :: iloop,unit
-  integer                                        :: Nlat,ilat
   integer                                        :: Nso,io,jo
-  integer                                        :: iorb,jorb,ispin,jspin
+  integer                                        :: iorb,ispin
   logical                                        :: converged,converged_n
   real(8)                                        :: wmixing
   character(len=60)                              :: finput
-  character(len=32)                              :: hkfile
   !Mpi:
   integer                                        :: comm,rank,ier
   logical                                        :: master
@@ -337,9 +335,9 @@ program ed_SOC_bethe
            if (iloop>=5) call search_chempot(xmu,sum(dens),converged_n,1.d0+0.5d0*floor(iloop/10.d0))
         endif
         !
-        if (mushift .and.(.not.mushift_done) ) then !converged_n.and.
+        if (converged_n .and. mushift .and.(.not.mushift_done) ) then
             write(LOGfile,*) "   ----------------------xmushift----------------------"
-            call find_xmu_shift(Greal(1,1,1,1,:),0.2d0,top,bottom)
+            call find_xmu_shift(Greal(1,1,1,1,:),top,bottom)
             xmu_shift = bottom + ( top - bottom ) / 2.d0
             xmu_old = xmu
             if(abs(xmu_shift)>2*dw)then
@@ -459,17 +457,14 @@ contains
    !+-------------------------------------------------------------------------+!
    !PURPOSE:
    !+-------------------------------------------------------------------------+!
-   subroutine find_xmu_shift(Gw,lvl,top,bottom)
+   subroutine find_xmu_shift(Gw,top,bottom)
      implicit none
      complex(8),dimension(Lreal),intent(in)      :: Gw
-     real(8),intent(in)                          :: lvl
      real(8),intent(out)                         :: top,bottom
      !
      integer                                     :: posupper,poslower
      integer                                     :: icount,max_count
      integer,dimension(300)                      :: posmax
-     real(8)                                     :: second_derivative
-     logical                                     :: level
      real(8),dimension(:),allocatable            :: Gtmp
      !
      top=0.d0;bottom=0.d0
@@ -503,7 +498,7 @@ contains
      !
      write(LOGfile,'(A16)')"--- selected ---"
      write(LOGfile,'(F8.3,1X,F8.3)')wr(posupper),wr(poslower)
-     write(*,*)posupper,wr(posupper),poslower,wr(poslower)
+     !write(*,*)posupper,wr(posupper),poslower,wr(poslower)
      if(wr(posupper).lt.0d0)then
         bottom=wr(posupper)
         top=wr(poslower)
