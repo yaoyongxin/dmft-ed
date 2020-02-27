@@ -819,10 +819,11 @@ contains
 
 
 
-  subroutine search_chempot(xmu_tmp,dens_tmp,converged_)
+  subroutine search_chempot(xmu_tmp,dens_tmp,converged_,delta_xmu_)
     real(8),intent(in)          ::   dens_tmp
     real(8),intent(inout)       ::   xmu_tmp
     logical,intent(inout)       ::   converged_
+    real(8),intent(in),optional ::   delta_xmu_
     !internal
     real(8)                     ::   diffdens,delta_xmu,xmu_shift
     real(8)                     ::   denslarge,denssmall,xmu_old
@@ -838,6 +839,7 @@ contains
     !
     diffdens=dens_tmp-nread
     delta_xmu=0.2d0
+    if(present(delta_xmu_))delta_xmu=delta_xmu_
     !
     if ((dabs(diffdens)).le.nerr) then
        converged_=.TRUE.

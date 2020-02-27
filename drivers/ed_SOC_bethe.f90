@@ -20,7 +20,7 @@ program ed_SOC_bethe
   logical                                        :: master
   !Bath:
   integer                                        :: Nb
-  real(8),dimension(:),allocatable               :: Bath
+  real(8),dimension(:),allocatable               :: Bath,Bath_old
   !Local functions:
   complex(8),dimension(:,:,:,:,:),allocatable    :: Smats,Gmats
   complex(8),dimension(:,:,:,:,:),allocatable    :: Sreal,Greal
@@ -31,16 +31,12 @@ program ed_SOC_bethe
   integer                                        :: iw
   real(8)                                        :: dw
   real(8),dimension(:),allocatable               :: wr,wm
-  !Energy meshes and Bethe DoS:
-  integer                                        :: ie,Le
-  real(8),dimension(4)                           :: semiW          !semi-bandwidth from inputfile
-  real(8),dimension(:),allocatable               :: Dband          !semi-bandwidth used
-  real(8),dimension(:),allocatable               :: de
-  real(8),dimension(:,:),allocatable             :: DoS,er
   !K-dependent Hamiltonian:
   integer                                        :: ik,Nk,Nkpath,Lk
   real(8),dimension(:),allocatable               :: Wtk
   complex(8),dimension(:,:,:),allocatable        :: Hk
+  real(8),dimension(4)                           :: semiW          !semi-bandwidth from inputfile
+  real(8),dimension(:),allocatable               :: Dband          !semi-bandwidth used
   !Local Hamiltonian:
   complex(8),dimension(:,:),allocatable          :: Hloc_so
   complex(8),dimension(:,:,:,:),allocatable      :: Hloc_nn
@@ -55,11 +51,19 @@ program ed_SOC_bethe
   complex(8),dimension(:,:),allocatable          :: Op
   complex(8),dimension(:,:),allocatable          :: Gtmp
   !Miscellaneous:
-  logical                                        :: socsym,calcG0
-  logical                                        :: symtest
+  logical                                        :: socsym,symtest
+  logical                                        :: calcG0
+  logical                                        :: testSO3
+  logical                                        :: mushift,mushift_done=.false.
+  !Rigid xmu shift:
+  integer                                        :: shift_n_loop
+  real(8)                                        :: xmu_shift,xmu_old
+  real(8)                                        :: top,bottom
   !Dummy variables:
   real(8)                                        :: dum,cum
   complex(8),dimension(:,:),allocatable          :: Odum
+
+
 
 
   !#########   MPI INITIALIZATION   #########
@@ -70,12 +74,13 @@ program ed_SOC_bethe
   master = get_Master_MPI(comm)
 
 
+
+
   !#########    VARIABLE PARSING    #########
   call parse_cmd_variable(finput,      "FINPUT",  default='inputED_S.in')
   !
   call parse_input_variable(nk,        "NK",       finput,default=10)
   call parse_input_variable(nkpath,    "NKPATH",   finput,default=500)
-  call parse_input_variable(Le,        "LE",       finput,default=1000)
   call parse_input_variable(semiW,     "SEMIW",    finput,default=[1d0,1d0,1d0,1d0,1d0])
   call parse_input_variable(Elevels,   "ELEVELS",  finput,default=[0d0,0d0,0d0,0d0,0d0])
   call parse_input_variable(wmixing,   "WMIXING",  finput,default=0.5d0)
@@ -83,8 +88,10 @@ program ed_SOC_bethe
   call parse_input_variable(socsym,    "SOCSYM",   finput,default=.false.)
   call parse_input_variable(symtest,   "SYMTEST",  finput,default=.true.)
   call parse_input_variable(calcG0,    "CALCG0LOC",finput,default=.true.)
-  call parse_input_variable(lattice,   "LATTICE",  finput,default="Bethe")
+  call parse_input_variable(lattice,   "LATTICE",  finput,default="Square")
   call parse_input_variable(Utensor,   "UTENSOR",  finput,default=.false.)
+  call parse_input_variable(testSO3,   "TESTSU3",  finput,default=.false.)
+  call parse_input_variable(mushift,   "MUSHIFT",  finput,default=.false.)
   !
   call ed_read_input(trim(finput),comm)
   lattice=reg(lattice)
@@ -103,12 +110,16 @@ program ed_SOC_bethe
   call add_ctrl_var(replica_operators, "REPLICA_OPERATORS")
 
 
+
+
   !#########      CONTROL FLAGS     #########
   dum=0d0
   do iorb=1,Norb
      dum=dum+abs(Elevels(iorb))
   enddo
   if ((dum.ne.0d0).and.(lambda_soc.ne.0d0)) stop "Crystal field and SOC are not compatible"
+
+
 
 
   !#########   FIELDS ALLOCATION    #########
@@ -128,6 +139,15 @@ program ed_SOC_bethe
   allocate(wm(Lmats)); wm = pi/beta*dble(2*arange(1,Lmats)-1)
   !
   allocate(Odum(Norb,Norb)); Odum=zero
+  dum=cos(pi/5.d0)
+  cum=sin(pi/5.d0)
+  Odum(1,1)=cmplx(+dum,0d0)
+  Odum(1,2)=cmplx(-cum,0d0)
+  Odum(2,1)=cmplx(+cum,0d0)
+  Odum(2,2)=cmplx(+dum,0d0)
+  Odum(3,3)=cmplx(1.d0,0d0)
+
+
 
 
   !######### LATTICE INITIALIZATION #########
@@ -143,27 +163,7 @@ program ed_SOC_bethe
   allocate(Hloc_so(Nso,Nso)              ); Hloc_so=zero
   allocate(Hloc_nn(Nspin,Nspin,Norb,Norb)); Hloc_nn=zero
   !
-  if (lattice.eq."Bethe") then
-     !
-     allocate(er(Nso,Le)); er=0d0
-     allocate(DoS(Nso,Le)); DoS=0d0
-     allocate(de(Nso)); de=0d0
-     do ispin=1,Nspin
-        do iorb=1,Norb
-           io = iorb + (ispin-1)*Norb
-           er(io,:) = linspace(-Dband(io),Dband(io),Le,mesh=de(io))! + Eloc(io)
-           DoS(io,:) = dens_bethe(er(io,:),Dband(io))*de(io)
-        enddo
-     enddo
-     !
-     Hloc_so = diag(Eloc) + lambda_soc * atomic_SOC()
-     if (lambda_soc.ne.0d0) call Cbasis_to_Ybasis(Hloc_so,"Hloc_Bethe")
-     !
-  else
-     !
-     call build_hk()
-     !
-  endif
+  call build_hk()
   !
   Hloc_nn = so2nn_reshape(Hloc_so,Nspin,Norb)
   if (master) then
@@ -175,30 +175,21 @@ program ed_SOC_bethe
      endif
   endif
   !
+  !
   if (calcG0) then
      !
-     if (lattice.eq."Bethe") then
-        call dmft_gloc_matsubara(Comm,er,DoS,Hloc_so,Gmats,Smats)               !provides only diagonal one
-        Gmats(1,2,1,3,:)=-(Gmats(1,1,2,2,:)-Gmats(1,1,1,1,:))/sqrt(2.d0) ; Gmats(2,1,3,1,:)=Gmats(1,2,1,3,:)
-        Gmats(1,2,3,2,:)=+(Gmats(1,1,2,2,:)-Gmats(1,1,1,1,:))/sqrt(2.d0) ; Gmats(2,1,2,3,:)=Gmats(1,2,3,2,:)
-        call dmft_gloc_realaxis(Comm,er,DoS,Hloc_so,Greal,Sreal)                !provides only diagonal one
-        Greal(1,2,1,3,:)=-(Greal(1,1,2,2,:)-Greal(1,1,1,1,:))/sqrt(2.d0) ; Greal(2,1,3,1,:)=Greal(1,2,1,3,:)
-        Greal(1,2,3,2,:)=+(Greal(1,1,2,2,:)-Greal(1,1,1,1,:))/sqrt(2.d0) ; Greal(2,1,2,3,:)=Greal(1,2,3,2,:)
-     else
-        call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
-        call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
-     endif
-     !
+     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
+     call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
      if(lambda_soc.ne.0d0) then
         call print_G("0Y")
         do iw=1,Lmats
            Gtmp=nn2so_reshape(Gmats(:,:,:,:,iw),Nspin,Norb)
-           call Ybasis_to_Jbasis(Gtmp,"Gmats")
+           call Ybasis_to_Jbasis(Gtmp)
            Gmats(:,:,:,:,iw)=so2nn_reshape(Gtmp,Nspin,Norb)
         enddo
         do iw=1,Lreal
            Gtmp=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
-           call Ybasis_to_Jbasis(Gtmp,"Greal")
+           call Ybasis_to_Jbasis(Gtmp)
            Greal(:,:,:,:,iw)=so2nn_reshape(Gtmp,Nspin,Norb)
         enddo
         call print_G("0J")
@@ -207,7 +198,7 @@ program ed_SOC_bethe
      endif
      !
   endif
-  !
+
 
 
 
@@ -234,21 +225,15 @@ program ed_SOC_bethe
   endif
   if(master)write(LOGfile,*)"Bath_size:",Nb
   allocate(Bath(Nb));Bath=0.0d0
+  allocate(Bath_old(Nb));Bath_old=0.0d0
   !
   call ed_init_solver(Comm,Bath,Hloc_nn)
   !
-  if (lambda_soc.ne.0d0.and.Utensor) call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
-  !
-  Odum=zero
-  dum=cos(pi/5.d0)
-  cum=sin(pi/5.d0)
-  Odum(1,1)=cmplx(+dum,0d0)
-  Odum(1,2)=cmplx(-cum,0d0)
-  Odum(2,1)=cmplx(+cum,0d0)
-  Odum(2,2)=cmplx(+dum,0d0)
-  Odum(3,3)=cmplx(1.d0,0d0)
-  !call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
-  !
+  if (lambda_soc.ne.0d0.and.Utensor.and.(.not.testSO3)) call ed_rotate_interaction(Comm,orbital_Lz_rotation_Norb())
+  if (lambda_soc.eq.0d0.and.Utensor.and.testSO3)        call ed_rotate_interaction(Comm,Odum)
+
+
+
 
   !#########       DMFT CYCLE       #########
   iloop=0 ; converged=.false. ; converged_n=.false.
@@ -271,19 +256,13 @@ program ed_SOC_bethe
 
 
      !get Gloc
-     if (lattice.eq."Bethe") then
-        !these two are providing only diagonal entries but that's only for check.
-        call dmft_gloc_matsubara(Comm,er,DoS,Hloc_so,Gmats,Smats)
-        call dmft_gloc_realaxis(Comm,er,DoS,Hloc_so,Greal,Sreal)
-     else
-        call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
-        call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
-     endif
+     call dmft_gloc_matsubara(Comm,Hk,Wtk,Gmats,Smats)
+     call dmft_gloc_realaxis(Comm,Hk,Wtk,Greal,Sreal)
 
 
      !print everything to check for the correct symmetry in {Y} basis
      call print_G("Y")
-     call print_Sigma("Y")
+     !call print_Sigma("Y")
      if(lambda_soc.ne.0d0) then
         do iw=1,Lreal
            Gtmp=nn2so_reshape(Greal(:,:,:,:,iw),Nspin,Norb)
@@ -295,12 +274,7 @@ program ed_SOC_bethe
 
 
      !Get the Weiss field/Delta function to be fitted
-     if (lattice.eq."Bethe") then
-        call ed_get_gimp_matsubara(Gmats)
-        call dmft_self_consistency(Comm,Gmats,Field,Hloc_nn,SCtype=cg_scheme,wbands=Dband)
-     else
-        call dmft_self_consistency(Comm,Gmats,Smats,Field,Hloc_nn,SCtype=cg_scheme)
-     endif
+     call dmft_self_consistency(Comm,Gmats,Smats,Field,Hloc_nn,SCtype=cg_scheme)
      if (master) then
         if (symtest) then
            call dmft_print_gf_matsubara(Field,cg_scheme,iprint=3)
@@ -311,8 +285,10 @@ program ed_SOC_bethe
 
 
      ! Mixing
-     if (iloop>1) Field = wmixing*Field + (1.d0-Field)*Field_old
-     Field_old=Field
+     !if (iloop>1) Field = wmixing*Field + (1.d0-Field)*Field_old
+     !Field_old=Field
+     if(iloop>1)Bath = wmixing*Bath + (1.d0-wmixing)*Bath_old
+     Bath_old=Bath
 
 
      !Perform the SELF-CONSISTENCY by fitting the new bath
@@ -320,7 +296,6 @@ program ed_SOC_bethe
         if (ed_para) then
            call ed_chi2_fitgf(Comm,Field,bath,ispin=1)
            call spin_symmetrize_bath(bath,save=.true.)
-           call orb_symmetrize_bath(bath,save=.true.)
         else
            call ed_chi2_fitgf(Comm,Field,bath)
         endif
@@ -338,13 +313,13 @@ program ed_SOC_bethe
            call Cbasis_to_Jbasis(rho)
            call ed_print_density_matrix(rho,suff="J")
         endif
-        !
-       !call ed_get_quantum_SOC_operators_single()
-    endif
+        call ed_get_quantum_SOC_operators_single()
+     endif
 
 
      !Check convergence (if required change chemical potential)
      if (master) then
+        !
         if (bath_type=="normal") then
            do ispin=1,Nspin
               do iorb=1,Norb
@@ -355,11 +330,33 @@ program ed_SOC_bethe
            Ftest=(Field(1,1,3,3,:)+Field(1,2,3,2,:))/2.d0
         endif
         converged = check_convergence(Ftest,dmft_error,nsuccess,nloop,reset=.false.)
+        !
         if (nread/=0d0) then
+           converged_n=.false.
            call ed_get_dens(dens)
-           !call ed_search_variable(xmu,sum(dens),converged)
-           call search_chempot(xmu,sum(dens),converged_n)
+           if (iloop>=5) call search_chempot(xmu,sum(dens),converged_n,1.d0+0.5d0*floor(iloop/10.d0))
         endif
+        !
+        if (mushift .and.(.not.mushift_done) ) then !converged_n.and.
+            write(LOGfile,*) "   ----------------------xmushift----------------------"
+            call find_xmu_shift(Greal(1,1,1,1,:),0.2d0,top,bottom)
+            xmu_shift = bottom + ( top - bottom ) / 2.d0
+            xmu_old = xmu
+            if(abs(xmu_shift)>2*dw)then
+               shift_n_loop = shift_n_loop+1
+               xmu = xmu_old + xmu_shift
+               converged_n = .false.
+               write(LOGfile,'(6(a10,F10.5))')"shift:",xmu_shift,"xmu_old:",xmu_old,"xmu_new:",xmu
+               unit=free_unit()
+               open(unit,file="search_mu_iteration.ed",position="append")
+               write(unit,'(3F25.12,a10,1I5)')xmu,sum(dens),xmu_shift,"shift",shift_n_loop
+               close(unit)
+            else
+               write(LOGfile,'(6(a10,F10.5))')"NO shift:",xmu_shift,"2dw:",2*dw,"xmu_old:",xmu_old,"xmu_new:",xmu
+            endif
+            write(LOGfile,*) "   ----------------------------------------------------"
+        endif
+        !
         converged = converged .and. converged_n
      endif
      call Bcast_MPI(comm,converged)
@@ -456,6 +453,68 @@ contains
      H_k = H_k + lambda_soc * atomic_SOC()
      !
    end function hk_t2g_Sz
+
+
+
+   !+-------------------------------------------------------------------------+!
+   !PURPOSE:
+   !+-------------------------------------------------------------------------+!
+   subroutine find_xmu_shift(Gw,lvl,top,bottom)
+     implicit none
+     complex(8),dimension(Lreal),intent(in)      :: Gw
+     real(8),intent(in)                          :: lvl
+     real(8),intent(out)                         :: top,bottom
+     !
+     integer                                     :: posupper,poslower
+     integer                                     :: icount,max_count
+     integer,dimension(300)                      :: posmax
+     real(8)                                     :: second_derivative
+     logical                                     :: level
+     real(8),dimension(:),allocatable            :: Gtmp
+     !
+     top=0.d0;bottom=0.d0
+     posupper=10*Lreal
+     poslower=-posupper
+     max_count=0;posmax=0
+     !
+     freqloop:do iw=Lreal,2,-1
+        if((real(Gw(iw))*real(Gw(iw-1)).lt.0d0))then
+           max_count=max_count+1
+           posmax(max_count)=iw
+           if(wr(iw)<-wfin) exit freqloop
+        endif
+     enddo freqloop
+     write(LOGfile,'(A8,1X,A8)')"iw","wr(iw)"
+     do icount=1,max_count
+        write(LOGfile,'(1I8,1X,1F8.3)')posmax(icount),wr(posmax(icount))
+     enddo
+     !
+     allocate(Gtmp(max_count))
+     do icount=1,max_count
+        Gtmp(icount)=aimag(Gw(posmax(icount)))
+     enddo
+     ! look for the lowest save and delete
+     icount = minloc(Gtmp,dim=1)
+     posupper=posmax(icount)
+     Gtmp(icount)=0d0
+     ! look for the second lowest and save
+     icount = minloc(Gtmp,dim=1)
+     poslower=posmax(icount)
+     !
+     write(LOGfile,'(A16)')"--- selected ---"
+     write(LOGfile,'(F8.3,1X,F8.3)')wr(posupper),wr(poslower)
+     write(*,*)posupper,wr(posupper),poslower,wr(poslower)
+     if(wr(posupper).lt.0d0)then
+        bottom=wr(posupper)
+        top=wr(poslower)
+     else
+        bottom=wr(poslower)
+        top=wr(posupper)
+     endif
+     !
+     mushift_done=.true.
+     !
+   end subroutine find_xmu_shift
 
 
 
@@ -715,3 +774,24 @@ contains
 
 
 end program ed_SOC_bethe
+
+
+
+
+!
+!maxloop:do icount=1,max_count
+!   level=.false.
+!   if(-aimag(Gw(posmax(icount)))/pi>0.85)level=.true.
+!   second_derivative = (real(Gw(posmax(icount)+1))-real(Gw(posmax(icount)-1)))/(wr(posmax(icount)+1)-wr(posmax(icount)-1))
+!   if(second_derivative>0.d0)then
+!      if((posmax(icount)<posupper).and.(wr(posmax(icount))>0.d0).and.level)then
+!         posupper=posmax(icount)
+!         top=wr(posupper)
+!      elseif((wr(posmax(icount))<0.d0).and.level)then
+!         poslower=posmax(icount)
+!         bottom=wr(poslower)
+!         exit maxloop
+!      endif
+!   endif
+!enddo maxloop
+!
