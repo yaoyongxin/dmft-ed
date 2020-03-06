@@ -66,6 +66,7 @@ MODULE ED_INPUT_VARS
   character(len=5)     :: cg_Scheme           !fit scheme: delta (default), weiss for G0^
   integer              :: cg_method           !fit routine type:0=CGnr (default), 1=minimize (old f77), 2=CG+
   integer              :: cg_stop             !fit stop condition:0-3, 0=default
+  integer              :: cg_grad             !gradient evaluation: 0=analytic, 1=numeric
   real(8)              :: cg_eps              !fit eps tolerance
   !
   logical              :: finiteT             !flag for finite temperature calculation
@@ -185,6 +186,7 @@ contains
     call parse_input_variable(cg_method,"CG_METHOD",INPUTunit,default=0,comment="Conjugate-Gradient method: 0=NR, 1=minimize, 2=CG+.")
     call parse_input_variable(cg_stop,"CG_STOP",INPUTunit,default=0,comment="Conjugate-Gradient stopping condition.")
     call parse_input_variable(cg_eps,"CG_EPS",INPUTunit,default=0.000001d0,comment="Conjugate-Gradient eps tolerance.")
+    call parse_input_variable(cg_grad,"CG_GRAD",INPUTunit,default=0,comment="Gradient evaluation method: 0=analytic (default), 1=numeric.")
     call parse_input_variable(cg_weight,"CG_WEIGHT",INPUTunit,default=0,comment="Conjugate-Gradient weight form: 0=1.0 ,1=1/n , 2=1/w.")
     call parse_input_variable(ed_mode,"ED_MODE",INPUTunit,default='normal',comment="Flag to set ED type: normal=normal, superc=superconductive, nonsu2=broken SU(2)")
     call parse_input_variable(ed_para,"ED_PARA",INPUTunit,default=.false.,comment="Flag to force paramagnetic solution (only used in ed_mode=nonsu2 now).")

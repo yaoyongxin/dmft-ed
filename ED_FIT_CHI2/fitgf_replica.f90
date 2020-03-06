@@ -102,14 +102,33 @@ subroutine chi2_fitgf_replica(fg,bath_)
   !
   select case(cg_method)     !0=NR-CG[default]; 1=CG-MINIMIZE; 2=CG+
   case default
-     select case (cg_scheme)
-     case ("weiss")
-        call fmin_cg(array_bath,chi2_weiss_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
-     case ("delta")
-        call fmin_cg(array_bath,chi2_delta_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
-     case default
-        stop "chi2_fitgf_replica error: cg_scheme != [weiss,delta]"
-     end select
+     if(cg_grad==0)then
+        select case (cg_scheme)
+        case ("weiss")
+           call fmin_cg(array_bath,chi2_weiss_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
+        case ("delta")
+           call fmin_cg(array_bath,chi2_delta_replica,iter,chi,itmax=cg_niter,ftol=cg_Ftol,istop=cg_stop)
+        case default
+           stop "chi2_fitgf_replica error: cg_scheme != [weiss,delta]"
+        end select
+     else
+        select case (cg_scheme)
+        case ("weiss")
+           call fmin_cg(array_bath,chi2_weiss_replica,grad_chi2_weiss_replica,iter,chi,&
+                itmax=cg_niter,&
+                ftol=cg_Ftol,  &
+                istop=cg_stop, &
+                iverbose=(ed_verbose>3))
+        case ("delta")
+           call fmin_cg(array_bath,chi2_delta_replica,grad_chi2_delta_replica,iter,chi,&
+                itmax=cg_niter,&
+                ftol=cg_Ftol,  &
+                istop=cg_stop, &
+                iverbose=(ed_verbose>3))
+        case default
+           stop "chi2_fitgf_replica error: cg_scheme != [weiss,delta]"
+        end select
+     endif
      !
   case (1)
      select case (cg_scheme)
@@ -203,11 +222,12 @@ end subroutine chi2_fitgf_replica
 !PURPOSE: Evaluate the \chi^2 distance of \Delta_Anderson function.
 !+-------------------------------------------------------------+
 function chi2_delta_replica(a) result(chi2)
-  real(8),dimension(:)                               ::  a
-  real(8)                                            ::  chi2
-  real(8),dimension(totNso)                          ::  chi2_so
-  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta) ::  Delta
-  integer                                            ::  i,l,iorb,jorb,ispin,jspin
+  real(8),dimension(:)                                       :: a
+  real(8)                                                    :: chi2
+  real(8),dimension(totNso)                                  :: chi2_so
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)         :: Delta
+  real(8),dimension(Ldelta)                                  :: Ctmp
+  integer                                                    :: i,l,iorb,jorb,ispin,jspin
   !
   Delta = delta_replica(a)
   !
@@ -216,12 +236,52 @@ function chi2_delta_replica(a) result(chi2)
      jorb = getJorb(l)
      ispin = getIspin(l)
      jspin = getJspin(l)
-     chi2_so(l) = sum( abs(Gdelta(l,:)-Delta(ispin,jspin,iorb,jorb,:))**2/Wdelta(:) )
+     !
+     Ctmp =  abs(Gdelta(l,:)-Delta(ispin,jspin,iorb,jorb,:))
+     chi2_so(l) = sum( Ctmp**2/Wdelta )
   enddo
   !
   chi2=sum(chi2_so)
+  chi2=chi2/Ldelta
   !
 end function chi2_delta_replica
+
+
+!+-------------------------------------------------------------+
+!PURPOSE: Evaluate the gradient \Grad\chi^2 of
+! \Delta_Anderson function.
+!+-------------------------------------------------------------+
+function grad_chi2_delta_replica(a) result(dchi2)
+  real(8),dimension(:)                                       :: a
+  real(8),dimension(size(a))                                 :: dchi2
+  real(8),dimension(totNso,size(a))                          :: df
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)         :: Delta
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta,size(a)) :: dDelta
+  complex(8),dimension(Ldelta)                               :: Ftmp
+  real(8),dimension(Ldelta)                                  :: Ctmp
+  integer                                                    :: i,j,l,iorb,jorb,ispin,jspin
+  !
+  Delta  = delta_replica(a)
+  dDelta = grad_delta_replica(a)
+  !
+  do l=1,totNso
+     iorb = getIorb(l)
+     jorb = getJorb(l)
+     ispin = getIspin(l)
+     jspin = getJspin(l)
+     !
+     Ftmp = Gdelta(l,:)-Delta(ispin,jspin,iorb,jorb,:)
+     Ctmp = abs(Ftmp)!**(cg_pow-2)
+     do j=1,size(a)
+        df(l,j)=&
+             sum( dreal(Ftmp)*dreal(dDelta(ispin,jspin,iorb,jorb,:,j))*Ctmp/Wdelta ) + &
+             sum( dimag(Ftmp)*dimag(dDelta(ispin,jspin,iorb,jorb,:,j))*Ctmp/Wdelta )
+     enddo
+  enddo
+  !
+  dchi2 = -2.d0*sum(df,1)/Ldelta     !sum over all orbital indices
+  !
+end function grad_chi2_delta_replica
 
 
 !+-------------------------------------------------------------+
@@ -230,11 +290,12 @@ end function chi2_delta_replica
 ! a numerical estimate of the gradient.
 !+-------------------------------------------------------------+
 function chi2_weiss_replica(a) result(chi2)
-  real(8),dimension(:)                               :: a
-  real(8)                                            :: chi2
-  real(8),dimension(totNso)                          :: chi2_so
-  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta) :: g0and
-  integer                                            :: i,l,iorb,jorb,ispin,jspin
+  real(8),dimension(:)                                       :: a
+  real(8)                                                    :: chi2
+  real(8),dimension(totNso)                                  :: chi2_so
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)         :: g0and
+  real(8),dimension(Ldelta)                                  :: Ctmp
+  integer                                                    :: i,l,iorb,jorb,ispin,jspin
   !
   g0and = g0and_replica(a)
   !
@@ -243,13 +304,52 @@ function chi2_weiss_replica(a) result(chi2)
      jorb = getJorb(l)
      ispin = getIspin(l)
      jspin = getJspin(l)
-     chi2_so(l) = sum( abs(Gdelta(l,:)-g0and(ispin,jspin,iorb,jorb,:))**2/Wdelta(:) )
+     !
+     Ctmp = abs(Gdelta(l,:)-g0and(ispin,jspin,iorb,jorb,:))
+     chi2_so(l) = sum( Ctmp**2/Wdelta )
   enddo
   !
   chi2=sum(chi2_so)
+  chi2=chi2/Ldelta
   !
 end function chi2_weiss_replica
 
+
+!+-------------------------------------------------------------+
+!PURPOSE: Evaluate the gradient \Grad\chi^2 of
+! \Delta_Anderson function.
+!+-------------------------------------------------------------+
+function grad_chi2_weiss_replica(a) result(dchi2)
+  real(8),dimension(:)                                       :: a
+  real(8),dimension(size(a))                                 :: dchi2
+  real(8),dimension(totNso,size(a))                          :: df
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)         :: g0and
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta,size(a)) :: dg0and
+  complex(8),dimension(Ldelta)                               :: Ftmp
+  real(8),dimension(Ldelta)                                  :: Ctmp
+  integer                                                    :: i,j,l,iorb,jorb,ispin,jspin
+  !
+  g0and  = g0and_replica(a)
+  dg0and = grad_g0and_replica(a)
+  !
+  do l=1,totNso
+     iorb = getIorb(l)
+     jorb = getJorb(l)
+     ispin = getIspin(l)
+     jspin = getJspin(l)
+     !
+     Ftmp = Gdelta(l,:)-g0and(ispin,jspin,iorb,jorb,:)
+     Ctmp = abs(Ftmp)!**(cg_pow-2)
+     do j=1,size(a)
+        df(l,j)=&
+             sum( dreal(Ftmp)*dreal(dg0and(ispin,jspin,iorb,jorb,:,j))*Ctmp/Wdelta ) + &
+             sum( dimag(Ftmp)*dimag(dg0and(ispin,jspin,iorb,jorb,:,j))*Ctmp/Wdelta )
+     enddo
+  enddo
+  !
+  dchi2 = -2.d0*sum(df,1)/Ldelta     !sum over all orbital indices
+  !
+end function grad_chi2_weiss_replica
 
 
 !##################################################################
@@ -259,14 +359,13 @@ end function chi2_weiss_replica
 ! FUNCTIONS.
 !##################################################################
 function delta_replica(a) result(Delta)
-  real(8),dimension(:)                                :: a
-  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)  :: Delta
-  integer                                             :: ispin,jspin,iorb,jorb,ibath
-  integer                                             :: i,io,jo,ndx
-  complex(8),dimension(Nspin*Norb,Nspin*Norb)         :: V_k
-  complex(8),dimension(Nspin*Norb,Nspin*Norb,Ldelta)  :: invH_k
-  complex(8),dimension(Nspin,Nspin,Norb,Norb,Nbath)   :: invH_knn
-  type(effective_bath)                                :: dmft_bath_tmp
+  real(8),dimension(:)                                       :: a
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)         :: Delta
+  integer                                                    :: ispin,jspin,iorb,jorb,ibath
+  integer                                                    :: i,io,jo,ndx
+  complex(8),dimension(Nspin*Norb,Nspin*Norb)                :: invH_k
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Nbath)          :: invH_knn
+  type(effective_bath)                                       :: dmft_bath_tmp
   !
   call allocate_dmft_bath(dmft_bath_tmp)
   call init_dmft_bath_mask(dmft_bath_tmp)
@@ -278,35 +377,42 @@ function delta_replica(a) result(Delta)
      invH_knn=zero
      do ibath=1,Nbath
         !
-        do ispin=1,Nspin
-           do jspin=1,Nspin
-              do iorb=1,Norb
-                 do jorb=1,Norb
-                    io = iorb + (ispin-1) * Norb
-                    jo = jorb + (jspin-1) * Norb
-                    invH_k(io,jo,i)=dmft_bath_tmp%h(ispin,jspin,iorb,jorb,ibath)
-                 enddo
-              enddo
-           enddo
-        enddo
+        !do ispin=1,Nspin
+        !   do jspin=1,Nspin
+        !      do iorb=1,Norb
+        !         do jorb=1,Norb
+        !            io = iorb + (ispin-1) * Norb
+        !            jo = jorb + (jspin-1) * Norb
+        !            invH_k(io,jo,i)=dmft_bath_tmp%h(ispin,jspin,iorb,jorb,ibath)
+        !         enddo
+        !      enddo
+        !   enddo
+        !enddo
         !
-        invH_k(:,:,i) = zeye(Nspin*Norb) * xi * Xdelta(i) - invH_k(:,:,i)
-        call inv(invH_k(:,:,i))
-        invH_knn(:,:,:,:,ibath)=so2nn_reshape(invH_k(:,:,i),Nspin,Norb)
+        ! get replica hamiltonian
+        invH_k = nn2so_reshape(dmft_bath_tmp%h(:,:,:,:,ibath),Nspin,Norb)
+        !
+        ! get inverse replica propagator
+        invH_k = zeye(Nspin*Norb) * xi * Xdelta(i) - invH_k
+        !
+        ! get replica propagator
+        call inv(invH_k)
+        invH_knn(:,:,:,:,ibath) = so2nn_reshape(invH_k,Nspin,Norb)
         !
      enddo
      !
      do ibath=1,Nbath
-        do ispin=1,Nspin
-           do jspin=1,Nspin
-              do iorb=1,Norb
-                 do jorb=1,Norb
-                    Delta(ispin,jspin,iorb,jorb,i)=Delta(ispin,jspin,iorb,jorb,i)+ &
-                      dmft_bath_tmp%t(ibath) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_tmp%t(ibath)
-                enddo
-              enddo
-           enddo
-         enddo
+        Delta(:,:,:,:,i) = Delta(:,:,:,:,i) + dmft_bath_tmp%t(ibath) * invH_knn(:,:,:,:,ibath) * dmft_bath_tmp%t(ibath)
+        !do ispin=1,Nspin
+        !   do jspin=1,Nspin
+        !      do iorb=1,Norb
+        !         do jorb=1,Norb
+        !            Delta(ispin,jspin,iorb,jorb,i)=Delta(ispin,jspin,iorb,jorb,i)+ &
+        !              dmft_bath_tmp%t(ibath) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_tmp%t(ibath)
+        !         enddo
+        !      enddo
+        !   enddo
+        ! enddo
      enddo
   enddo
   !
@@ -314,12 +420,76 @@ function delta_replica(a) result(Delta)
   !
 end function delta_replica
 
+
+function grad_delta_replica(a) result(dDelta)
+  real(8),dimension(:)                                       :: a
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta,size(a)) :: dDelta
+  integer                                                    :: ispin,jspin,iorb,jorb,ibath
+  integer                                                    :: i,io,jo,iop
+  complex(8),dimension(Nspin*Norb,Nspin*Norb)                :: invH_k,derH_k,Op
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Nbath)          :: invH_knn
+  type(effective_bath)                                       :: dmft_bath_tmp
+  !
+  call allocate_dmft_bath(dmft_bath_tmp)
+  call init_dmft_bath_mask(dmft_bath_tmp)
+  call set_dmft_bath(a,dmft_bath_tmp)
+  !
+  do i=1,Ldelta
+     !
+     ![a, b, c]_k1  [a, b, c]_k2  [a, b, c]_k3
+     do ibath=1,Nbath
+        !
+        ! get replica hamiltonian
+        invH_k = nn2so_reshape(dmft_bath_tmp%h(:,:,:,:,ibath),Nspin,Norb)
+        !
+        ! get inverse replica propagator
+        invH_k = zeye(Nspin*Norb) * xi * Xdelta(i) - invH_k
+        !
+        ! get replica propagator
+        call inv(invH_k)
+        !
+        do iop=1,Nop
+           !
+           ! get operator
+           Op=nn2so_reshape(OpMat(:,:,:,:,iop),Nspin,Norb)
+           !
+           ! get derivative with respect of Op
+           derH_k = -matmul(invH_k,matmul(Op,invH_k)) * dmft_bath_tmp%t(ibath)**2
+           dDelta(:,:,:,:,i,iop+(ibath-1)*Nop) = so2nn_reshape(derH_k,Nspin,Norb)
+           !
+        enddo
+        !
+     enddo
+     !
+     !T_k1  T_k2  T_k3
+     do ibath=1,Nbath
+        !
+        ! get replica hamiltonian
+        invH_k = nn2so_reshape(dmft_bath_tmp%h(:,:,:,:,ibath),Nspin,Norb)
+        !
+        ! get inverse replica propagator
+        invH_k = zeye(Nspin*Norb) * xi * Xdelta(i) - invH_k
+        !
+        ! get replica propagator
+        call inv(invH_k)
+        !
+        ! get derivative with respect of T_k1
+        derH_k = 2.d0 * dmft_bath_tmp%t(ibath) * invH_k
+        dDelta(:,:,:,:,i,Nbath*Nop+ibath) = so2nn_reshape(derH_k,Nspin,Norb)
+        !
+     enddo
+     !
+  enddo
+  !
+end function grad_delta_replica
+
+
 function g0and_replica(a) result(G0and)
-  real(8),dimension(:)                               :: a
-  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta) :: G0and,Delta
-  complex(8),dimension(Norb*Nspin,Norb*Nspin)        :: zeta,fgorb
-  integer                                            :: i,Nso
-  integer                                            :: iorb,jorb,ispin,jspin,io,jo
+  real(8),dimension(:)                                       :: a
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)         :: G0and,Delta
+  complex(8),dimension(Norb*Nspin,Norb*Nspin)                :: zeta,fgorb
+  integer                                                    :: i,Nso
+  integer                                                    :: iorb,jorb,ispin,jspin,io,jo
   !
   Nso = Norb*Nspin
   !
@@ -354,3 +524,31 @@ function g0and_replica(a) result(G0and)
   enddo
   !
 end function g0and_replica
+
+
+function grad_g0and_replica(a) result(dG0and)
+  real(8),dimension(:)                                       :: a
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta,size(a)) :: dG0and
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta)         :: G0and
+  complex(8),dimension(Nspin,Nspin,Norb,Norb,Ldelta,size(a)) :: dDelta
+  complex(8),dimension(Nspin*Norb,Nspin*Norb)                :: dDelta_so,dG0and_so,G0and_so
+  integer                                                    :: ispin,iorb,jorb
+  integer                                                    :: ik,l
+  !
+  G0and  = g0and_replica(a)
+  dDelta = grad_delta_replica(a)
+  !
+  dG0and = zero
+  do l=1,Ldelta
+     G0and_so=nn2so_reshape(g0and(:,:,:,:,l),Nspin,Norb)
+     do ik=1,size(a)
+        dDelta_so=nn2so_reshape(dDelta(:,:,:,:,l,ik),Nspin,Norb)
+        ! dG0and_lso=matmul(-G0and_lso,dDelta_lso)
+        ! dG0and_lso=matmul(dG0and_lso,G0and_lso)
+        dG0and_so = matmul(G0and_so,matmul(dDelta_so,G0and_so))
+        ! dG0and_so = (G0and_so .x. dDelta_so) .x. G0and_so
+        dG0and(:,:,:,:,l,ik)=-so2nn_reshape(dG0and_so,Nspin,Norb)
+     enddo
+  enddo
+  !
+end function grad_g0and_replica
