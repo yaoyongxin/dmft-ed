@@ -55,7 +55,7 @@ program ed_SOC_bethe
   logical                                        :: mushift,mushift_done=.false.
   !Rigid xmu shift:
   integer                                        :: shift_n_loop
-  real(8)                                        :: xmu_shift,xmu_old
+  real(8)                                        :: xmu_shift,xmu_old,xmu_delta
   real(8)                                        :: top,bottom
   !Dummy variables:
   real(8)                                        :: dum,cum
@@ -90,6 +90,7 @@ program ed_SOC_bethe
   call parse_input_variable(Utensor,   "UTENSOR",  finput,default=.false.)
   call parse_input_variable(testSO3,   "TESTSU3",  finput,default=.false.)
   call parse_input_variable(mushift,   "MUSHIFT",  finput,default=.false.)
+  call parse_input_variable(xmu_delta, "XMUDELTA", finput,default=0.1d0)
   !
   call ed_read_input(trim(finput),comm)
   lattice=reg(lattice)
@@ -217,7 +218,7 @@ program ed_SOC_bethe
         Op=atomic_SOC()
         call Cbasis_to_Ybasis(Op,"SOC")
         call set_replica_operators(Op,2)
-        call set_replica_operators(-1.d0*Op,3)
+        if (Nop==3) call set_replica_operators(-1.d0*Op,3)
      endif
      !
   endif
@@ -234,7 +235,7 @@ program ed_SOC_bethe
 
 
   !#########       DMFT CYCLE       #########
-  iloop=0 ; converged=.false. ; converged_n=.false.
+  iloop=0 ; converged=.false. ; converged_n=.true.
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
      if (master) call start_loop(iloop,nloop,"DMFT-loop")
@@ -332,7 +333,7 @@ program ed_SOC_bethe
         if (nread/=0d0) then
            converged_n=.false.
            call ed_get_dens(dens)
-           if (iloop>=5) call search_chempot(xmu,sum(dens),converged_n,1.d0+0.5d0*floor(iloop/10.d0))
+           if (iloop>2) call search_chempot(xmu,sum(dens),converged_n,xmu_delta,0)
         endif
         !
         if (converged_n .and. mushift .and.(.not.mushift_done) ) then

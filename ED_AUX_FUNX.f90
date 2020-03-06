@@ -819,11 +819,12 @@ contains
 
 
 
-  subroutine search_chempot(xmu_tmp,dens_tmp,converged_,delta_xmu_)
+  subroutine search_chempot(xmu_tmp,dens_tmp,converged_,delta_xmu_,maxbound_)
     real(8),intent(in)          ::   dens_tmp
     real(8),intent(inout)       ::   xmu_tmp
     logical,intent(inout)       ::   converged_
     real(8),intent(in),optional ::   delta_xmu_
+    integer,intent(in),optional ::   maxbound_
     !internal
     real(8)                     ::   diffdens,delta_xmu,xmu_shift
     real(8)                     ::   denslarge,denssmall,xmu_old
@@ -835,13 +836,17 @@ contains
     integer,save                ::   inotbound
     integer,save                ::   ibound=0
     integer,save                ::   iattempt=1
-    integer                     ::   unit
+    integer                     ::   unit,maxbound
     !
-    diffdens=dens_tmp-nread
+    maxbound=10
+    if(present(maxbound_))maxbound=maxbound_
     delta_xmu=0.2d0
     if(present(delta_xmu_))delta_xmu=delta_xmu_
     !
+    diffdens=dens_tmp-nread
+    !
     if ((dabs(diffdens)).le.nerr) then
+      !
        converged_=.TRUE.
        inotbound=0
        write(LOGfile,*)
@@ -859,7 +864,9 @@ contains
        open(unit,file="search_mu_iteration"//reg(ed_file_suffix)//".ed",position="append")
        write(unit,'(3F25.12)')xmu_tmp,dens_tmp,diffdens
        close(unit)
+       !
     else
+      !
        converged_=.FALSE.
        write(LOGfile,*)
        write(LOGfile,*) "   ------------------- search chempot -----------------"
@@ -875,37 +882,30 @@ contains
           xmusmall=xmu_tmp
           denssmall=dens_tmp
        endif
+       !
        if (ilarge*ismall.ne.0) ibound=ibound+1
-       if (ilarge*ismall.eq.0) then
+       !
+       if ((ilarge*ismall.eq.0).or.(ibound.gt.maxbound)) then
           !non ho ancora trovato un xmu per cui diffdens cambia segno
           inotbound=inotbound+1
-          !if (inotbound>=8)  delta_xmu = 0.6d0
-          if (inotbound>=10) delta_xmu = 0.4d0
-          !if (inotbound>=16) delta_xmu = 1.0d0
-          !if (inotbound>=20) delta_xmu = 1.2d0
           xmu_shift = delta_xmu * diffdens
           xmu_old = xmu_tmp
           xmu_tmp = xmu_tmp - xmu_shift
-          !
           write(LOGfile,*) "   Delta xmu: ",delta_xmu
           write(LOGfile,*) "   Old xmu: ",xmu_old
           write(LOGfile,*) "   Try xmu: ",xmu_tmp
           write(LOGfile,*) "   ----------------------------------------------------"
           write(LOGfile,*)
-          !
-       else
-          !elseif((ilarge*ismall.ne.0).and.(ibound.ne.1))then
+       elseif((ilarge*ismall.ne.0).and.(ibound.le.maxbound))then
           !ho trovato un xmu per cui diffdens cambia segno
           write(LOGfile,*)"   xmu is bound",xmularge,"-",xmusmall
           xmu_shift =  sign(1.0d0,diffdens)*abs((xmusmall-xmularge)/2.)
           xmu_old = xmu_tmp
           xmu_tmp = xmu_tmp - xmu_shift
-          !
           write(LOGfile,*) "   Old xmu: ",xmu_old
           write(LOGfile,*) "   Try xmu =",xmu_tmp
           write(LOGfile,*) "   ----------------------------------------------------"
           write(LOGfile,*)
-          !
        endif
        !
        unit=free_unit()
