@@ -4,7 +4,7 @@ MODULE ED_FIT_CHI2
   USE SF_LINALG,   only:eye,zeye,inv,inv_her
   USE SF_IOTOOLS,  only:reg,free_unit,txtfy
   USE SF_ARRAYS,   only:arange
-  USE SF_MISC,     only:assert_shape 
+  USE SF_MISC,     only:assert_shape
   USE ED_INPUT_VARS
   USE ED_VARS_GLOBAL
   USE ED_AUX_FUNX
@@ -56,6 +56,7 @@ MODULE ED_FIT_CHI2
   complex(8),dimension(:,:),allocatable :: Gdelta
   complex(8),dimension(:,:),allocatable :: Fdelta
   real(8),dimension(:),allocatable      :: Xdelta,Wdelta
+  real(8)                               :: cg_pow=2d0
   integer                               :: totNorb,totNspin,totNso
   integer,dimension(:),allocatable      :: getIorb,getJorb,getIspin,getJspin
   integer                               :: Orb_indx,Spin_indx,Spin_mask
@@ -73,10 +74,10 @@ contains
 
 
   !+----------------------------------------------------------------------+
-  !PURPOSE  : Chi^2 fit of the G0/Delta 
+  !PURPOSE  : Chi^2 fit of the G0/Delta
   !
-  ! - CHI2_FITGF_GENERIC_NORMAL interface for the normal case 
-  ! - CHI2_FITGF_GENERIC_SUPERC interface for the superconducting case 
+  ! - CHI2_FITGF_GENERIC_NORMAL interface for the normal case
+  ! - CHI2_FITGF_GENERIC_SUPERC interface for the superconducting case
   !   * CHI2_FITGF_GENERIC_NORMAL_NOSPIN interface to fixed spin input
   !   * CHI2_FITGF_GENERIC_SUPERC_NOSPIN interface to fixed spin input
   !+----------------------------------------------------------------------+
@@ -84,7 +85,7 @@ contains
   !                                NORMAL                                 !
   !+----------------------------------------------------------------------+
   subroutine chi2_fitgf_generic_normal(fg,bath,ispin,iorb)
-    complex(8),dimension(:,:,:,:,:) :: fg ![Nspin][Nspin][Norb][Norb][Niw] 
+    complex(8),dimension(:,:,:,:,:) :: fg ![Nspin][Nspin][Norb][Norb][Niw]
     real(8),dimension(:)            :: bath
     integer,optional                :: ispin,iorb
     integer                         :: ispin_
@@ -131,12 +132,12 @@ contains
           endif
           call chi2_fitgf_hybrid_nonsu2(fg(:,:,:,:,:),bath)
        case default
-          stop "chi2_fitgf ERROR: ed_mode!=normal/nonsu2 but only NORMAL component is provided" 
+          stop "chi2_fitgf ERROR: ed_mode!=normal/nonsu2 but only NORMAL component is provided"
        end select
     case ("replica")
        call chi2_fitgf_replica(fg,bath)
     end select
-    !set trim_state_list to true after the first fit has been done: this 
+    !set trim_state_list to true after the first fit has been done: this
     !marks the ends of the cycle of the 1st DMFT loop.
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_normal
@@ -148,7 +149,7 @@ contains
     integer,optional                                 :: ispin,iorb
     integer                                          :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
-    if(size(fg,3)<Lfit)stop "chi2_fitgf_generic_normal_NOSPIN error: size[fg,3] < Lfit" 
+    if(size(fg,3)<Lfit)stop "chi2_fitgf_generic_normal_NOSPIN error: size[fg,3] < Lfit"
     fg_=zero
     fg_(ispin_,ispin_,:,:,1:Lfit) = fg(:,:,1:Lfit)
     if(present(iorb))then
@@ -163,7 +164,7 @@ contains
 #ifdef _MPI
   subroutine chi2_fitgf_generic_normal_mpi(comm,fg,bath,ispin,iorb)
     integer                         :: comm
-    complex(8),dimension(:,:,:,:,:) :: fg ![Nspin][Nspin][Norb][Norb][Niw] 
+    complex(8),dimension(:,:,:,:,:) :: fg ![Nspin][Nspin][Norb][Norb][Niw]
     real(8),dimension(:)            :: bath
     integer,optional                :: ispin,iorb
     integer                         :: ispin_
@@ -214,7 +215,7 @@ contains
              endif
              call chi2_fitgf_hybrid_nonsu2(fg(:,:,:,:,:),bath)
           case default
-             stop "chi2_fitgf ERROR: ed_mode!=normal/nonsu2 but only NORMAL component is provided" 
+             stop "chi2_fitgf ERROR: ed_mode!=normal/nonsu2 but only NORMAL component is provided"
           end select
        case ("replica")
           call chi2_fitgf_replica(fg,bath)
@@ -224,7 +225,7 @@ contains
     call Bcast_MPI(comm,bath)
     if(.not.MPI_MASTER)write(LOGfile,"(A)")"Bath received from master node"
     !
-    !set trim_state_list to true after the first fit has been done: this 
+    !set trim_state_list to true after the first fit has been done: this
     !marks the ends of the cycle of the 1st DMFT loop.
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_normal_mpi
@@ -237,7 +238,7 @@ contains
     integer,optional                                 :: ispin,iorb
     integer                                          :: ispin_
     ispin_=1;if(present(ispin))ispin_=ispin
-    if(size(fg,3)<Lfit)stop "chi2_fitgf_generic_normal_NOSPIN error: size[fg,3] < Lfit" 
+    if(size(fg,3)<Lfit)stop "chi2_fitgf_generic_normal_NOSPIN error: size[fg,3] < Lfit"
     fg_=zero
     fg_(ispin_,ispin_,:,:,1:Lfit) = fg(:,:,1:Lfit)
     if(present(iorb))then
@@ -288,7 +289,7 @@ contains
        case default
           write(LOGfile,"(A)") "chi2_fitgf WARNING: ed_mode=normal/nonsu2 but NORMAL & ANOMAL components provided."
           call sleep(1)
-          call chi2_fitgf_normal_normal_AllOrb(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
+          call chi2_fitgf_normal_normal_AllOrb(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)
        end select
     case ("hybrid")
        select case(ed_mode)
@@ -297,10 +298,10 @@ contains
        case default
           write(LOGfile,"(A)") "chi2_fitgf WARNING: ed_mode=normal/nonsu2 but NORMAL & ANOMAL components provided."
           call sleep(1)
-          call chi2_fitgf_hybrid_normal(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
+          call chi2_fitgf_hybrid_normal(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)
        end select
     end select
-    !set trim_state_list to true after the first fit has been done: this 
+    !set trim_state_list to true after the first fit has been done: this
     !marks the ends of the cycle of the 1st DMFT loop.
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_superc
@@ -360,7 +361,7 @@ contains
           case default
              write(LOGfile,"(A)") "chi2_fitgf WARNING: ed_mode=normal/nonsu2 but NORMAL & ANOMAL components provided."
              call sleep(1)
-             call chi2_fitgf_normal_normal_AllOrb(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
+             call chi2_fitgf_normal_normal_AllOrb(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)
           end select
        case ("hybrid")
           select case(ed_mode)
@@ -369,7 +370,7 @@ contains
           case default
              write(LOGfile,"(A)") "chi2_fitgf WARNING: ed_mode=normal/nonsu2 but NORMAL & ANOMAL components provided."
              call sleep(1)
-             call chi2_fitgf_hybrid_normal(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)          
+             call chi2_fitgf_hybrid_normal(fg(1,ispin_,ispin_,:,:,:),bath,ispin_)
           end select
        end select
     endif
@@ -377,7 +378,7 @@ contains
     call Bcast_MPI(comm,bath)
     if(.not.MPI_MASTER)write(LOGfile,"(A)")"Bath received from master node"
     !
-    !set trim_state_list to true after the first fit has been done: this 
+    !set trim_state_list to true after the first fit has been done: this
     !marks the ends of the cycle of the 1st DMFT loop.
     trim_state_list=.true.
   end subroutine chi2_fitgf_generic_superc_mpi
@@ -417,8 +418,8 @@ contains
   include "ED_FIT_CHI2/fitgf_normal_nonsu2.f90"
 
   !hybrid ED_bath
-  include "ED_FIT_CHI2/fitgf_hybrid_normal.f90"  
-  include "ED_FIT_CHI2/fitgf_hybrid_superc.f90"  
+  include "ED_FIT_CHI2/fitgf_hybrid_normal.f90"
+  include "ED_FIT_CHI2/fitgf_hybrid_superc.f90"
   include "ED_FIT_CHI2/fitgf_hybrid_nonsu2.f90"
 
   !replica ED_bath
@@ -544,8 +545,8 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: spin
     complex(8)               :: Delta_(size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Norb>1)stop "ed_fit_bath_sites_hloc_1b error: Norb > 1 in 1-band routine" 
-    if(Nspin>1)stop "ed_fit_bath_sites_hloc_1b error: Nspin > 1 in 1-band routine" 
+    if(Norb>1)stop "ed_fit_bath_sites_hloc_1b error: Norb > 1 in 1-band routine"
+    if(Nspin>1)stop "ed_fit_bath_sites_hloc_1b error: Nspin > 1 in 1-band routine"
     Delta_(:,1,1,1,1,:) = Delta
     if(present(spin))then
        call ed_fit_bath_sites_normal(bath,Delta_,Hloc,spin)
@@ -562,8 +563,8 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: spin
     complex(8)               :: Delta_(size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Norb>1)stop "ed_fit_bath_sites_hloc_1b error: Norb > 1 in 1-band routine" 
-    if(Nspin>1)stop "ed_fit_bath_sites_hloc_1b error: Nspin > 1 in 1-band routine" 
+    if(Norb>1)stop "ed_fit_bath_sites_hloc_1b error: Norb > 1 in 1-band routine"
+    if(Nspin>1)stop "ed_fit_bath_sites_hloc_1b error: Nspin > 1 in 1-band routine"
     Delta_(:,1,1,1,1,:) = Delta
     if(present(spin))then
        call ed_fit_bath_sites_normal_mpi(comm,bath,Delta_,Hloc,spin)
@@ -584,7 +585,7 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: spin
     complex(8)               :: Delta_(size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Nspin>1)stop "ed_fit_bath_sites_hloc_mb error: Nspin > 1 in M-band routine" 
+    if(Nspin>1)stop "ed_fit_bath_sites_hloc_mb error: Nspin > 1 in M-band routine"
     Delta_(:,1,1,:,:,:) = Delta
     if(present(spin))then
        call ed_fit_bath_sites_normal(bath,Delta_,Hloc,spin)
@@ -601,7 +602,7 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: spin
     complex(8)               :: Delta_(size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Nspin>1)stop "ed_fit_bath_sites_hloc_mb error: Nspin > 1 in M-band routine" 
+    if(Nspin>1)stop "ed_fit_bath_sites_hloc_mb error: Nspin > 1 in M-band routine"
     Delta_(:,1,1,:,:,:) = Delta
     if(present(spin))then
        call ed_fit_bath_sites_normal_mpi(comm,bath,Delta_,Hloc,spin)
@@ -736,8 +737,8 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: ispin
     complex(8)               :: Delta_(2,size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Norb>1)stop "ed_fit_bath_sites_superc_1b error: Norb > 1 in 1-band routine" 
-    if(Nspin>1)stop "ed_fit_bath_sites_superc_1b error: Nspin > 1 in 1-band routine" 
+    if(Norb>1)stop "ed_fit_bath_sites_superc_1b error: Norb > 1 in 1-band routine"
+    if(Nspin>1)stop "ed_fit_bath_sites_superc_1b error: Nspin > 1 in 1-band routine"
     Delta_(:,:,1,1,1,1,:) = Delta
     if(present(ispin))then
        call ed_fit_bath_sites_superc(bath,Delta_,Hloc,ispin)
@@ -754,8 +755,8 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: ispin
     complex(8)               :: Delta_(2,size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Norb>1)stop "ed_fit_bath_sites_superc_1b error: Norb > 1 in 1-band routine" 
-    if(Nspin>1)stop "ed_fit_bath_sites_superc_1b error: Nspin > 1 in 1-band routine" 
+    if(Norb>1)stop "ed_fit_bath_sites_superc_1b error: Norb > 1 in 1-band routine"
+    if(Nspin>1)stop "ed_fit_bath_sites_superc_1b error: Nspin > 1 in 1-band routine"
     Delta_(:,:,1,1,1,1,:) = Delta
     if(present(ispin))then
        call ed_fit_bath_sites_superc_mpi(comm,bath,Delta_,Hloc,ispin)
@@ -775,7 +776,7 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: ispin
     complex(8)               :: Delta_(2,size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Nspin>1)stop "ed_fit_bath_sites_superc_mb error: Nspin > 1 in M-band routine" 
+    if(Nspin>1)stop "ed_fit_bath_sites_superc_mb error: Nspin > 1 in M-band routine"
     Delta_(:,:,1,1,:,:,:) = Delta
     if(present(ispin))then
        call ed_fit_bath_sites_superc(bath,Delta_,Hloc,ispin)
@@ -792,7 +793,7 @@ contains
     complex(8)               :: Hloc(size(bath,1),Nspin,Nspin,Norb,Norb)
     integer,optional         :: ispin
     complex(8)               :: Delta_(2,size(bath,1),Nspin,Nspin,Norb,Norb,Lmats)
-    if(Nspin>1)stop "ed_fit_bath_sites_superc_mb error: Nspin > 1 in M-band routine" 
+    if(Nspin>1)stop "ed_fit_bath_sites_superc_mb error: Nspin > 1 in M-band routine"
     Delta_(:,:,1,1,:,:,:) = Delta
     if(present(ispin))then
        call ed_fit_bath_sites_superc_mpi(comm,bath,Delta_,Hloc,ispin)

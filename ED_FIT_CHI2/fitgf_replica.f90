@@ -238,7 +238,7 @@ function chi2_delta_replica(a) result(chi2)
      jspin = getJspin(l)
      !
      Ctmp =  abs(Gdelta(l,:)-Delta(ispin,jspin,iorb,jorb,:))
-     chi2_so(l) = sum( Ctmp**2/Wdelta )
+     chi2_so(l) = sum( Ctmp**cg_pow/Wdelta )
   enddo
   !
   chi2=sum(chi2_so)
@@ -271,7 +271,7 @@ function grad_chi2_delta_replica(a) result(dchi2)
      jspin = getJspin(l)
      !
      Ftmp = Gdelta(l,:)-Delta(ispin,jspin,iorb,jorb,:)
-     Ctmp = abs(Ftmp)!**(cg_pow-2)
+     Ctmp = abs(Ftmp)**(cg_pow-2)
      do j=1,size(a)
         df(l,j)=&
              sum( dreal(Ftmp)*dreal(dDelta(ispin,jspin,iorb,jorb,:,j))*Ctmp/Wdelta ) + &
@@ -279,7 +279,8 @@ function grad_chi2_delta_replica(a) result(dchi2)
      enddo
   enddo
   !
-  dchi2 = -2.d0*sum(df,1)/Ldelta     !sum over all orbital indices
+  dchi2 = -cg_pow*sum(df,1)/Ldelta     !sum over all orbital indices
+  print*,"dchi2",dchi2
   !
 end function grad_chi2_delta_replica
 
@@ -306,7 +307,7 @@ function chi2_weiss_replica(a) result(chi2)
      jspin = getJspin(l)
      !
      Ctmp = abs(Gdelta(l,:)-g0and(ispin,jspin,iorb,jorb,:))
-     chi2_so(l) = sum( Ctmp**2/Wdelta )
+     chi2_so(l) = sum( Ctmp**cg_pow/Wdelta )
   enddo
   !
   chi2=sum(chi2_so)
@@ -339,7 +340,7 @@ function grad_chi2_weiss_replica(a) result(dchi2)
      jspin = getJspin(l)
      !
      Ftmp = Gdelta(l,:)-g0and(ispin,jspin,iorb,jorb,:)
-     Ctmp = abs(Ftmp)!**(cg_pow-2)
+     Ctmp = abs(Ftmp)**(cg_pow-2)
      do j=1,size(a)
         df(l,j)=&
              sum( dreal(Ftmp)*dreal(dg0and(ispin,jspin,iorb,jorb,:,j))*Ctmp/Wdelta ) + &
@@ -347,7 +348,7 @@ function grad_chi2_weiss_replica(a) result(dchi2)
      enddo
   enddo
   !
-  dchi2 = -2.d0*sum(df,1)/Ldelta     !sum over all orbital indices
+  dchi2 = -cg_pow*sum(df,1)/Ldelta     !sum over all orbital indices
   !
 end function grad_chi2_weiss_replica
 
@@ -372,24 +373,13 @@ function delta_replica(a) result(Delta)
   call set_dmft_bath(a,dmft_bath_tmp)
   !
   Delta=zero
-  invH_k=zero
+  !
   do i=1,Ldelta
      invH_knn=zero
      do ibath=1,Nbath
         !
-        !do ispin=1,Nspin
-        !   do jspin=1,Nspin
-        !      do iorb=1,Norb
-        !         do jorb=1,Norb
-        !            io = iorb + (ispin-1) * Norb
-        !            jo = jorb + (jspin-1) * Norb
-        !            invH_k(io,jo,i)=dmft_bath_tmp%h(ispin,jspin,iorb,jorb,ibath)
-        !         enddo
-        !      enddo
-        !   enddo
-        !enddo
-        !
         ! get replica hamiltonian
+        invH_k = zero
         invH_k = nn2so_reshape(dmft_bath_tmp%h(:,:,:,:,ibath),Nspin,Norb)
         !
         ! get inverse replica propagator
@@ -403,16 +393,6 @@ function delta_replica(a) result(Delta)
      !
      do ibath=1,Nbath
         Delta(:,:,:,:,i) = Delta(:,:,:,:,i) + dmft_bath_tmp%t(ibath) * invH_knn(:,:,:,:,ibath) * dmft_bath_tmp%t(ibath)
-        !do ispin=1,Nspin
-        !   do jspin=1,Nspin
-        !      do iorb=1,Norb
-        !         do jorb=1,Norb
-        !            Delta(ispin,jspin,iorb,jorb,i)=Delta(ispin,jspin,iorb,jorb,i)+ &
-        !              dmft_bath_tmp%t(ibath) * invH_knn(ispin,jspin,iorb,jorb,ibath) * dmft_bath_tmp%t(ibath)
-        !         enddo
-        !      enddo
-        !   enddo
-        ! enddo
      enddo
   enddo
   !
@@ -454,7 +434,7 @@ function grad_delta_replica(a) result(dDelta)
            Op=nn2so_reshape(OpMat(:,:,:,:,iop),Nspin,Norb)
            !
            ! get derivative with respect of Op
-           derH_k = -matmul(invH_k,matmul(Op,invH_k)) * dmft_bath_tmp%t(ibath)**2
+           derH_k = -1.d0 * matmul(invH_k,matmul(Op,invH_k)) * dmft_bath_tmp%t(ibath)**2
            dDelta(:,:,:,:,i,iop+(ibath-1)*Nop) = so2nn_reshape(derH_k,Nspin,Norb)
            !
         enddo
