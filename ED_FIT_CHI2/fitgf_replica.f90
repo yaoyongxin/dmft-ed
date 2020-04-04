@@ -242,7 +242,7 @@ function chi2_delta_replica(a) result(chi2)
   enddo
   !
   chi2=sum(chi2_so)
-  chi2=chi2/Ldelta
+  !chi2=chi2/Ldelta
   !
 end function chi2_delta_replica
 
@@ -280,7 +280,6 @@ function grad_chi2_delta_replica(a) result(dchi2)
   enddo
   !
   dchi2 = -cg_pow*sum(df,1)/Ldelta     !sum over all orbital indices
-  print*,"dchi2",dchi2
   !
 end function grad_chi2_delta_replica
 
@@ -311,7 +310,7 @@ function chi2_weiss_replica(a) result(chi2)
   enddo
   !
   chi2=sum(chi2_so)
-  chi2=chi2/Ldelta
+  !chi2=chi2/Ldelta
   !
 end function chi2_weiss_replica
 

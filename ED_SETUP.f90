@@ -77,9 +77,9 @@ contains
        if(lanc_nstates_sector>1)stop "ED ERROR: lanc_method==lanczos available only for lanc_nstates_sector==1, T=0"
     endif
     !
-    if(ed_sectors.AND.ed_mode/="normal")then
-       stop "ED_ERROR: using ed_sectors with ed_mode=[superc,nonsu2] NOT TESTED! Uncomment this line in ED_SETUP if u want to take the risk.."
-    endif
+    !if(ed_sectors.AND.ed_mode/="normal")then
+    !   stop "ED_ERROR: using ed_sectors with ed_mode=[superc,nonsu2] NOT TESTED! Uncomment this line in ED_SETUP if u want to take the risk.."
+    !endif
   end subroutine ed_checks_global
 
 

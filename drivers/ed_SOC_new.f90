@@ -11,7 +11,7 @@ program ed_SOC_bethe
   integer                                        :: Nso,io,jo
   integer                                        :: iorb,ispin
   logical                                        :: converged,converged_n
-  real(8)                                        :: wmixing
+  real(8)                                        :: wmixing,wmixingF
   character(len=60)                              :: finput
   !Mpi:
   integer                                        :: comm,rank,ier
@@ -91,6 +91,7 @@ program ed_SOC_bethe
   call parse_input_variable(testSO3,   "TESTSU3",  finput,default=.false.)
   call parse_input_variable(mushift,   "MUSHIFT",  finput,default=.false.)
   call parse_input_variable(xmu_delta, "XMUDELTA", finput,default=0.1d0)
+  call parse_input_variable(wmixingF,  "WMIXINGF", finput,default=0.5d0)
   !
   call ed_read_input(trim(finput),comm)
   lattice=reg(lattice)
@@ -284,9 +285,9 @@ program ed_SOC_bethe
 
 
      ! Mixing
-     !if (iloop>1) Field = wmixing*Field + (1.d0-Field)*Field_old
-     !Field_old=Field
-     if(iloop>1)Bath = wmixing*Bath + (1.d0-wmixing)*Bath_old
+     if (iloop>1) Field = wmixingF*Field + (1.d0-wmixingF)*Field_old
+     Field_old=Field
+     if (iloop>1) Bath = wmixing*Bath + (1.d0-wmixing)*Bath_old
      Bath_old=Bath
 
 
@@ -333,7 +334,7 @@ program ed_SOC_bethe
         if (nread/=0d0) then
            converged_n=.false.
            call ed_get_dens(dens)
-           if (iloop>2) call search_chempot(xmu,sum(dens),converged_n,xmu_delta,0)
+           if (iloop>5) call search_chempot(xmu,sum(dens),converged_n,xmu_delta,0)
         endif
         !
         if (converged_n .and. mushift .and.(.not.mushift_done) ) then
