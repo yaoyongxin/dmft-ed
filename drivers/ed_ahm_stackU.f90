@@ -148,6 +148,7 @@ program ed_stripe
 
   !write(*,*) order_of_magnitude(43.2d0)
 
+  
   lanc_error=1.d-10
 
 
