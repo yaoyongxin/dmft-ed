@@ -33,7 +33,7 @@ contains
              write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(iorb)//"_s"//str(ispin)//str(ispin)
              if(MPIMASTER)call start_timer()
              call lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
-             if(MPIMASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(unit=logfile)
           enddo
        enddo
        !same orbital, different spin GF: G_{aa}^{ss'}(z)
@@ -45,7 +45,7 @@ contains
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
                       if(MPIMASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
-                      if(MPIMASTER)call stop_timer(LOGfile)
+                      if(MPIMASTER)call stop_timer(unit=logfile)
                    endif
                 enddo
              enddo
@@ -80,7 +80,7 @@ contains
              write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(iorb)//"_s"//str(ispin)//str(ispin)
              if(MPIMASTER)call start_timer()
              call lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
-             if(MPIMASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(unit=logfile)
           enddo
        enddo
        !
@@ -93,7 +93,7 @@ contains
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
                       if(MPIMASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
-                      if(MPIMASTER)call stop_timer(LOGfile)
+                      if(MPIMASTER)call stop_timer(unit=logfile)
                    endif
                 enddo
              enddo
@@ -129,7 +129,7 @@ contains
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
                       if(MPIMASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
-                      if(MPIMASTER)call stop_timer(LOGfile)
+                      if(MPIMASTER)call stop_timer(unit=logfile)
                    endif
                 enddo
              enddo
@@ -165,7 +165,7 @@ contains
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
                       if(MPIMASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
-                      if(MPIMASTER)call stop_timer(LOGfile)
+                      if(MPIMASTER)call stop_timer(unit=logfile)
                    endif
                 enddo
              enddo
@@ -200,7 +200,7 @@ contains
              write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(iorb)//"_s"//str(ispin)//str(ispin)
              if(MPIMASTER)call start_timer()
              call lanc_build_gf_nonsu2_diagOrb_diagSpin_c(iorb,ispin)
-             if(MPIMASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(unit=logfile)
           enddo
        enddo
        !
@@ -215,7 +215,7 @@ contains
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
                       if(MPIMASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
-                      if(MPIMASTER)call stop_timer(LOGfile)
+                      if(MPIMASTER)call stop_timer(unit=logfile)
                    endif
                 enddo
              enddo
@@ -255,7 +255,7 @@ contains
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
                       if(MPIMASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
-                      if(MPIMASTER)call stop_timer(LOGfile)
+                      if(MPIMASTER)call stop_timer(unit=logfile)
                    endif
                 enddo
              enddo
@@ -295,7 +295,7 @@ contains
                       write(LOGfile,"(A)")"Get G_l"//str(iorb)//str(jorb)//"_s"//str(ispin)//str(jspin)
                       if(MPIMASTER)call start_timer()
                       call lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
-                      if(MPIMASTER)call stop_timer(LOGfile)
+                      if(MPIMASTER)call stop_timer(unit=logfile)
                    endif
                 enddo
              enddo

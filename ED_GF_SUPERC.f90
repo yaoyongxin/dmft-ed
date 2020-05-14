@@ -34,7 +34,7 @@ contains
        write(LOGfile,"(A)")"Get G&F_l"//str(iorb)//"_s"//str(ispin)
        if(MPIMASTER)call start_timer()
        call lanc_build_gf_superc_c(iorb)
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=logfile)
        !
        impGmats(ispin,ispin,iorb,iorb,:) = auxGmats(1,:) !this is G_{iorb,iorb} = G_{up,up;iorb,iorb}
        impGreal(ispin,ispin,iorb,iorb,:) = auxGreal(1,:)

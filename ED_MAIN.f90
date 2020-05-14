@@ -468,7 +468,7 @@ contains
        !
     enddo
     !
-    call stop_timer(LOGfile)
+    call stop_timer(unit=logfile)
     !
     ed_file_suffix=""
     !
@@ -637,7 +637,7 @@ contains
     !
     call MPI_Barrier(MpiComm,MPI_ERR)
     !
-    if(MPI_MASTER)call stop_timer(LOGfile)
+    if(MPI_MASTER)call stop_timer(unit=logfile)
     !
     ed_file_suffix=""
     !

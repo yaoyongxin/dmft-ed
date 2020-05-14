@@ -25,7 +25,7 @@ contains
        write(LOGfile,"(A)")"Get Chi_dens_diag_l"//reg(txtfy(iorb))
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_densChi_diag_c(iorb)
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=logfile)
     enddo
     !
     !
@@ -35,7 +35,7 @@ contains
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
              if(MPIMASTER)call start_timer()
              call lanc_ed_build_densChi_offdiag_c(iorb,jorb)
-             if(MPIMASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(unit=logfile)
           end do
        end do
        do iorb=1,Norb
@@ -49,14 +49,14 @@ contains
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
              if(MPIMASTER)call start_timer()
              call lanc_ed_build_densChi_mix_c(iorb,jorb)
-             if(MPIMASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(unit=logfile)
           end do
        end do
        !
        write(LOGfile,"(A)")"Get Chi_dens_tot"
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_densChi_tot_c()
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=logfile)
     endif
     !
     denschi_tau = Denschi_tau/zeta_function

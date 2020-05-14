@@ -26,7 +26,7 @@ contains
           write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_s"//str(ispin)
           if(MPIMASTER)call start_timer
           call lanc_build_gf_normal_c(iorb,ispin)
-          if(MPIMASTER)call stop_timer(LOGfile)
+          if(MPIMASTER)call stop_timer(unit=logfile)
        enddo
     enddo
     !
@@ -44,7 +44,7 @@ contains
                 write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_m"//str(jorb)//"_s"//str(ispin)
                 if(MPIMASTER)call start_timer
                 call lanc_build_gf_normal_mix_c(iorb,jorb,ispin)
-                if(MPIMASTER)call stop_timer(LOGfile)
+                if(MPIMASTER)call stop_timer(unit=logfile)
              enddo
           enddo
        enddo
