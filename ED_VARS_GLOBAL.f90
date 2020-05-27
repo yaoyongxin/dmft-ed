@@ -179,6 +179,7 @@ MODULE ED_VARS_GLOBAL
   real(8),dimension(:),allocatable                   ::  ed_dens_up,ed_dens_dw
   real(8),dimension(:),allocatable                   ::  ed_docc
   real(8),dimension(:),allocatable                   ::  ed_phisc
+  real(8),dimension(:,:),allocatable                 ::  ed_mag
 
   !--------------- LATTICE WRAP VARIABLES -----------------!
   real(8),dimension(:,:),allocatable,save            :: nii,dii,mii,pii

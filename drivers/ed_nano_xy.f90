@@ -14,36 +14,30 @@ program ed_nano_isoc
   !local hybridization function:
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Weiss_ineq
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Smats,Smats_ineq
-  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Sreal,Sreal_ineq ![Nlat*(Nspin*Norb)**2*Lreal]
+  complex(8),allocatable,dimension(:,:,:,:,:,:) :: Sreal,Sreal_ineq
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Gmats,Gmats_ineq
   complex(8),allocatable,dimension(:,:,:,:,:,:) :: Greal,Greal_ineq
   real(8), allocatable,dimension(:)             :: dens,dens_ineq
   real(8), allocatable,dimension(:)             :: Sz,Sz_ineq
   real(8), allocatable,dimension(:)             :: docc,docc_ineq
   !hamiltonian input:
-  complex(8),allocatable                        :: Hij(:,:,:) ![Nlat*Nspin*Norb][Nlat*Nspin*Norb][Nk==1]
+  complex(8),allocatable                        :: Hij(:,:,:) 
   complex(8),allocatable                        :: nanoHloc(:,:),Hloc(:,:,:,:,:),Hloc_ineq(:,:,:,:,:)
-  integer                                       :: Nk,Nlso,Nineq,Nlat,Nk_chi0,Nq_chi0
+  integer                                       :: Nk,Nlso,Nineq,Nlat,unit
   integer,dimension(:),allocatable              :: lat2ineq,ineq2lat
   integer,dimension(:),allocatable              :: sb_field_sign
-  !
-  real(8)                                       :: wmixing,Eout(2),Nread_bkp
-  !input files:
+  !  
+  real(8)                                       :: wmixing
   character(len=32)                             :: finput
   character(len=32)                             :: nfile,hijfile,hisocfile
   !
-  !hybridization function to environment
-  real(8)                                       :: e1(2),e2(2),nss(2,2)
   integer                                       :: unitHIJ,jlat
   complex(8),allocatable                        :: Hij_test(:,:,:)
-  integer                                       :: is,js,jorb,top_index,top_jndex
-  complex(8),allocatable                        :: Hij_top(:,:),Smats_rep(:,:),xmu_mat(:,:)
-  logical                                       :: Ioptimize
-  real(8),dimension(2)                          :: aparams
+  integer                                       :: is,js,jorb
   real(8),dimension(:,:),allocatable            :: Sig
-
-  integer :: comm
-  logical :: master
+  complex(8)                                    :: n(2,2)
+  integer                                       :: comm
+  logical                                       :: master
 
 
   call Init_MPI(comm)
@@ -148,14 +142,18 @@ program ed_nano_isoc
      enddo
      !
 
-     if(master)open(345,file="magXY.ed")
+     if(master)open(free_unit(unit),file="magXY.ed")
      do ineq=1,Nineq
-        Sig(ineq,1) = 0.5d0*(fft_get_density(Gmats_Ineq(ineq,1,2,1,1,:),beta)+fft_get_density(Gmats_Ineq(ineq,2,1,1,1,:),beta))
-        Sig(ineq,2) = 0.5d0*(fft_get_density(xi*Gmats_Ineq(ineq,1,2,1,1,:),beta)+fft_get_density(xi*Gmats_Ineq(ineq,2,1,1,1,:),beta))
-        Sig(ineq,3) = 0.5d0*(fft_get_density(Gmats_Ineq(ineq,1,1,1,1,:),beta)-fft_get_density(Gmats_Ineq(ineq,2,2,1,1,:),beta))
-        if(master)write(345,*)ineq,Sig(ineq,:)
+        n(1,1) = 2d0*sum(Gmats_Ineq(ineq,1,1,1,1,:))/beta
+        n(1,2) = 2d0*sum(Gmats_Ineq(ineq,1,2,1,1,:))/beta
+        n(2,1) = 2d0*sum(Gmats_Ineq(ineq,2,1,1,1,:))/beta
+        n(2,2) = 2d0*sum(Gmats_Ineq(ineq,2,2,1,1,:))/beta
+        Sig(ineq,1) = 0.5d0*(n(1,2)+n(2,1))
+        Sig(ineq,2) = -xi*0.5d0*(n(1,2)-n(2,1))
+        Sig(ineq,3) = 0.5d0*(n(1,1)-n(2,2))
+        if(master)write(unit,*)ineq,Sig(ineq,:)
      enddo
-     if(master)close(345)
+     if(master)close(unit)
 
 
 

@@ -507,7 +507,7 @@ contains
 
   
 
-  !PURPOSE: Evaluate the same different orbital IORB,JORB, different spin ISPIN,JSPIN impurity GF.
+  !PURPOSE: Evaluate the  different orbital IORB,JORB, different spin ISPIN,JSPIN impurity GF.
   subroutine lanc_build_gf_nonsu2_mixOrb_mixSpin_c(iorb,jorb,ispin,jspin)
     integer                          :: iorb,jorb,ispin,jspin,isite,jsite,isector,istate
     integer                          :: idim,jsector,vecDim

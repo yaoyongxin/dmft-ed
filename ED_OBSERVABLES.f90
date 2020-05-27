@@ -25,7 +25,7 @@ MODULE ED_OBSERVABLES
   logical,save                       :: iolegend=.true.
   real(8),dimension(:),allocatable   :: dens,dens_up,dens_dw
   real(8),dimension(:),allocatable   :: docc
-  real(8),dimension(:),allocatable   :: magz
+  real(8),dimension(:),allocatable   :: magZ,magX,magY
   real(8),dimension(:),allocatable   :: phisc
   real(8),dimension(:,:),allocatable :: sz2,n2
   real(8),dimensioN(:,:),allocatable :: zimp,simp
@@ -69,8 +69,8 @@ contains
     ! superconducting order parameter, etc..
     allocate(dens(Norb),dens_up(Norb),dens_dw(Norb))
     allocate(docc(Norb))
-    allocate(phisc(Norb))
-    allocate(magz(Norb),sz2(Norb,Norb),n2(Norb,Norb))
+    allocate(phisc(Norb),magX(Norb),magY(Norb))
+    allocate(magZ(Norb),sz2(Norb,Norb),n2(Norb,Norb))
     allocate(simp(Norb,Nspin),zimp(Norb,Nspin))
     !
     Egs     = state_list%emin
@@ -78,8 +78,10 @@ contains
     dens_up = 0.d0
     dens_dw = 0.d0
     docc    = 0.d0
-    phisc   = 0.d0
+    phisc   = 0.d0    
     magz    = 0.d0
+    magx    = 0.d0
+    magy    = 0.d0
     sz2     = 0.d0
     n2      = 0.d0
     s2tot   = 0.d0
@@ -144,6 +146,7 @@ contains
        endif
     enddo
     !
+
     !SUPERCONDUCTING ORDER PARAMETER
     if(ed_mode=="superc")then
        do ispin=1,Nspin
@@ -211,6 +214,121 @@ contains
           enddo
        enddo
     end if
+
+
+    !EVALUATE <SX> AND <SY>
+    if(ed_mode=="nonsu2")then
+       ispin=1
+       jspin=2
+       do iorb=1,Norb
+          isite=impIndex(iorb,1)
+          jsite=impIndex(iorb,2)
+
+          do istate=1,state_list%size
+             !
+             isector = es_return_sector(state_list,istate)
+             Ei      = es_return_energy(state_list,istate)
+#ifdef _MPI
+             if(MpiStatus)then
+                gscvec => es_return_cvector(MpiComm,state_list,istate)
+             else
+                gscvec => es_return_cvector(state_list,istate)
+             endif
+#else
+             gscvec => es_return_cvector(state_list,istate)
+#endif
+             !
+             peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
+             peso = peso/zeta_function
+             !
+
+             idim    = getdim(isector)
+
+             !GET <(CDG_UP + CDG_DW)(C_UP + C_DW)> = 
+             !<CDG_UP*C_UP> + <CDG_DW*C_DW> + <CDG_UP*C_DW + CDG_DW*C_UP> = 
+             !<N_UP> + <N_DW> + 2*<Sx>
+             !<Sx> = <CDG_UP*C_DW + CDG_DW*C_UP>
+             if(Mpimaster)then
+                !
+                jsector = getCsector(ispin,isector)
+                jdim    = getdim(jsector)
+                !
+                call build_sector(isector,H)
+                call build_sector(jsector,HJ)
+                !
+                allocate(vvinit(jdim));vvinit=zero
+                do i=1,idim
+                   m=H%map(i)
+                   ib = bdecomp(m,2*Ns)
+                   if(ib(isite)==1)then
+                      call c(isite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = sgn*gscvec(i)
+                   endif
+                enddo
+                do i=1,idim
+                   m=H%map(i)
+                   ib = bdecomp(m,2*Ns)
+                   if(ib(jsite)==1)then
+                      call c(jsite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = vvinit(j) + sgn*gscvec(i)
+                   endif
+                enddo
+                call delete_sector(isector,H)
+                call delete_sector(jsector,HJ)
+                magx(iorb) = magx(iorb) + dot_product(vvinit,vvinit)*peso
+                if(allocated(vvinit))deallocate(vvinit)
+             endif
+
+
+
+             !GET <(-i*CDG_UP + CDG_DW)(i*C_UP + C_DW)> = 
+             !<CDG_UP*C_UP> + <CDG_DW*C_DW> - i<CDG_UP*C_DW - CDG_DW*C_UP> = 
+             !<N_UP> + <N_DW> + 2*<Sy>
+             !<Sy> = -i/2<CDG_UP*C_DW - CDG_DW*C_UP>
+             if(Mpimaster)then
+                !
+                jsector = getCsector(ispin,isector)
+                jdim    = getdim(jsector)
+                !
+                call build_sector(isector,H)
+                call build_sector(jsector,HJ)
+                !
+                allocate(vvinit(jdim));vvinit=zero
+                do i=1,idim
+                   m=H%map(i)
+                   ib = bdecomp(m,2*Ns)
+                   if(ib(isite)==1)then
+                      call c(isite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = xi*sgn*gscvec(i)
+                   endif
+                enddo
+                do i=1,idim
+                   m=H%map(i)
+                   ib = bdecomp(m,2*Ns)
+                   if(ib(jsite)==1)then
+                      call c(jsite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = vvinit(j) + sgn*gscvec(i)
+                   endif
+                enddo
+                call delete_sector(isector,H)
+                call delete_sector(jsector,HJ)
+                magy(iorb) = magy(iorb) + dot_product(vvinit,vvinit)*peso
+                if(allocated(vvinit))deallocate(vvinit)
+             endif
+             !
+             if(associated(gscvec)) nullify(gscvec)
+          enddo
+          magx(iorb) = 0.5d0*(magx(iorb) - dens_up(iorb) - dens_dw(iorb))
+          magy(iorb) = 0.5d0*(magy(iorb) - dens_up(iorb) - dens_dw(iorb))
+       enddo
+    end if
+
+
+
     !
     !IMPURITY DENSITY MATRIX
     if(allocated(imp_density_matrix))deallocate(imp_density_matrix)
@@ -367,9 +485,12 @@ contains
        write(LOGfile,"(A,10f18.12,A)")    "docc"//reg(ed_file_suffix)//"=",(docc(iorb),iorb=1,Norb)
     case("superc")
        write(LOGfile,"(A,20f18.12,A)")    "phi "//reg(ed_file_suffix)//"=",(phisc(iorb),iorb=1,Norb),(abs(uloc(iorb))*phisc(iorb),iorb=1,Norb)
+    case("nonsu2")
+       write(LOGfile,"(A,10f18.12,A)")    "magX"//reg(ed_file_suffix)//"=",(magX(iorb),iorb=1,Norb)
+       write(LOGfile,"(A,10f18.12,A)")    "magY"//reg(ed_file_suffix)//"=",(magY(iorb),iorb=1,Norb)
     end select
     if(Nspin==2)then
-       write(LOGfile,"(A,10f18.12,A)") "mag "//reg(ed_file_suffix)//"=",(magz(iorb),iorb=1,Norb)
+       write(LOGfile,"(A,10f18.12,A)")    "magZ"//reg(ed_file_suffix)//"=",(magz(iorb),iorb=1,Norb)
     endif
     !
     do iorb=1,Norb
@@ -378,6 +499,9 @@ contains
        ed_dens(iorb)   =dens(iorb)
        ed_docc(iorb)   =docc(iorb)
        ed_phisc(iorb)  =phisc(iorb)
+       ed_mag(1,iorb)  =magX(iorb)
+       ed_mag(2,iorb)  =magY(iorb)
+       ed_mag(3,iorb)  =magZ(iorb)
     enddo
 #ifdef _MPI
     if(MpiStatus)then
@@ -386,6 +510,7 @@ contains
        call Bcast_MPI(MpiComm,ed_dens)
        call Bcast_MPI(MpiComm,ed_docc)
        call Bcast_MPI(MpiComm,ed_phisc)
+       call Bcast_MPI(MpiComm,ed_mag)
        if(allocated(imp_density_matrix))call Bcast_MPI(MpiComm,imp_density_matrix)
        if(bath_type=="replica")then
           call Bcast_MPI(MpiComm,bth_density_matrix)
@@ -393,8 +518,8 @@ contains
     endif
 #endif
     !
-    deallocate(dens,docc,phisc,dens_up,dens_dw,magz,sz2,n2)
-    deallocate(simp,zimp)    
+    deallocate(dens,docc,phisc,dens_up,dens_dw,magz,sz2,n2,magx,magy)
+    deallocate(simp,zimp)
   end subroutine observables_impurity
 
 
@@ -720,6 +845,21 @@ contains
             ((reg(txtfy((6+Norb)*Norb+2+(iorb-1)*Norb+jorb))//"n2_"//reg(txtfy(iorb))//reg(txtfy(jorb)),jorb=1,Norb),iorb=1,Norb),&
             ((reg(txtfy((6+2*Norb)*Norb+2+(ispin-1)*Nspin+iorb))//"z_"//reg(txtfy(iorb))//"s"//reg(txtfy(ispin)),iorb=1,Norb),ispin=1,Nspin),&
             ((reg(txtfy((7+2*Norb)*Norb+2+Nspin+(ispin-1)*Nspin+iorb))//"sig_"//reg(txtfy(iorb))//"s"//reg(txtfy(ispin)),iorb=1,Norb),ispin=1,Nspin)
+    case("nonsu2")
+       write(unit,"(A1,90(A10,6X))")"#",&
+            (reg(txtfy(iorb))//"dens_"//reg(txtfy(iorb)),iorb=1,Norb),&
+            (reg(txtfy(Norb+iorb))//"docc_"//reg(txtfy(iorb)),iorb=1,Norb),&
+            (reg(txtfy(2*Norb+iorb))//"nup_"//reg(txtfy(iorb)),iorb=1,Norb),&
+            (reg(txtfy(3*Norb+iorb))//"ndw_"//reg(txtfy(iorb)),iorb=1,Norb),&
+            (reg(txtfy(4*Norb+iorb))//"magX_"//reg(txtfy(iorb)),iorb=1,Norb),&
+            (reg(txtfy(5*Norb+iorb))//"magY_"//reg(txtfy(iorb)),iorb=1,Norb),&
+            (reg(txtfy(6*Norb+iorb))//"magZ_"//reg(txtfy(iorb)),iorb=1,Norb),&            
+            reg(txtfy(7*Norb+1))//"s2",&
+            reg(txtfy(7*Norb+2))//"egs",&
+            ((reg(txtfy(7*Norb+2+(iorb-1)*Norb+jorb))//"sz2_"//reg(txtfy(iorb))//reg(txtfy(jorb)),jorb=1,Norb),iorb=1,Norb),&
+            ((reg(txtfy((7+Norb)*Norb+2+(iorb-1)*Norb+jorb))//"n2_"//reg(txtfy(iorb))//reg(txtfy(jorb)),jorb=1,Norb),iorb=1,Norb),&
+            ((reg(txtfy((7+2*Norb)*Norb+2+(ispin-1)*Nspin+iorb))//"z_"//reg(txtfy(iorb))//"s"//reg(txtfy(ispin)),iorb=1,Norb),ispin=1,Nspin),&
+            ((reg(txtfy((8+2*Norb)*Norb+2+Nspin+(ispin-1)*Nspin+iorb))//"sig_"//reg(txtfy(iorb))//"s"//reg(txtfy(ispin)),iorb=1,Norb),ispin=1,Nspin)
     end select
     close(unit)
     !
@@ -784,6 +924,20 @@ contains
             ((n2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
             ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
             ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
+    case ("nonsu2")
+       write(unit,"(90(F15.9,1X))")&
+            (dens(iorb),iorb=1,Norb),&
+            (docc(iorb),iorb=1,Norb),&
+            (dens_up(iorb),iorb=1,Norb),&
+            (dens_dw(iorb),iorb=1,Norb),&
+            (magX(iorb),iorb=1,Norb),&
+            (magY(iorb),iorb=1,Norb),&
+            (magZ(iorb),iorb=1,Norb),&
+            s2tot,egs,&
+            ((sz2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
+            ((n2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
+            ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
+            ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
     end select
     close(unit)    
     !
@@ -815,6 +969,20 @@ contains
             (dens_up(iorb),iorb=1,Norb),&
             (dens_dw(iorb),iorb=1,Norb),&
             (magz(iorb),iorb=1,Norb),&
+            s2tot,egs,&
+            ((sz2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
+            ((n2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
+            ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
+            ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
+    case ("nonsu2")
+       write(unit,"(90(F15.9,1X))")&
+            (dens(iorb),iorb=1,Norb),&
+            (docc(iorb),iorb=1,Norb),&
+            (dens_up(iorb),iorb=1,Norb),&
+            (dens_dw(iorb),iorb=1,Norb),&
+            (magX(iorb),iorb=1,Norb),&
+            (magY(iorb),iorb=1,Norb),&
+            (magZ(iorb),iorb=1,Norb),&
             s2tot,egs,&
             ((sz2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
             ((n2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&

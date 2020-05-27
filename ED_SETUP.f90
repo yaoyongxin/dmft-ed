@@ -331,11 +331,13 @@ contains
     !
     !allocate observables
     allocate(ed_dens(Norb),ed_docc(Norb),ed_phisc(Norb),ed_dens_up(Norb),ed_dens_dw(Norb))
+    allocate(ed_mag(3,Norb))
     ed_dens=0d0
     ed_docc=0d0
     ed_phisc=0d0
     ed_dens_up=0d0
     ed_dens_dw=0d0
+    ed_mag=0d0
     !
     allocate(spinChi_tau(Norb+1,0:Ltau))
     allocate(spinChi_w(Norb+1,Lreal))
