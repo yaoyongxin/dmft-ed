@@ -199,7 +199,7 @@ contains
     call parse_input_variable(LOGfile,"LOGFILE",INPUTunit,default=6,comment="LOG unit.")
     call parse_input_variable(Jz_basis,"JZ_BASIS",INPUTunit,default=.false.,comment="switch to spherical harmonics basis (Interaction need to be rotated)")
     call parse_input_variable(Jz_max,"JZ_MAX",INPUTunit,default=.false.,comment="limit the number of sectorn spanned by the solver (like ed_sectors_shift)")
-    call parse_input_variable(Jz_max_value,"JZ_MAX_VALUE",INPUTunit,default=1000.d0,comment="maximum Jz reached by sector scan")
+    call parse_input_variable(Jz_max_value,"JZ_MAX_VALUE",INPUTunit,default=-1000.d0,comment="if (Jz_basis.and.Jz_max):maximum Jz reached by sector scan elseif(Jz_basis.and..not.Jz_max): minimum Ntot from where sector scan starts")
     call parse_input_variable(ed_verbose,"ED_VERBOSE",INPUTunit,default=3,comment="Verbosity level: 0=almost nothing --> 3:all.")
     !
     call parse_input_variable(replica_operators,"REPLICA_OPERATORS",INPUTunit,default=.false.,comment="Flag to set the bath representation via user provided fixed operators")

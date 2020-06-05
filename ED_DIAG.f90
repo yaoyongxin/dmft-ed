@@ -43,7 +43,7 @@ contains
 
 
   !+-------------------------------------------------------------------+
-  !PURPOSE  : diagonalize the Hamiltonian in each sector and find the 
+  !PURPOSE  : diagonalize the Hamiltonian in each sector and find the
   ! spectrum DOUBLE COMPLEX
   !+------------------------------------------------------------------+
   subroutine ed_diag_c
@@ -72,6 +72,7 @@ contains
        if(.not.sectors_mask(isector))cycle sector
        if(.not.twin_mask(isector))cycle sector !cycle loop if this sector should not be investigated
        if(Jz_basis.and.Jz_max.and.abs(gettwoJz(isector))>int(2*Jz_max_value))cycle
+       if(Jz_basis.and.(.not.Jz_max).and.abs(getn(isector))<int(Jz_max_value))cycle
        iter=iter+1
        Tflag    = twin_mask(isector).AND.ed_twin
        select case(ed_mode)
@@ -377,8 +378,8 @@ contains
   !
   !###################################################################################################
   !+-------------------------------------------------------------------+
-  !PURPOSE  : analyse the spectrum and print some information after 
-  !lanczos diagonalization. 
+  !PURPOSE  : analyse the spectrum and print some information after
+  !lanczos diagonalization.
   !+------------------------------------------------------------------+
   subroutine ed_post_diag()
     integer             :: nup,ndw,sz,n,isector,dim,jz
@@ -390,7 +391,7 @@ contains
     type(histogram)     :: hist
     real(8)             :: hist_a,hist_b,hist_w
     integer             :: hist_n
-    integer,allocatable :: list_sector(:),count_sector(:)    
+    integer,allocatable :: list_sector(:),count_sector(:)
     !POST PROCESSING:
     if(MPIMASTER)then
        unit=free_unit()
@@ -444,7 +445,7 @@ contains
     !
     if(.not.finiteT)then
        !generate a sector_list to be reused in case we want to reduce sectors scan
-       open(free_unit(unit),file="sectors_list"//reg(ed_file_suffix)//".restart")       
+       open(free_unit(unit),file="sectors_list"//reg(ed_file_suffix)//".restart")
        do istate=1,state_list%size
           isector = es_return_sector(state_list,istate)
           select case(ed_mode)
@@ -508,7 +509,7 @@ contains
           else
              neigen_sector(i)=neigen_sector(i)-1
           endif
-          !prevent Neig(i) from growing unbounded but 
+          !prevent Neig(i) from growing unbounded but
           !try to put another state in the list from sector i
           if(neigen_sector(i) > count_sector(i))neigen_sector(i)=count_sector(i)+1
           if(neigen_sector(i) <= 0)neigen_sector(i)=1
@@ -517,7 +518,7 @@ contains
        !the condition to fullfill is:
        ! exp(-beta(Ec-Egs)) < \epsilon_c
        ! if this condition is violated then required number of states is increased
-       ! if number of states is larger than those required to fullfill the cutoff: 
+       ! if number of states is larger than those required to fullfill the cutoff:
        ! trim the list and number of states.
        Egs  = state_list%emin
        Ec   = state_list%emax
@@ -555,7 +556,7 @@ contains
              Ei      = es_return_energy(state_list,state_list%size)
           enddo
           if(ed_verbose>=1.AND.MPIMASTER)then
-             write(LOGfile,*)"Trimmed state list:"          
+             write(LOGfile,*)"Trimmed state list:"
              call print_state_list(LOGfile)
           endif
           !
@@ -641,12 +642,3 @@ contains
 
 
 end MODULE ED_DIAG
-
-
-
-
-
-
-
-
-
