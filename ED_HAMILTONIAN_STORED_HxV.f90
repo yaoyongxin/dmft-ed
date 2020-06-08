@@ -48,6 +48,9 @@ contains
     integer                                :: first_state_up,last_state_up
     integer                                :: first_state_dw,last_state_dw
     !
+    integer                                :: isite,jsite,hopndx,distance
+    real(8)                                :: n_i,n_j
+    !
     if(.not.Hstatus)stop "ed_buildH_c ERROR: Hsector NOT set"
     isector=Hsector
     !
@@ -84,20 +87,25 @@ contains
     !-----------------------------------------------!
     !
     !IMPURITY  HAMILTONIAN
-    include "ED_HAMILTONIAN/stored/Himp.f90"
-    !
-    !LOCAL INTERACTION
-    if (Utensor) then
-       include "ED_HAMILTONIAN/stored/Hint_tensor.f90"
+    if(quartett)then
+       include "ED_HAMILTONIAN/stored/Hquartett.f90"
     else
-       include "ED_HAMILTONIAN/stored/Hint.f90"
+       include "ED_HAMILTONIAN/stored/Himp.f90"
+       !
+       !LOCAL INTERACTION
+       if (Utensor) then
+           include "ED_HAMILTONIAN/stored/Hint_tensor.f90"
+       else
+           include "ED_HAMILTONIAN/stored/Hint.f90"
+       endif
+       !
+       !BATH HAMILTONIAN
+       include "ED_HAMILTONIAN/stored/Hbath.f90"
+       !
+       !IMPURITY- BATH HYBRIDIZATION
+       include "ED_HAMILTONIAN/stored/Himp_bath.f90"
     endif
-    !
-    !BATH HAMILTONIAN
-    include "ED_HAMILTONIAN/stored/Hbath.f90"
-    !
-    !IMPURITY- BATH HYBRIDIZATION
-    include "ED_HAMILTONIAN/stored/Himp_bath.f90"
+
     !
     !
     !-----------------------------------------------!

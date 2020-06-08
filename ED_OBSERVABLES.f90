@@ -3,7 +3,7 @@
 !########################################################################
 MODULE ED_OBSERVABLES
   USE SF_CONSTANTS, only:zero,pi,xi
-  USE SF_IOTOOLS, only:free_unit,reg,txtfy
+  USE SF_IOTOOLS, only:free_unit,reg,txtfy,str
   USE SF_ARRAYS, only: arange
   USE SF_LINALG
   !
@@ -20,6 +20,7 @@ MODULE ED_OBSERVABLES
   !
   public :: observables_impurity
   public :: local_energy_impurity
+  public :: observables_quartett
 
 
   logical,save                       :: iolegend=.true.
@@ -34,7 +35,7 @@ MODULE ED_OBSERVABLES
   !
 
 
-contains 
+contains
 
 
 
@@ -62,10 +63,10 @@ contains
     complex(8),allocatable          :: vvinit(:)
     !
     !LOCAL OBSERVABLES:
-    ! density, 
-    ! double occupancy, 
-    ! magnetization, 
-    ! orbital//spin correlations  
+    ! density,
+    ! double occupancy,
+    ! magnetization,
+    ! orbital//spin correlations
     ! superconducting order parameter, etc..
     allocate(dens(Norb),dens_up(Norb),dens_dw(Norb))
     allocate(docc(Norb))
@@ -169,8 +170,8 @@ contains
                 !
                 if(Mpimaster)then
                    call build_sector(isector,H)
-                   !GET <(C_UP + CDG_DW)(CDG_UP + C_DW)> = 
-                   !<C_UP*CDG_UP> + <CDG_DW*C_DW> + <C_UP*C_DW> + <CDG_DW*CDG_UP> = 
+                   !GET <(C_UP + CDG_DW)(CDG_UP + C_DW)> =
+                   !<C_UP*CDG_UP> + <CDG_DW*C_DW> + <C_UP*C_DW> + <CDG_DW*CDG_UP> =
                    !<N_UP> + < 1 - N_DW> + 2*<PHI>
                    isz = getsz(isector)
                    if(isz<Ns)then
@@ -307,7 +308,7 @@ contains
           !
           idim  = getdim(isector)
           !
-          if(Mpimaster)then             
+          if(Mpimaster)then
              call build_sector(isector,H)
              !
              !Diagonal densities
@@ -394,7 +395,7 @@ contains
 #endif
     !
     deallocate(dens,docc,phisc,dens_up,dens_dw,magz,sz2,n2)
-    deallocate(simp,zimp)    
+    deallocate(simp,zimp)
   end subroutine observables_impurity
 
 
@@ -561,7 +562,7 @@ contains
              endif
              !
              !SPIN-EXCHANGE (S-E) TERMS
-             !S-E: Jh *( c^+_iorb_up c^+_jorb_dw c_iorb_dw c_jorb_up )  (i.ne.j) 
+             !S-E: Jh *( c^+_iorb_up c^+_jorb_dw c_iorb_dw c_jorb_up )  (i.ne.j)
              if(Norb>1.AND.Jhflag)then
                 do iorb=1,Norb
                    do jorb=1,Norb
@@ -585,7 +586,7 @@ contains
              endif
              !
              !PAIR-HOPPING (P-H) TERMS
-             !P-H: J c^+_iorb_up c^+_iorb_dw   c_jorb_dw   c_jorb_up  (i.ne.j) 
+             !P-H: J c^+_iorb_up c^+_iorb_dw   c_jorb_dw   c_jorb_up  (i.ne.j)
              !P-H: J c^+_{iorb}  c^+_{iorb+Ns} c_{jorb+Ns} c_{jorb}
              if(Norb>1.AND.Jhflag)then
                 do iorb=1,Norb
@@ -648,7 +649,7 @@ contains
        write(LOGfile,"(A,10f18.12)")"<Hint>  =",ed_Epot
        write(LOGfile,"(A,10f18.12)")"<V>     =",ed_Epot-ed_Ehartree
        write(LOGfile,"(A,10f18.12)")"<E0>    =",ed_Eknot
-       write(LOGfile,"(A,10f18.12)")"<Ehf>   =",ed_Ehartree    
+       write(LOGfile,"(A,10f18.12)")"<Ehf>   =",ed_Ehartree
        write(LOGfile,"(A,10f18.12)")"Dust    =",ed_Dust
        write(LOGfile,"(A,10f18.12)")"Dund    =",ed_Dund
        write(LOGfile,"(A,10f18.12)")"Dse     =",ed_Dse
@@ -686,7 +687,7 @@ contains
 
 
   !+-------------------------------------------------------------------+
-  !PURPOSE  : write legend, i.e. info about columns 
+  !PURPOSE  : write legend, i.e. info about columns
   !+-------------------------------------------------------------------+
   subroutine write_legend()
     integer :: unit,iorb,jorb,ispin
@@ -785,7 +786,7 @@ contains
             ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
             ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
     end select
-    close(unit)    
+    close(unit)
     !
     unit = free_unit()
     open(unit,file="parameters_last"//reg(ed_file_suffix)//".ed")
@@ -821,7 +822,7 @@ contains
             ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
             ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
     end select
-    close(unit)         
+    close(unit)
   end subroutine write_observables
 
   subroutine write_energy()
@@ -831,6 +832,160 @@ contains
     write(unit,"(90F15.9)")ed_Epot,ed_Epot-ed_Ehartree,ed_Eknot,ed_Ehartree,ed_Dust,ed_Dund,ed_Dse,ed_Dph
     close(unit)
   end subroutine write_energy
+
+
+
+
+  !+-------------------------------------------------------------------+
+  !PURPOSE  : Evaluate and print out many interesting physical qties
+  !+-------------------------------------------------------------------+
+  subroutine observables_quartett()
+    integer,dimension(Nlevels)      :: ib
+    integer                         :: i,j
+    integer                         :: istate
+    integer                         :: isector,jsector
+    integer                         :: idim,jdim
+    integer                         :: numstates
+    integer                         :: r,m,k
+    real(8)                         :: sgn,sgn1,sgn2
+    real(8)                         :: gs_weight
+    real(8)                         :: Ei
+    real(8)                         :: peso
+    complex(8),dimension(:),pointer :: gscvec
+    type(sector_map)                :: H
+    !
+    real(8),allocatable             :: denslatt(:,:),denslatt2(:,:)
+    real(8),allocatable             :: Eklatt(:,:),Epotlatt(:,:,:)
+    real(8),allocatable             :: corrfunc(:)
+    integer                         :: distance
+    integer                         :: isite,jsite
+    integer                         :: row,col,hopndx
+    real(8)                         :: n_i,n_j
+    integer                         :: unit_
+    !
+    allocate(denslatt(Nbath,Norb),denslatt2(Nbath,Norb))
+    allocate(Eklatt(Nbath,Norb),Epotlatt(Nbath,Norb,size(Neigh)))
+    allocate(corrfunc(size(Neigh)))
+    !
+    Egs       = state_list%emin
+    denslatt  = 0.d0
+    denslatt2 = 0.d0
+    corrfunc  = 0.d0
+    Eklatt    = 0.d0
+    Epotlatt  = 0.d0
+    !
+    numstates=state_list%size
+    do istate=1,numstates
+       isector = es_return_sector(state_list,istate)
+       Ei      = es_return_energy(state_list,istate)
+       !
+#ifdef _MPI
+       if(MpiStatus)then
+          gscvec => es_return_cvector(MpiComm,state_list,istate)
+       else
+          gscvec => es_return_cvector(state_list,istate)
+       endif
+#else
+       gscvec => es_return_cvector(state_list,istate)
+#endif
+       !
+       peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
+       peso = peso/zeta_function
+       !
+       idim    = getdim(isector)
+       !
+       if(Mpimaster)then
+          call build_sector(isector,H)
+          !
+          do i=1,idim
+             m=H%map(i)
+             ib = bdecomp(m,Ns)
+             !
+             gs_weight=peso*abs(gscvec(i))**2
+             !
+             do isite=1,Norb*Nbath
+                !
+                row = floor(dble(isite)/Norb)+1
+                col = mod(isite,Norb)
+                !
+                n_i = dble(ib(isite))
+                !
+                denslatt(row,col) = denslatt(row,col) + n_i*gs_weight
+                denslatt2(row,col) = denslatt2(row,col) + n_i*n_i*gs_weight
+                !
+                do distance=1,size(Neigh)
+                   !
+                   do jsite=1,Neigh(distance)
+                      !
+                      n_j = dble(ib(Vstride(isite,distance,jsite)))
+                      corrfunc(distance) = corrfunc(distance) + n_i*n_j*gs_weight
+                      Epotlatt(row,col,distance) = Epotlatt(row,col,distance) + n_i*n_j*gs_weight
+                      !
+                      hopndx = Vstride(isite,distance,jsite)
+                      !
+                      if((ib(isite)==1).and.(ib(hopndx)==0))then
+                         call c(isite,m,r,sgn1)
+                         call cdg(hopndx,r,k,sgn2)
+                         j=binary_search(H%map,k)
+                         Eklatt(row,col) = Eklatt(row,col) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
+                      elseif((ib(isite)==0).and.(ib(hopndx)==1))then
+                         call c(hopndx,m,r,sgn1)
+                         call cdg(isite,r,k,sgn2)
+                         j=binary_search(H%map,k)
+                         Eklatt(row,col) = Eklatt(row,col) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
+                      endif
+                      !
+                   enddo ! end loop on neighbors at a given radius
+                   !
+                enddo ! end loop on possible neighbors
+                !
+             enddo ! end loop on lattice sites
+             !
+          enddo ! end loop on states
+          !
+          if(associated(gscvec))nullify(gscvec)
+          call delete_sector(isector,H)
+          !
+       endif ! master
+       !
+    enddo ! end loop on eigenstates considered
+    !
+    !
+    unit_ = free_unit()
+    open(unit=unit_,file="n.DAT",status='unknown',position='rewind',action='write',form='formatted')
+    do row=1,Nbath
+       write(unit_,'(30(F20.12,1X))') (denslatt(row,col),col=1,Norb)
+    enddo
+    close(unit_)
+    !
+    unit_ = free_unit()
+    open(unit=unit_,file="n2.DAT",status='unknown',position='rewind',action='write',form='formatted')
+    do row=1,Nbath
+       write(unit_,'(30(F20.12,1X))') (denslatt2(row,col),col=1,Norb)
+    enddo
+    close(unit_)
+    !
+    unit_ = free_unit()
+    open(unit=unit_,file="Ek.DAT",status='unknown',position='rewind',action='write',form='formatted')
+    do row=1,Nbath
+       write(unit_,'(30(F20.12,1X))') (Eklatt(row,col),col=1,Norb)
+    enddo
+    close(unit_)
+    !
+    do distance=1,size(Neigh)
+       unit_ = free_unit()
+       open(unit=unit_,file="Epot_"//reg(str(distance))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+       do row=1,Nbath
+           write(unit_,'(30(F20.12,1X))') (Epotlatt(row,col,distance),col=1,Norb)
+       enddo
+       close(unit_)
+    enddo
+    !
+    deallocate(denslatt,denslatt2)
+    deallocate(Eklatt,Epotlatt)
+    deallocate(corrfunc)
+    !
+  end subroutine observables_quartett
 
 
 

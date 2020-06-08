@@ -107,10 +107,16 @@ contains
     end select
     Nlevels  = 2*Ns
     !
+    if(quartett)then
+       Ns=Norb*Nbath
+       Nlevels=Ns
+    endif
+    !
     select case(ed_mode)
     case default
        Nsectors = (Ns+1)*(Ns+1) !nup=0:Ns;ndw=0:Ns
        Nhel     = 1
+       if(quartett)Nsectors=1
     case ("superc")
        Nsectors = Nlevels+1     !sz=-Ns:Ns=2*Ns+1=Nlevels+1
        Nhel     = 1
@@ -244,6 +250,15 @@ contains
        !
        if(MPI_MASTER)call dmft_interaction_print(Umat,"Utensor.in")
        !
+    endif
+    !
+    !
+    !Setup the stride for quartett calculations
+    if(quartett)then
+       write(LOGfile,*)
+       write(LOGfile,*)"Vstride allocation."
+       allocate(Vstride(Nbath*Norb,4,8))
+       Vstride = 0
     endif
     !
     !
@@ -693,6 +708,15 @@ contains
              neigen_sector(isector) = min(dim,lanc_nstates_sector)
           enddo
        enddo
+    elseif(quartett)then
+       do in=0,Nlevels
+          isector=isector+1
+          getSector(in,1)=isector
+          getN(isector)=in
+          dim = get_normal_sector_dimension(in,0)
+          getDim(isector)=dim
+          neigen_sector(isector) = min(dim,lanc_nstates_sector)
+       enddo
     else
        do in=0,Nlevels
           isector=isector+1
@@ -918,6 +942,7 @@ contains
     integer                                      :: twoSz_,twoLz_
     integer                                      :: i,ibath,iorb
     integer                                      :: iup,idw
+    integer                                      :: p1,p2,p3,p4
     integer                                      :: dim
     integer                                      :: ivec(Ns),jvec(Ns)
     select case(ed_mode)
@@ -988,6 +1013,22 @@ contains
                    dim=dim+1
                    Hup%map(dim)=iup + idw*2**Ns
                 endif
+             enddo
+          enddo
+       elseif(quartett)then
+          nt  = getN(isector)
+          if(nt.ne.4)stop "not implemented for more than 4 part"
+          dim = get_normal_sector_dimension(nt,0)
+          call map_allocate(Hup,dim)
+          dim=0
+          do p1=0,Ns-2
+             do p2=p1+1,Ns-1
+                do p3=p2+1,Ns-1
+                   do p4=p3+1,Ns-1
+                      dim=dim+1
+                      Hup%map(dim) = 2**p1 + 2**p2 + 2**p3 + 2**p4
+                   enddo
+                enddo
              enddo
           enddo
        else

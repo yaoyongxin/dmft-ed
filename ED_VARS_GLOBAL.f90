@@ -79,6 +79,12 @@ MODULE ED_VARS_GLOBAL
   !=========================================================
   real(8),allocatable,dimension(:,:,:,:,:)           :: Umat
 
+  !neighboring stride indexes for quartett calculations
+  !INTERNAL USE (accessed thru functions)
+  !=========================================================
+  integer(8),allocatable,dimension(:,:,:)            :: Vstride
+  integer(8),allocatable,dimension(:)                :: Neigh
+
 
   !local part of the Hamiltonian
   !INTERNAL USE (accessed thru functions)

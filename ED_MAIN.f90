@@ -44,6 +44,11 @@ module ED_MAIN
 
 
   !
+  !>USER DEFINED MANIPULATION OF Vstride
+  public :: ed_set_Vstride
+
+
+  !
   !> ED SOLVER
   !
   interface ed_solve
@@ -326,6 +331,12 @@ contains
     !
     !SOLVE THE QUANTUM IMPURITY PROBLEM:
     call diagonalize_impurity()         !find target states by digonalization of Hamiltonian
+    !
+    if (quartett)then
+      call observables_quartett()
+      stop "quartett mode active - brutally stopping calculation"
+    endif
+    !
     call buildgf_impurity()             !build the one-particle impurity Green's functions  & Self-energy
     call buildchi_impurity()            !build the local susceptibilities (spin [todo charge])
     call observables_impurity()         !obtain impurity observables as thermal averages.
@@ -740,6 +751,20 @@ subroutine ed_rotate_interaction_mpi(MpiComm,rot)
   !
 end subroutine ed_rotate_interaction_mpi
 #endif
+
+
+subroutine ed_set_Vstride(MpiComm,User_stride,User_neigh)
+  integer(8),dimension(:,:,:),intent(in)     :: User_stride
+  integer(8),dimension(:),intent(in)         :: User_neigh
+  integer                                    :: MpiComm
+  logical                                    :: MPI_MASTER=.true.
+  integer                                    :: MPI_ERR
+  !
+  if(MPI_MASTER)write(LOGfile,*)"User_stride set."
+  Vstride = User_stride
+  Neigh = User_neigh
+  !
+end subroutine ed_set_Vstride
 
 
 end module ED_MAIN

@@ -84,6 +84,10 @@ MODULE ED_INPUT_VARS
   integer              :: Nop                 !number of user provided fixed operators
   !
   logical              :: Utensor             !flag to use tensorial representation of the interaction
+  !
+  logical              :: quartett            !flag to perform quartett calculation on the square lattice
+  real(8),dimension(7) :: Vnn                 !non-local interactions
+  real(8)              :: Thopping            !hopping integral
 
 
   !Some parameters for function dimension:
@@ -207,6 +211,10 @@ contains
     !
     call parse_input_variable(Utensor,"UTENSOR",INPUTunit,default=.false.,comment="Flag to use tensorial representation of the interaction")
     call parse_input_variable(UTENSfile,"UTENSfile",INPUTunit,default="Utensor.in",comment="File read the input tensorial representation of the interaction")
+    !
+    call parse_input_variable(quartett,"QUARTETT",INPUTunit,default=.false.,comment="Flag to perform quartett calculation on the square lattice")
+    call parse_input_variable(Vnn,"VNN",INPUTunit,default=[0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0],comment="Values of the non-local interaction per site (max 7)")
+    call parse_input_variable(Thopping,"THOPPING",INPUTunit,default=0.d0,comment="Hopping integral")
     !
 #ifdef _MPI
     if(present(comm))then
