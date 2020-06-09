@@ -84,6 +84,9 @@ MODULE ED_VARS_GLOBAL
   !=========================================================
   integer(8),allocatable,dimension(:,:,:)            :: Vstride
   integer(8),allocatable,dimension(:)                :: Neigh
+  integer(8),allocatable,dimension(:,:)              :: vec2lat
+  integer(8),allocatable,dimension(:,:)              :: lat2vec
+  real(8),allocatable,dimension(:,:)                 :: Radius
 
 
   !local part of the Hamiltonian

@@ -54,7 +54,7 @@ contains
     !CHECKS:
     if(Lfit>Lmats)Lfit=Lmats
     if(Nspin>2)stop "ED ERROR: Nspin > 2 is currently not supported"
-    if(Norb>3)stop "ED ERROR: Norb > 3 is currently not supported"
+    if(Norb>3.and.(.not.quartett))stop "ED ERROR: Norb > 3 is currently not supported"
     !
     if(ed_mode=="superc")then
        if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ."
@@ -116,7 +116,7 @@ contains
     case default
        Nsectors = (Ns+1)*(Ns+1) !nup=0:Ns;ndw=0:Ns
        Nhel     = 1
-       if(quartett)Nsectors=1
+       if(quartett)Nsectors=Ns+1
     case ("superc")
        Nsectors = Nlevels+1     !sz=-Ns:Ns=2*Ns+1=Nlevels+1
        Nhel     = 1
@@ -179,6 +179,7 @@ contains
        dim_sector_max(1)=get_superc_sector_dimension(0)
     case("nonsu2")
        dim_sector_max(1)=get_nonsu2_sector_dimension(Ns)
+       if(quartett)dim_sector_max(1)=get_normal_sector_dimension(Ns/2)
     end select
     !
     write(LOGfile,"(A)")"Summary:"
@@ -255,10 +256,7 @@ contains
     !
     !Setup the stride for quartett calculations
     if(quartett)then
-       write(LOGfile,*)
-       write(LOGfile,*)"Vstride allocation."
-       allocate(Vstride(Nbath*Norb,4,8))
-       Vstride = 0
+       if(.not.allocated(Vstride))stop "Vstride not allocated."
     endif
     !
     !
@@ -945,6 +943,8 @@ contains
     integer                                      :: p1,p2,p3,p4
     integer                                      :: dim
     integer                                      :: ivec(Ns),jvec(Ns)
+    !
+    integer, allocatable                         :: Order(:)
     select case(ed_mode)
        !
        !
@@ -1020,6 +1020,7 @@ contains
           if(nt.ne.4)stop "not implemented for more than 4 part"
           dim = get_normal_sector_dimension(nt,0)
           call map_allocate(Hup,dim)
+          allocate(Order(dim))
           dim=0
           do p1=0,Ns-2
              do p2=p1+1,Ns-1
@@ -1027,10 +1028,22 @@ contains
                    do p4=p3+1,Ns-1
                       dim=dim+1
                       Hup%map(dim) = 2**p1 + 2**p2 + 2**p3 + 2**p4
+                      !write(LOGfile,'(3I4)')dim,Hup%map(dim)
                    enddo
                 enddo
              enddo
           enddo
+          !
+          call sort_array2(Hup%map,Order)
+          dim = get_normal_sector_dimension(nt,0)
+          do iup=1,dim
+             jvec = bdecomp(Hup%map(iup),Ns)
+             if (sum(jvec).ne.4) then
+                write(*,'(1000I5)')iup,Hup%map(iup),Ns,jvec
+                stop
+             endif
+          enddo
+          !
        else
           nt  = getN(isector)
           dim = getDim(isector)
@@ -1449,6 +1462,68 @@ contains
       if(f<g)compare=-1
     end function compare
   end subroutine sort_array
+
+  subroutine sort_array2(array,order)
+    implicit none
+    integer,dimension(:)                    :: array
+    integer,dimension(size(array))          :: order
+    integer,dimension(size(array))          :: backup
+    integer                                 :: i
+    forall(i=1:size(array))order(i)=i
+    call qsort_sort(array, order,1, size(array))
+    do i=1,size(array)
+       backup(i)=array(order(i))
+    enddo
+    array=backup
+  contains
+    recursive subroutine qsort_sort( array, order, left, right )
+      integer, dimension(:) :: array
+      integer, dimension(:) :: order
+      integer               :: left
+      integer               :: right
+      integer               :: i
+      integer               :: last
+      if ( left .ge. right ) return
+      call qsort_swap( order, left, qsort_rand(left,right) )
+      last = left
+      do i = left+1, right
+         if ( compare(array(order(i)), array(order(left)) ) .lt. 0 ) then
+            last = last + 1
+            call qsort_swap( order, last, i )
+         endif
+      enddo
+      call qsort_swap( order, left, last )
+      call qsort_sort( array, order, left, last-1 )
+      call qsort_sort( array, order, last+1, right )
+    end subroutine qsort_sort
+    !---------------------------------------------!
+    subroutine qsort_swap( order, first, second )
+      integer, dimension(:) :: order
+      integer               :: first, second
+      integer               :: tmp
+      tmp           = order(first)
+      order(first)  = order(second)
+      order(second) = tmp
+    end subroutine qsort_swap
+    !---------------------------------------------!
+    integer function qsort_rand( lower, upper )
+      integer               :: lower, upper
+      real(8)               :: r
+      call random_number(r)
+      qsort_rand =  lower + nint(r * (upper-lower))
+    end function qsort_rand
+    !---------------------------------------------!
+    function compare(f,g)
+      implicit none
+      integer               :: f,g
+      integer               :: compare
+      if(f<g) then
+         compare=-1
+      else
+         compare=1
+      endif
+    end function compare
+  end subroutine sort_array2
 
 
 

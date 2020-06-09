@@ -753,16 +753,24 @@ end subroutine ed_rotate_interaction_mpi
 #endif
 
 
-subroutine ed_set_Vstride(MpiComm,User_stride,User_neigh)
+subroutine ed_set_Vstride(MpiComm,User_stride,User_neigh,User_lat2vec,User_vec2lat,User_Radius)
   integer(8),dimension(:,:,:),intent(in)     :: User_stride
   integer(8),dimension(:),intent(in)         :: User_neigh
+  integer(8),dimension(:,:),intent(in)       :: User_lat2vec
+  integer(8),dimension(:,:),intent(in)       :: User_vec2lat
+  real(8),dimension(:,:),intent(in)          :: User_Radius
+  integer                                    :: distance
   integer                                    :: MpiComm
   logical                                    :: MPI_MASTER=.true.
   integer                                    :: MPI_ERR
   !
   if(MPI_MASTER)write(LOGfile,*)"User_stride set."
+  !
   Vstride = User_stride
   Neigh = User_neigh
+  lat2vec = User_lat2vec
+  vec2lat = User_vec2lat
+  Radius = User_Radius
   !
 end subroutine ed_set_Vstride
 

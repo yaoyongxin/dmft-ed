@@ -18,6 +18,9 @@
            !
         enddo
         !
+        !symmetry breaking term
+        htmp = htmp + Ust * Radius(vec2lat(isite,1),vec2lat(isite,2)) * n_i
+        !
      enddo
      !
      select case(MpiStatus)

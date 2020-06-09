@@ -9,7 +9,7 @@ MODULE ED_SPARSE_MATRIX  !THIS VERSION CONTAINS ONLY COMPLX ELEMENT: (HERMITIAN 
 
 
   type sparse_row_csr
-     integer                                   :: size !actual 
+     integer                                   :: size !actual
      complex(8),dimension(:),allocatable       :: vals
      integer,dimension(:),allocatable          :: cols
   end type sparse_row_csr
@@ -30,7 +30,7 @@ MODULE ED_SPARSE_MATRIX  !THIS VERSION CONTAINS ONLY COMPLX ELEMENT: (HERMITIAN 
 
 
 
-  !INIT SPARSE MATRICES 
+  !INIT SPARSE MATRICES
   interface sp_init_matrix
      module procedure :: sp_init_matrix_csr
 #ifdef _MPI
@@ -40,7 +40,7 @@ MODULE ED_SPARSE_MATRIX  !THIS VERSION CONTAINS ONLY COMPLX ELEMENT: (HERMITIAN 
 
 
 
-  !DELETE SPARSE MATRIX 
+  !DELETE SPARSE MATRIX
   interface sp_delete_matrix
      module procedure :: sp_delete_matrix_csr
 #ifdef _MPI
@@ -66,7 +66,7 @@ MODULE ED_SPARSE_MATRIX  !THIS VERSION CONTAINS ONLY COMPLX ELEMENT: (HERMITIAN 
 #endif
   end interface sp_dump_matrix
 
-#ifdef _MPI  
+#ifdef _MPI
   interface sp_set_mpi_matrix
      module procedure :: sp_set_mpi_matrix_csr
   end interface sp_set_mpi_matrix
@@ -104,7 +104,7 @@ MODULE ED_SPARSE_MATRIX  !THIS VERSION CONTAINS ONLY COMPLX ELEMENT: (HERMITIAN 
 
 
 
-contains       
+contains
 
 
   !+------------------------------------------------------------------+
@@ -120,7 +120,7 @@ contains
     if(sparse%status)stop "sp_init_matrix: alreay allocate can not init"
     !
     sparse%Nrow=N
-    sparse%Ncol=N 
+    sparse%Ncol=N
     if(present(N1))sparse%Ncol=N1
     !
     allocate(sparse%row(N))
@@ -172,7 +172,7 @@ contains
   !+------------------------------------------------------------------+
   !PURPOSE: delete an entire sparse matrix
   !+------------------------------------------------------------------+
-  subroutine sp_delete_matrix_csr(sparse)    
+  subroutine sp_delete_matrix_csr(sparse)
     type(sparse_matrix_csr),intent(inout) :: sparse
     integer                           :: i
     type(sparse_row_csr),pointer          :: row
@@ -194,7 +194,7 @@ contains
     sparse%iend   = 0
     sparse%ishift = 0
     sparse%mpi    = .false.
-#endif 
+#endif
   end subroutine sp_delete_matrix_csr
 
 
@@ -229,7 +229,7 @@ contains
     sparse%mpi=.false.
     !
   end subroutine mpi_sp_delete_matrix_csr
-#endif    
+#endif
 
 
 
@@ -261,13 +261,13 @@ contains
     !
     iadd = .false.                          !check if column already exist
     if(any(row%cols == column))then         !
-       pos = binary_search(row%cols,column) !find the position  column in %cols        
+       pos = binary_search(row%cols,column) !find the position  column in %cols
        iadd=.true.                          !set Iadd to true
     endif
     !
-    if(iadd)then                            !this column exists so just sum it up       
+    if(iadd)then                            !this column exists so just sum it up
        row%vals(pos)=row%vals(pos) + value  !add up value to the current one in %vals
-    else                                    !this column is new. increase counter and store it 
+    else                                    !this column is new. increase counter and store it
        ! row%vals = [row%vals,value]
        ! row%cols = [row%cols,column]
        call add_to(row%vals,value)
@@ -301,13 +301,13 @@ contains
     !
     iadd = .false.                          !check if column already exist
     if(any(row%cols == column))then         !
-       pos = binary_search(row%cols,column) !find the position  column in %cols        
+       pos = binary_search(row%cols,column) !find the position  column in %cols
        iadd=.true.                          !set Iadd to true
     endif
     !
-    if(iadd)then                            !this column exists so just sum it up       
+    if(iadd)then                            !this column exists so just sum it up
        row%vals(pos)=row%vals(pos) + value  !add up value to the current one in %vals
-    else                                    !this column is new. increase counter and store it 
+    else                                    !this column is new. increase counter and store it
        ! row%vals = [row%vals,value]
        ! row%cols = [row%cols,column]
        call add_to(row%vals,value)
@@ -453,10 +453,10 @@ contains
 
 
 
-  
+
   subroutine add_to_I(vec,val)
     integer,dimension(:),allocatable,intent(inout) :: vec
-    integer,intent(in)                             :: val  
+    integer,intent(in)                             :: val
     integer,dimension(:),allocatable               :: tmp
     integer                                        :: n
     !
@@ -479,7 +479,7 @@ contains
 
   subroutine add_to_D(vec,val)
     real(8),dimension(:),allocatable,intent(inout) :: vec
-    real(8),intent(in)                             :: val  
+    real(8),intent(in)                             :: val
     real(8),dimension(:),allocatable               :: tmp
     integer                                        :: n
     !
@@ -502,7 +502,7 @@ contains
 
   subroutine add_to_Z(vec,val)
     complex(8),dimension(:),allocatable,intent(inout) :: vec
-    complex(8),intent(in)                             :: val  
+    complex(8),intent(in)                             :: val
     complex(8),dimension(:),allocatable               :: tmp
     integer                                           :: n
     !
@@ -595,9 +595,3 @@ contains
 
 
 end module ED_SPARSE_MATRIX
-
-
-
-
-
-

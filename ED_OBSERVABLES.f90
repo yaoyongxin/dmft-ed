@@ -854,27 +854,28 @@ contains
     complex(8),dimension(:),pointer :: gscvec
     type(sector_map)                :: H
     !
-    real(8),allocatable             :: denslatt(:,:),denslatt2(:,:)
-    real(8),allocatable             :: Eklatt(:,:),Epotlatt(:,:,:)
-    real(8),allocatable             :: corrfunc(:)
+    real(8),allocatable             :: denslatt(:,:,:),denslatt2(:,:,:)
+    real(8),allocatable             :: Eklatt(:,:,:),Epotlatt(:,:,:,:)
+    real(8),allocatable             :: corrfunc(:,:)
     integer                         :: distance
     integer                         :: isite,jsite
     integer                         :: row,col,hopndx
-    real(8)                         :: n_i,n_j
+    real(8)                         :: n_i,n_j,ntot
     integer                         :: unit_
     !
-    allocate(denslatt(Nbath,Norb),denslatt2(Nbath,Norb))
-    allocate(Eklatt(Nbath,Norb),Epotlatt(Nbath,Norb,size(Neigh)))
-    allocate(corrfunc(size(Neigh)))
-    !
     Egs       = state_list%emin
+    !
+    numstates=state_list%size
+    !
+    allocate(denslatt(Nbath,Norb,numstates),denslatt2(Nbath,Norb,numstates))
+    allocate(Eklatt(Nbath,Norb,numstates),Epotlatt(Nbath,Norb,size(Neigh),numstates))
+    allocate(corrfunc(size(Neigh),numstates))
     denslatt  = 0.d0
     denslatt2 = 0.d0
     corrfunc  = 0.d0
     Eklatt    = 0.d0
     Epotlatt  = 0.d0
     !
-    numstates=state_list%size
     do istate=1,numstates
        isector = es_return_sector(state_list,istate)
        Ei      = es_return_energy(state_list,istate)
@@ -895,7 +896,13 @@ contains
        idim    = getdim(isector)
        !
        if(Mpimaster)then
+          !
           call build_sector(isector,H)
+          !do i=1,idim
+          !   m=H%map(i)
+          !   ib = bdecomp(m,Ns)
+          !   write(*,"(A,50I5)")"i,idim,m,Ns  ", i,idim,m,Ns,size(H%map),(ib(isite),isite=1,Norb*Nbath)
+          !enddo
           !
           do i=1,idim
              m=H%map(i)
@@ -905,21 +912,25 @@ contains
              !
              do isite=1,Norb*Nbath
                 !
-                row = floor(dble(isite)/Norb)+1
-                col = mod(isite,Norb)
+                row = vec2lat(isite,1)
+                col = vec2lat(isite,2)
+                if(Norb.eq.1) then
+                   col=1
+                   row=row-1
+                endif
                 !
                 n_i = dble(ib(isite))
                 !
-                denslatt(row,col) = denslatt(row,col) + n_i*gs_weight
-                denslatt2(row,col) = denslatt2(row,col) + n_i*n_i*gs_weight
+                denslatt(row,col,istate) = denslatt(row,col,istate) + n_i*gs_weight
+                denslatt2(row,col,istate) = denslatt2(row,col,istate) + n_i*n_i*gs_weight
                 !
                 do distance=1,size(Neigh)
                    !
                    do jsite=1,Neigh(distance)
                       !
                       n_j = dble(ib(Vstride(isite,distance,jsite)))
-                      corrfunc(distance) = corrfunc(distance) + n_i*n_j*gs_weight
-                      Epotlatt(row,col,distance) = Epotlatt(row,col,distance) + n_i*n_j*gs_weight
+                      corrfunc(distance,istate) = corrfunc(distance,istate) + n_i*n_j*gs_weight
+                      Epotlatt(row,col,distance,istate) = Epotlatt(row,col,distance,istate) + n_i*n_j*gs_weight
                       !
                       hopndx = Vstride(isite,distance,jsite)
                       !
@@ -927,12 +938,14 @@ contains
                          call c(isite,m,r,sgn1)
                          call cdg(hopndx,r,k,sgn2)
                          j=binary_search(H%map,k)
-                         Eklatt(row,col) = Eklatt(row,col) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
+                         if(j.eq.0)write(*,'(A,14I6)')" a ",i,j,m,r,k,isite,hopndx
+                         Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
                       elseif((ib(isite)==0).and.(ib(hopndx)==1))then
                          call c(hopndx,m,r,sgn1)
                          call cdg(isite,r,k,sgn2)
                          j=binary_search(H%map,k)
-                         Eklatt(row,col) = Eklatt(row,col) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
+                         if(j.eq.0)write(*,'(A,4I6)')" b ",i,j,isite,hopndx
+                         Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
                       endif
                       !
                    enddo ! end loop on neighbors at a given radius
@@ -948,38 +961,57 @@ contains
           !
        endif ! master
        !
-    enddo ! end loop on eigenstates considered
-    !
-    !
-    unit_ = free_unit()
-    open(unit=unit_,file="n.DAT",status='unknown',position='rewind',action='write',form='formatted')
-    do row=1,Nbath
-       write(unit_,'(30(F20.12,1X))') (denslatt(row,col),col=1,Norb)
-    enddo
-    close(unit_)
-    !
-    unit_ = free_unit()
-    open(unit=unit_,file="n2.DAT",status='unknown',position='rewind',action='write',form='formatted')
-    do row=1,Nbath
-       write(unit_,'(30(F20.12,1X))') (denslatt2(row,col),col=1,Norb)
-    enddo
-    close(unit_)
-    !
-    unit_ = free_unit()
-    open(unit=unit_,file="Ek.DAT",status='unknown',position='rewind',action='write',form='formatted')
-    do row=1,Nbath
-       write(unit_,'(30(F20.12,1X))') (Eklatt(row,col),col=1,Norb)
-    enddo
-    close(unit_)
-    !
-    do distance=1,size(Neigh)
+       !
        unit_ = free_unit()
-       open(unit=unit_,file="Epot_"//reg(str(distance))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+       open(unit=unit_,file="n_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
        do row=1,Nbath
-           write(unit_,'(30(F20.12,1X))') (Epotlatt(row,col,distance),col=1,Norb)
+          write(unit_,'(30(F20.12,1X))') (denslatt(row,col,istate),col=1,Norb)
        enddo
        close(unit_)
+       !
+       unit_ = free_unit()
+       open(unit=unit_,file="n2_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+       do row=1,Nbath
+          write(unit_,'(30(F20.12,1X))') (denslatt2(row,col,istate),col=1,Norb)
+       enddo
+       close(unit_)
+       !
+       unit_ = free_unit()
+       open(unit=unit_,file="Ek_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+       do row=1,Nbath
+          write(unit_,'(30(F20.12,1X))') (Eklatt(row,col,istate),col=1,Norb)
+       enddo
+       close(unit_)
+       !
+       do distance=1,size(Neigh)
+          unit_ = free_unit()
+          open(unit=unit_,file="Epot_r"//reg(str(distance))//"_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+          do row=1,Nbath
+              write(unit_,'(30(F20.12,1X))') (Epotlatt(row,col,distance,istate),col=1,Norb)
+          enddo
+          close(unit_)
+       enddo
+       !
+       unit_ = free_unit()
+       open(unit=unit_,file="corr_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+       do distance=1,size(Neigh)
+          write(unit_,'(1I3,30(F20.12,1X))') distance,corrfunc(distance,istate)
+       enddo
+       close(unit_)
+       !
+    enddo ! end loop on eigenstates considered
+    !
+    ntot=0d0
+    do istate=1,numstates
+       do isite=1,Norb*Nbath
+          !
+          row = vec2lat(isite,1)
+          col = vec2lat(isite,2)
+          !
+          ntot = ntot + denslatt(row,col,istate)
+       enddo
     enddo
+    write(*,"(A,1F10.5)")" NTOT= ",ntot
     !
     deallocate(denslatt,denslatt2)
     deallocate(Eklatt,Epotlatt)
