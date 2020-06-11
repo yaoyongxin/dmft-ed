@@ -12,6 +12,7 @@ program ed_quartett
   integer(8),dimension(:),allocatable            :: Neigh
   integer(8),dimension(:,:),allocatable          :: lat2vec,vec2lat
   real(8),dimension(:,:),allocatable             :: Radius
+  real(8)                                        :: bottom,Xc,Yc
   !Mpi:
   integer                                        :: comm,rank,ier
   logical                                        :: master
@@ -62,6 +63,8 @@ program ed_quartett
   allocate(Radius(Nbath,Norb));Radius=0d0
   !
   !
+  Xc = dble(Norb)/2  + 0.5 ! 3.5 ! dble(Norb)/2  + 0.5
+  Yc = dble(Nbath)/2 + 0.5 ! 4.5 ! dble(Nbath)/2 + 0.5
   ilatt=0
   do row=1,Nbath
     do col=1,Norb
@@ -70,9 +73,11 @@ program ed_quartett
         lat2vec(row,col) = ilatt
         vec2lat(ilatt,1) = row
         vec2lat(ilatt,2) = col
-        Radius(row,col) = sqrt( (dble(Nbath)/2 + 0.5 - dble(row))**2 + (dble(Norb)/2 + 0.5 - dble(col))**2 )
+        Radius(row,col) = sqrt( (Yc - dble(row))**2 + (Xc - dble(col))**2 )
      enddo
   enddo
+  bottom=minval(Radius)
+  Radius=Radius-bottom
   do ilatt=1,tiling
      do jlatt=1,tiling
         lattice_tiled(1+(ilatt-1)*Nbath:Nbath+(ilatt-1)*Nbath,1+(jlatt-1)*Norb:Norb+(jlatt-1)*Norb) = lattice_irred

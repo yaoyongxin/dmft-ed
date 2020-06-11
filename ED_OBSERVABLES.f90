@@ -846,13 +846,14 @@ contains
     integer                         :: isector,jsector
     integer                         :: idim,jdim
     integer                         :: numstates
-    integer                         :: r,m,k
+    integer(8)                      :: r,m,k
     real(8)                         :: sgn,sgn1,sgn2
     real(8)                         :: gs_weight
     real(8)                         :: Ei
     real(8)                         :: peso
     complex(8),dimension(:),pointer :: gscvec
     type(sector_map)                :: H
+    type(sector_map8)               :: H8
     !
     real(8),allocatable             :: denslatt(:,:,:),denslatt2(:,:,:)
     real(8),allocatable             :: Eklatt(:,:,:),Epotlatt(:,:,:,:)
@@ -861,7 +862,7 @@ contains
     integer                         :: isite,jsite
     integer                         :: row,col,hopndx
     real(8)                         :: n_i,n_j,ntot
-    integer                         :: unit_
+    integer                         :: unit_,ier
     !
     Egs       = state_list%emin
     !
@@ -897,16 +898,16 @@ contains
        !
        if(Mpimaster)then
           !
-          call build_sector(isector,H)
+          call build_sector(isector,H,H8)
           !do i=1,idim
-          !   m=H%map(i)
-          !   ib = bdecomp(m,Ns)
-          !   write(*,"(A,50I5)")"i,idim,m,Ns  ", i,idim,m,Ns,size(H%map),(ib(isite),isite=1,Norb*Nbath)
+          !   m=H8%map(i)
+          !   ib = bdecomp8(m,Ns)
+          !   write(*,"(A,50I5)")"i,idim,m,Ns  ", i,idim,m,Ns,size(H8%map),(ib(isite),isite=1,Norb*Nbath)
           !enddo
           !
           do i=1,idim
-             m=H%map(i)
-             ib = bdecomp(m,Ns)
+             m=H8%map(i)
+             ib = bdecomp8(m,Ns)
              !
              gs_weight=peso*abs(gscvec(i))**2
              !
@@ -935,15 +936,15 @@ contains
                       hopndx = Vstride(isite,distance,jsite)
                       !
                       if((ib(isite)==1).and.(ib(hopndx)==0))then
-                         call c(isite,m,r,sgn1)
-                         call cdg(hopndx,r,k,sgn2)
-                         j=binary_search(H%map,k)
+                         call c8(isite,m,r,sgn1)
+                         call cdg8(hopndx,r,k,sgn2)
+                         j=binary_search8(H8%map,k)
                          if(j.eq.0)write(*,'(A,14I6)')" a ",i,j,m,r,k,isite,hopndx
                          Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
                       elseif((ib(isite)==0).and.(ib(hopndx)==1))then
-                         call c(hopndx,m,r,sgn1)
-                         call cdg(isite,r,k,sgn2)
-                         j=binary_search(H%map,k)
+                         call c8(hopndx,m,r,sgn1)
+                         call cdg8(isite,r,k,sgn2)
+                         j=binary_search8(H8%map,k)
                          if(j.eq.0)write(*,'(A,4I6)')" b ",i,j,isite,hopndx
                          Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
                       endif
@@ -957,61 +958,67 @@ contains
           enddo ! end loop on states
           !
           if(associated(gscvec))nullify(gscvec)
-          call delete_sector(isector,H)
+          call delete_sector8(isector,H8)
+          !
+          !
+          unit_ = free_unit()
+          open(unit=unit_,file="n_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+          do row=1,Nbath
+             write(unit_,'(30(F20.12,1X))') (denslatt(row,col,istate),col=1,Norb)
+          enddo
+          close(unit_)
+          !
+          unit_ = free_unit()
+          open(unit=unit_,file="n2_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+          do row=1,Nbath
+             write(unit_,'(30(F20.12,1X))') (denslatt2(row,col,istate),col=1,Norb)
+          enddo
+          close(unit_)
+          !
+          unit_ = free_unit()
+          open(unit=unit_,file="Ek_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+          do row=1,Nbath
+             write(unit_,'(30(F20.12,1X))') (Eklatt(row,col,istate),col=1,Norb)
+          enddo
+          close(unit_)
+          !
+          do distance=1,size(Neigh)
+             unit_ = free_unit()
+             open(unit=unit_,file="Epot_r"//reg(str(distance))//"_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+             do row=1,Nbath
+                 write(unit_,'(30(F20.12,1X))') (Epotlatt(row,col,distance,istate),col=1,Norb)
+             enddo
+             close(unit_)
+          enddo
+          !
+          unit_ = free_unit()
+          open(unit=unit_,file="corr_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+          do distance=1,size(Neigh)
+             write(unit_,'(1I3,30(F20.12,1X))') distance,corrfunc(distance,istate)
+          enddo
+          close(unit_)
+          !
           !
        endif ! master
        !
-       !
-       unit_ = free_unit()
-       open(unit=unit_,file="n_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
-       do row=1,Nbath
-          write(unit_,'(30(F20.12,1X))') (denslatt(row,col,istate),col=1,Norb)
-       enddo
-       close(unit_)
-       !
-       unit_ = free_unit()
-       open(unit=unit_,file="n2_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
-       do row=1,Nbath
-          write(unit_,'(30(F20.12,1X))') (denslatt2(row,col,istate),col=1,Norb)
-       enddo
-       close(unit_)
-       !
-       unit_ = free_unit()
-       open(unit=unit_,file="Ek_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
-       do row=1,Nbath
-          write(unit_,'(30(F20.12,1X))') (Eklatt(row,col,istate),col=1,Norb)
-       enddo
-       close(unit_)
-       !
-       do distance=1,size(Neigh)
-          unit_ = free_unit()
-          open(unit=unit_,file="Epot_r"//reg(str(distance))//"_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
-          do row=1,Nbath
-              write(unit_,'(30(F20.12,1X))') (Epotlatt(row,col,distance,istate),col=1,Norb)
-          enddo
-          close(unit_)
-       enddo
-       !
-       unit_ = free_unit()
-       open(unit=unit_,file="corr_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
-       do distance=1,size(Neigh)
-          write(unit_,'(1I3,30(F20.12,1X))') distance,corrfunc(distance,istate)
-       enddo
-       close(unit_)
-       !
     enddo ! end loop on eigenstates considered
     !
-    ntot=0d0
-    do istate=1,numstates
-       do isite=1,Norb*Nbath
-          !
-          row = vec2lat(isite,1)
-          col = vec2lat(isite,2)
-          !
-          ntot = ntot + denslatt(row,col,istate)
-       enddo
-    enddo
-    write(*,"(A,1F10.5)")" NTOT= ",ntot
+    !
+    if(Mpimaster)then
+      ntot=0d0
+      do istate=1,numstates
+         do isite=1,Norb*Nbath
+            !
+            row = vec2lat(isite,1)
+            col = vec2lat(isite,2)
+            !
+            ntot = ntot + denslatt(row,col,istate)
+         enddo
+      enddo
+      write(*,"(A,1F10.5)")" NTOT= ",ntot
+    endif
+    !
+    call MPI_Barrier(MpiComm,ier)
     !
     deallocate(denslatt,denslatt2)
     deallocate(Eklatt,Epotlatt)

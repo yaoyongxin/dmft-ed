@@ -32,6 +32,7 @@ MODULE ED_HAMILTONIAN_SHARED
   integer          :: Hsector=0
   logical          :: Hstatus=.false.
   type(sector_map) :: H
+  type(sector_map8) :: H8
 
 
 

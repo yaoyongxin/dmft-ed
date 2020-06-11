@@ -21,13 +21,16 @@ MODULE ED_SETUP
   public :: build_sector
   public :: build_sector_2
   public :: delete_sector
+  public :: delete_sector8
   !
-  public :: bdecomp
+  public :: bdecomp, bdecomp8
   public :: bjoin
   !
   public :: c,cdg
+  public :: c8,cdg8
   !
   public :: binary_search
+  public :: binary_search8
   !
   public :: flip_state
   public :: twin_sector_order
@@ -932,7 +935,7 @@ contains
   !states i\in Hilbert_space from the states count in H_sector.
   !|ImpUP,BathUP>|ImpDW,BathDW >
   !+------------------------------------------------------------------+
-  subroutine build_sector(isector,Hup)
+  subroutine build_sector(isector,Hup,Hup8)
     integer                                      :: isector
     type(sector_map)                             :: Hup
     integer                                      :: nup,ndw,sz,nt,twoJz
@@ -944,7 +947,9 @@ contains
     integer                                      :: dim
     integer                                      :: ivec(Ns),jvec(Ns)
     !
-    integer, allocatable                         :: Order(:)
+    integer(8),parameter                         :: zr=0
+    integer(8), allocatable                      :: Order(:)
+    type(sector_map8),optional                   :: Hup8
     select case(ed_mode)
        !
        !
@@ -1019,7 +1024,7 @@ contains
           nt  = getN(isector)
           if(nt.ne.4)stop "not implemented for more than 4 part"
           dim = get_normal_sector_dimension(nt,0)
-          call map_allocate(Hup,dim)
+          call map_allocate8(Hup8,dim)
           allocate(Order(dim))
           dim=0
           do p1=0,Ns-2
@@ -1027,19 +1032,20 @@ contains
                 do p3=p2+1,Ns-1
                    do p4=p3+1,Ns-1
                       dim=dim+1
-                      Hup%map(dim) = 2**p1 + 2**p2 + 2**p3 + 2**p4
-                      !write(LOGfile,'(3I4)')dim,Hup%map(dim)
+                      Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 )
+                      !write(LOGfile,'(30I20)')dim,Hup8%map(dim),ibset( zr, p1 ),ibset( zr, p2 ),ibset( zr, p3 ),ibset( zr, p4 ),p1,p2,p3,p4
+                      if(Hup8%map(dim).lt.0) stop
                    enddo
                 enddo
              enddo
           enddo
           !
-          call sort_array2(Hup%map,Order)
+          call sort_array8(Hup8%map,Order)
           dim = get_normal_sector_dimension(nt,0)
           do iup=1,dim
-             jvec = bdecomp(Hup%map(iup),Ns)
+             jvec = bdecomp8(Hup8%map(iup),Ns)
              if (sum(jvec).ne.4) then
-                write(*,'(1000I5)')iup,Hup%map(iup),Ns,jvec
+                write(*,'(3I15,1000I3)')iup,dim,Hup8%map(iup),Ns,jvec
                 stop
              endif
           enddo
@@ -1152,6 +1158,14 @@ contains
     call map_deallocate(Hup)
   end subroutine delete_sector
 
+  subroutine delete_sector8(isector,Hup)!,Hdw)
+    integer                   :: isector
+    type(sector_map8)          :: Hup
+    ! type(sector_map),optional :: Hdw
+    call map_deallocate8(Hup)
+  end subroutine delete_sector8
+
+
 
   !+-------------------------------------------------------------------+
   !PURPOSE: input state |in> of the basis and calculates
@@ -1185,6 +1199,34 @@ contains
     enddo
     out = ibset(in,pos-1)
   end subroutine cdg
+
+  subroutine c8(pos,in,out,fsgn)
+    integer,intent(in)    :: pos
+    integer(8),intent(in)    :: in
+    integer(8),intent(inout) :: out
+    real(8),intent(inout) :: fsgn
+    integer               :: l
+    if(.not.btest(in,pos-1))stop "C error: C_i|...0_i...>"
+    fsgn=1d0
+    do l=1,pos-1
+       if(btest(in,l-1))fsgn=-fsgn
+    enddo
+    out = ibclr(in,pos-1)
+  end subroutine c8
+
+  subroutine cdg8(pos,in,out,fsgn)
+    integer,intent(in)    :: pos
+    integer(8),intent(in)    :: in
+    integer(8),intent(inout) :: out
+    real(8),intent(inout) :: fsgn
+    integer               :: l
+    if(btest(in,pos-1))stop "C^+ error: C^+_i|...1_i...>"
+    fsgn=1d0
+    do l=1,pos-1
+       if(btest(in,l-1))fsgn=-fsgn
+    enddo
+    out = ibset(in,pos-1)
+  end subroutine cdg8
 
 
 
@@ -1324,6 +1366,19 @@ contains
     enddo
   end function bdecomp
 
+  function bdecomp8(i,Ntot) result(ivec)
+    integer(8) :: i
+    integer :: Ntot,ivec(Ntot),l
+    logical :: busy
+    !this is the configuration vector |1,..,Ns,Ns+1,...,Ntot>
+    !obtained from binary decomposition of the state/number i\in 2^Ntot
+    do l=0,Ntot-1
+       busy=btest(i,l)
+       ivec(l+1)=0
+       if(busy)ivec(l+1)=1
+    enddo
+  end function bdecomp8
+
 
 
   !+------------------------------------------------------------------+
@@ -1404,6 +1459,25 @@ contains
     end if
   end function binary_search
 
+  recursive function binary_search8(a,value) result(bsresult)
+    integer(8),intent(in) :: a(:), value
+    integer(8)            :: bsresult, mid
+    mid = size(a)/2 + 1
+    if (size(a) == 0) then
+       bsresult = 0        ! not found
+       !stop "binary_search error: value not found"
+    else if (a(mid) > value) then
+       bsresult= binary_search8(a(:mid-1), value)
+    else if (a(mid) < value) then
+       bsresult = binary_search8(a(mid+1:), value)
+       if (bsresult /= 0) then
+          bsresult = mid + bsresult
+       end if
+    else
+       bsresult = mid      ! SUCCESS!!
+    end if
+  end function binary_search8
+
 
 
   !+------------------------------------------------------------------+
@@ -1463,26 +1537,29 @@ contains
     end function compare
   end subroutine sort_array
 
-  subroutine sort_array2(array,order)
+  subroutine sort_array8(array,order)
     implicit none
-    integer,dimension(:)                    :: array
-    integer,dimension(size(array))          :: order
-    integer,dimension(size(array))          :: backup
-    integer                                 :: i
+    integer(8),dimension(:)                    :: array
+    integer(8),dimension(size(array))          :: order
+    integer(8),dimension(size(array))          :: backup
+    integer(8)                                 :: i
+    integer(8)                                 :: lf,rg
+    lf=1
+    rg=size(array)
     forall(i=1:size(array))order(i)=i
-    call qsort_sort(array, order,1, size(array))
+    call qsort_sort(array, order,lf, rg)
     do i=1,size(array)
        backup(i)=array(order(i))
     enddo
     array=backup
   contains
     recursive subroutine qsort_sort( array, order, left, right )
-      integer, dimension(:) :: array
-      integer, dimension(:) :: order
-      integer               :: left
-      integer               :: right
-      integer               :: i
-      integer               :: last
+      integer(8), dimension(:) :: array
+      integer(8), dimension(:) :: order
+      integer(8)               :: left
+      integer(8)               :: right
+      integer(8)               :: i
+      integer(8)               :: last
       if ( left .ge. right ) return
       call qsort_swap( order, left, qsort_rand(left,right) )
       last = left
@@ -1498,16 +1575,16 @@ contains
     end subroutine qsort_sort
     !---------------------------------------------!
     subroutine qsort_swap( order, first, second )
-      integer, dimension(:) :: order
-      integer               :: first, second
-      integer               :: tmp
+      integer(8), dimension(:) :: order
+      integer(8)               :: first, second
+      integer(8)               :: tmp
       tmp           = order(first)
       order(first)  = order(second)
       order(second) = tmp
     end subroutine qsort_swap
     !---------------------------------------------!
-    integer function qsort_rand( lower, upper )
-      integer               :: lower, upper
+    integer(8) function qsort_rand( lower, upper )
+      integer(8)            :: lower, upper
       real(8)               :: r
       call random_number(r)
       qsort_rand =  lower + nint(r * (upper-lower))
@@ -1515,15 +1592,15 @@ contains
     !---------------------------------------------!
     function compare(f,g)
       implicit none
-      integer               :: f,g
-      integer               :: compare
+      integer(8)               :: f,g
+      integer(8)               :: compare
       if(f<g) then
          compare=-1
       else
          compare=1
       endif
     end function compare
-  end subroutine sort_array2
+  end subroutine sort_array8
 
 
 

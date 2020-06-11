@@ -1,6 +1,6 @@
   do i=MpiIstart,MpiIend
-     m = H%map(i)
-     ib = bdecomp(m,Ns)
+     m_8 = H8%map(i)
+     ib = bdecomp8(m_8,Ns)
      !
      htmp = zero
      !
@@ -40,9 +40,9 @@
            !
            Jcondition = (Thopping/=zero) .AND. (ib(isite)==1) .AND. (ib(hopndx)==0 )
            if (Jcondition) then
-              call c(isite,m,k1,sg1)
-              call cdg(hopndx,k1,k2,sg2)
-              j = binary_search(H%map,k2)
+              call c8(isite,m_8,k1_8,sg1)
+              call cdg8(hopndx,k1_8,k2_8,sg2)
+              j = binary_search8(H8%map,k2_8)
               htmp = Thopping * sg1 * sg2
               !
               select case(MpiStatus)
@@ -56,9 +56,9 @@
            !
            Jcondition = (Thopping/=zero) .AND. (ib(hopndx)==1) .AND. (ib(isite)==0 )
            if (Jcondition) then
-              call c(hopndx,m,k1,sg1)
-              call cdg(isite,k1,k2,sg2)
-              j = binary_search(H%map,k2)
+              call c8(hopndx,m_8,k1_8,sg1)
+              call cdg8(isite,k1_8,k2_8,sg2)
+              j = binary_search8(H8%map,k2_8)
               htmp = Thopping * sg1 * sg2
               !
               select case(MpiStatus)

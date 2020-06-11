@@ -46,6 +46,22 @@ MODULE ED_VARS_GLOBAL
   end interface map_deallocate
 
 
+  type sector_map8
+     integer(8),dimension(:),allocatable :: map
+     logical                             :: status=.false.
+  end type sector_map8
+
+  interface map_allocate8
+     module procedure :: map_allocate_scalar8
+     module procedure :: map_allocate_vector8
+  end interface map_allocate8
+
+  interface map_deallocate8
+     module procedure :: map_deallocate_scalar8
+     module procedure :: map_deallocate_vector8
+  end interface map_deallocate8
+
+
 
 
   !------------------ ABTRACT INTERFACES PROCEDURES ------------------!
@@ -290,6 +306,22 @@ contains
     enddo
   end subroutine map_allocate_vector
 
+  subroutine map_allocate_scalar8(H,N)
+    type(sector_map8) :: H
+    integer          :: N
+    allocate(H%map(N))
+    H%status=.true.
+  end subroutine map_allocate_scalar8
+  !
+  subroutine map_allocate_vector8(H,N)
+    type(sector_map8),dimension(:) :: H
+    integer,dimension(size(H))    :: N
+    integer :: i
+    do i=1,size(H)
+       allocate(H(i)%map(N(i)))
+    enddo
+  end subroutine map_allocate_vector8
+
 
 
   !=========================================================
@@ -310,6 +342,24 @@ contains
        deallocate(H(i)%map)
     enddo
   end subroutine map_deallocate_vector
+
+  subroutine map_deallocate_scalar8(H)
+    type(sector_map8) :: H
+    if(.not.H%status)then
+       write(*,*) "WARNING map_deallocate_scalar: H is not allocated"
+       return
+    endif
+    if(allocated(H%map))deallocate(H%map)
+    H%status=.false.
+  end subroutine map_deallocate_scalar8
+  !
+  subroutine map_deallocate_vector8(H)
+    type(sector_map8),dimension(:) :: H
+    integer :: i
+    do i=1,size(H)
+       deallocate(H(i)%map)
+    enddo
+  end subroutine map_deallocate_vector8
 
 
   !=========================================================

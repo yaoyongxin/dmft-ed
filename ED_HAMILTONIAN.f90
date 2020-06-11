@@ -48,7 +48,11 @@ contains
     Hsector=isector
     Hstatus=.true.
     !
-    call build_sector(isector,H)
+    if(quartett)then
+       call build_sector(isector,H,H8)
+    else
+       call build_sector(isector,H)
+    endif
     !
     Dim = getDim(isector)
     !
@@ -105,7 +109,11 @@ contains
 
   subroutine delete_Hv_sector()
     integer :: iud
-    call delete_sector(Hsector,H)
+    if(quartett)then
+       call delete_sector8(Hsector,H8)
+    else
+       call delete_sector(Hsector,H)
+    endif
     Hstatus=.false.
     !
 #ifdef _MPI
