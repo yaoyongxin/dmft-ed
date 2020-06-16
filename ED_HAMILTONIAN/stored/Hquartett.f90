@@ -53,23 +53,23 @@
               end select
               !
            endif
-           !
-           Jcondition = (Thopping/=zero) .AND. (ib(hopndx)==1) .AND. (ib(isite)==0 )
-           if (Jcondition) then
-              call c8(hopndx,m_8,k1_8,sg1)
-              call cdg8(isite,k1_8,k2_8,sg2)
-              j = binary_search8(H8%map,k2_8)
-              htmp = Thopping * sg1 * sg2
-              !
-              select case(MpiStatus)
-              case (.true.)
-                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
-              case (.false.)
-                 call sp_insert_element(spH0,htmp,i,j)
-              end select
-              !
-           endif
-           !
+           !!
+           !Jcondition = (Thopping/=zero) .AND. (ib(hopndx)==1) .AND. (ib(isite)==0 )
+           !if (Jcondition) then
+           !   call c8(hopndx,m_8,k1_8,sg1)
+           !   call cdg8(isite,k1_8,k2_8,sg2)
+           !   j = binary_search8(H8%map,k2_8)
+           !   htmp = Thopping * sg1 * sg2
+           !   !
+           !   select case(MpiStatus)
+           !   case (.true.)
+           !      call sp_insert_element(MpiComm,spH0,htmp,i,j)
+           !   case (.false.)
+           !      call sp_insert_element(spH0,htmp,i,j)
+           !   end select
+           !   !
+           !endif
+           !!
         enddo
      enddo
      !

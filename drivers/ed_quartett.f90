@@ -38,7 +38,7 @@ program ed_quartett
 
 
   !#########    VARIABLE PARSING    #########
-  call parse_cmd_variable(finput,      "FINPUT",  default='inputED_S.in')
+  call parse_cmd_variable(finput,"FINPUT",default='inputED_quartett.in')
   call ed_read_input(trim(finput),comm)
   call parse_input_variable(tiling,"TILING",finput,default=5)
   !Add DMFT CTRL Variables:
@@ -48,7 +48,7 @@ program ed_quartett
 
 
   !######### VECTOR-LATTICE WRAPPIN #########
-  MaxNeig = 6
+  MaxNeig = 6 ! Max is 7 because is the max dimension of Vnn
   allocate(Neigh(MaxNeig)); Neigh=zero !Max is 7 as the max Vnn
   Neigh(1:3)=4
   Neigh(4)=8
@@ -91,6 +91,8 @@ program ed_quartett
   write(*,*)
   write(*,*)
   write(*,*)
+  !
+  !
   do row=1,Nbath
      write(*,"(1000F6.2)") (Radius(row,col),col=1,Norb)
   enddo
@@ -109,21 +111,21 @@ program ed_quartett
      Vstride(ilatt,1,2) = lattice_tiled(row,col+1)
      Vstride(ilatt,1,3) = lattice_tiled(row+1,col)
      Vstride(ilatt,1,4) = lattice_tiled(row,col-1)
-     if(ilatt.eq.5)write(LOGfile,'(1F6.2,4I3)')Vnn(1),(Vstride(ilatt,1,jlatt),jlatt=1,4)
+     if(ilatt.eq.5)write(LOGfile,'(1F6.2,A,4I3)')Vnn(1)," - ",(Vstride(ilatt,1,jlatt),jlatt=1,4)
      !
      !nn-2
      Vstride(ilatt,2,1) = lattice_tiled(row-1,col+1)
      Vstride(ilatt,2,2) = lattice_tiled(row+1,col+1)
      Vstride(ilatt,2,3) = lattice_tiled(row+1,col-1)
      Vstride(ilatt,2,4) = lattice_tiled(row-1,col-1)
-     if(ilatt.eq.5)write(LOGfile,'(1F6.2,4I3)')Vnn(2),(Vstride(ilatt,2,jlatt),jlatt=1,4)
+     if(ilatt.eq.5)write(LOGfile,'(1F6.2,A,4I3)')Vnn(2)," - ",(Vstride(ilatt,2,jlatt),jlatt=1,4)
      !
      !nn-3
      Vstride(ilatt,3,1) = lattice_tiled(row-2,col)
      Vstride(ilatt,3,2) = lattice_tiled(row,col+2)
      Vstride(ilatt,3,3) = lattice_tiled(row+2,col)
      Vstride(ilatt,3,4) = lattice_tiled(row,col-2)
-     if(ilatt.eq.5)write(LOGfile,'(1F6.2,4I3)')Vnn(3),(Vstride(ilatt,3,jlatt),jlatt=1,4)
+     if(ilatt.eq.5)write(LOGfile,'(1F6.2,A,4I3)')Vnn(3)," - ",(Vstride(ilatt,3,jlatt),jlatt=1,4)
      !
      !nn-4
      Vstride(ilatt,4,1) = lattice_tiled(row-2,col+1)
@@ -134,23 +136,26 @@ program ed_quartett
      Vstride(ilatt,4,6) = lattice_tiled(row+1,col-2)
      Vstride(ilatt,4,7) = lattice_tiled(row-1,col-2)
      Vstride(ilatt,4,8) = lattice_tiled(row-2,col-1)
-     if(ilatt.eq.5)write(LOGfile,'(1F6.2,8I3)')Vnn(4),(Vstride(ilatt,4,jlatt),jlatt=1,8)
+     if(ilatt.eq.5)write(LOGfile,'(1F6.2,A,8I3)')Vnn(4)," - ",(Vstride(ilatt,4,jlatt),jlatt=1,8)
      !
      !nn-5
      Vstride(ilatt,5,1) = lattice_tiled(row-2,col+2)
      Vstride(ilatt,5,2) = lattice_tiled(row+2,col+2)
      Vstride(ilatt,5,3) = lattice_tiled(row+2,col-2)
      Vstride(ilatt,5,4) = lattice_tiled(row-2,col-2)
-     if(ilatt.eq.5)write(LOGfile,'(1F6.2,4I3)')Vnn(5),(Vstride(ilatt,5,jlatt),jlatt=1,4)
-     !!
-     !!nn-1
+     if(ilatt.eq.5)write(LOGfile,'(1F6.2,A,4I3)')Vnn(5)," - ",(Vstride(ilatt,5,jlatt),jlatt=1,4)
+     !
+     !nn-6
      Vstride(ilatt,6,1) = lattice_tiled(row-3,col)
      Vstride(ilatt,6,2) = lattice_tiled(row,col+3)
      Vstride(ilatt,6,3) = lattice_tiled(row+3,col)
      Vstride(ilatt,6,4) = lattice_tiled(row,col-3)
-     if(ilatt.eq.5)write(LOGfile,'(1F6.2,4I3)')Vnn(6),(Vstride(ilatt,6,jlatt),jlatt=1,4)
+     if(ilatt.eq.5)write(LOGfile,'(1F6.2,A,4I3)')Vnn(6)," - ",(Vstride(ilatt,6,jlatt),jlatt=1,4)
      !
   enddo
+  write(*,*)
+  write(*,*)
+  write(*,*)
 
   call ed_set_Vstride(Comm,Vstride,Neigh,lat2vec,vec2lat,Radius)
   call MPI_Barrier(Comm,ier)
