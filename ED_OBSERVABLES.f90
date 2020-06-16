@@ -855,24 +855,25 @@ contains
     type(sector_map)                :: H
     type(sector_map8)               :: H8
     !
-    real(8),allocatable             :: denslatt(:,:,:),denslatt2(:,:,:)
+    real(8),allocatable             :: denslatt(:,:,:),denslatt_tot(:,:)
     real(8),allocatable             :: Eklatt(:,:,:),Epotlatt(:,:,:,:)
     real(8),allocatable             :: corrfunc(:,:)
     integer                         :: distance
     integer                         :: isite,jsite
     integer                         :: row,col,hopndx
-    real(8)                         :: n_i,n_j,ntot
     integer                         :: unit_,ier
+    real(8)                         :: n_i,n_j
+    real(8)                         :: ntot,ncorr,Ektot,Eptot
     !
     Egs       = state_list%emin
     !
     numstates=state_list%size
     !
-    allocate(denslatt(Nbath,Norb,numstates),denslatt2(Nbath,Norb,numstates))
-    allocate(Eklatt(Nbath,Norb,numstates),Epotlatt(Nbath,Norb,size(Neigh),numstates))
+    allocate(denslatt(Nbath,Norb,numstates),denslatt_tot(Nbath,Norb))
+    allocate(Eklatt(Nbath,Norb,numstates),Epotlatt(Nbath,Norb,0:size(Neigh),numstates))
     allocate(corrfunc(size(Neigh),numstates))
     denslatt  = 0.d0
-    denslatt2 = 0.d0
+    denslatt_tot = 0.d0
     corrfunc  = 0.d0
     Eklatt    = 0.d0
     Epotlatt  = 0.d0
@@ -898,6 +899,7 @@ contains
        !
        if(Mpimaster)then
           !
+          write(*,*)Ei,Egs,zeta_function
           call build_sector(isector,H,H8)
           !do i=1,idim
           !   m=H8%map(i)
@@ -923,42 +925,43 @@ contains
                 n_i = dble(ib(isite))
                 !
                 denslatt(row,col,istate) = denslatt(row,col,istate) + n_i*gs_weight
-                denslatt2(row,col,istate) = denslatt2(row,col,istate) + n_i*n_i*gs_weight
+                denslatt_tot(row,col) = denslatt_tot(row,col) + n_i*n_i*gs_weight
                 !
+                !Epot
+                Epotlatt(row,col,0,istate) = Epotlatt(row,col,0,istate) + Ust * Radius(row,col) * n_i*gs_weight
                 do distance=1,size(Neigh)
-                   !
                    do jsite=1,Neigh(distance)
-                      !
                       n_j = dble(ib(Vstride(isite,distance,jsite)))
                       corrfunc(distance,istate) = corrfunc(distance,istate) + n_i*n_j*gs_weight
-                      Epotlatt(row,col,distance,istate) = Epotlatt(row,col,distance,istate) + n_i*n_j*gs_weight
-                      !
-                      hopndx = Vstride(isite,distance,jsite)
-                      !
-                      if((ib(isite)==1).and.(ib(hopndx)==0))then
-                         call c8(isite,m,r,sgn1)
-                         call cdg8(hopndx,r,k,sgn2)
-                         j=binary_search8(H8%map,k)
-                         if(j.eq.0)write(*,'(A,14I6)')" a ",i,j,m,r,k,isite,hopndx
-                         Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
-                      elseif((ib(isite)==0).and.(ib(hopndx)==1))then
-                         call c8(hopndx,m,r,sgn1)
-                         call cdg8(isite,r,k,sgn2)
-                         j=binary_search8(H8%map,k)
-                         if(j.eq.0)write(*,'(A,4I6)')" b ",i,j,isite,hopndx
-                         Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))
-                      endif
-                      !
-                   enddo ! end loop on neighbors at a given radius
-                   !
-                enddo ! end loop on possible neighbors
+                      Epotlatt(row,col,distance,istate) = Epotlatt(row,col,distance,istate) + n_i*n_j*gs_weight*Vnn(distance)
+                   enddo
+                enddo
+                !
+                !Ekin
+                do jsite=1,4
+                   hopndx = Vstride(isite,1,jsite)
+                   if((ib(isite)==1).and.(ib(hopndx)==0))then
+                      call c8(isite,m,r,sgn1)
+                      call cdg8(hopndx,r,k,sgn2)
+                      j=binary_search8(H8%map,k)
+                      if(j.eq.0)write(*,'(A,14I6)')" a ",i,j,m,r,k,isite,hopndx
+                      Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))*Thopping
+                   endif
+                enddo
                 !
              enddo ! end loop on lattice sites
              !
-          enddo ! end loop on states
+          enddo ! end loop on states in the block
           !
           if(associated(gscvec))nullify(gscvec)
           call delete_sector8(isector,H8)
+          !
+          !
+          ncorr=0d0
+          do distance=1,size(Neigh)
+             ncorr=ncorr+corrfunc(distance,istate)
+          enddo
+          corrfunc(:,istate) = corrfunc(:,istate)/ncorr
           !
           !
           unit_ = free_unit()
@@ -969,20 +972,13 @@ contains
           close(unit_)
           !
           unit_ = free_unit()
-          open(unit=unit_,file="n2_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
-          do row=1,Nbath
-             write(unit_,'(30(F20.12,1X))') (denslatt2(row,col,istate),col=1,Norb)
-          enddo
-          close(unit_)
-          !
-          unit_ = free_unit()
           open(unit=unit_,file="Ek_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
           do row=1,Nbath
              write(unit_,'(30(F20.12,1X))') (Eklatt(row,col,istate),col=1,Norb)
           enddo
           close(unit_)
           !
-          do distance=1,size(Neigh)
+          do distance=0,size(Neigh)
              unit_ = free_unit()
              open(unit=unit_,file="Epot_r"//reg(str(distance))//"_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
              do row=1,Nbath
@@ -1001,12 +997,12 @@ contains
           !
        endif ! master
        !
-    enddo ! end loop on eigenstates considered
+    enddo ! end loop on degenrate groundstates considered
     !
     !
     if(Mpimaster)then
-      ntot=0d0
       do istate=1,numstates
+         ntot=0d0
          do isite=1,Norb*Nbath
             !
             row = vec2lat(isite,1)
@@ -1014,13 +1010,60 @@ contains
             !
             ntot = ntot + denslatt(row,col,istate)
          enddo
+         write(*,"(A,I4,A,1F10.5)")"#GS= ",istate, " NTOT= ",ntot
       enddo
-      write(*,"(A,1F10.5)")" NTOT= ",ntot
+      !
+      ncorr=0d0
+      do istate=1,numstates
+         do distance=1,size(Neigh)
+            ncorr=ncorr+corrfunc(distance,istate)*distance/numstates
+         enddo
+      enddo
+      !
+      Ektot=0d0
+      do istate=1,numstates
+         do row=1,Nbath
+            do col=1,Norb
+               Ektot=Ektot+Eklatt(row,col,istate)/(Nbath*Norb)
+            enddo
+         enddo
+      enddo
+      !
+      Eptot=0d0
+      do istate=1,numstates
+         do distance=0,size(Neigh)
+            do row=1,Nbath
+               do col=1,Norb
+                  Eptot=Eptot+Epotlatt(row,col,distance,istate)/(Nbath*Norb)
+               enddo
+            enddo
+         enddo
+      enddo
+      !
+      !
+      unit_ = free_unit()
+      open(unit=unit_,file="nlatt.DAT",status='unknown',position='rewind',action='write',form='formatted')
+      do row=1,Nbath
+        write(unit_,'(30(F20.12,1X))') (denslatt_tot(row,col),col=1,Norb)
+      enddo
+      close(unit_)
+      !
+      !
+      unit_ = free_unit()
+      open(unit=unit_,file="observables_last.ed",status='unknown',position='rewind',action='write',form='formatted')
+      write(unit_,'(2I3,1F10.5,1I5,30(F20.12,1X))') Nbath,Norb,Thopping,numstates,ncorr,Ektot,Eptot,Egs/(Nbath*Norb),ust
+      close(unit_)
+      unit_ = free_unit()
+      open(unit_,file="parameters_last.ed")
+      write(unit_,"(90F15.9)")xmu,beta,uloc(1),uloc(2),uloc(3),Ust,Jh,Jx,Jp
+      close(unit_)
+      !
+      !
     endif
     !
     call MPI_Barrier(MpiComm,ier)
     !
-    deallocate(denslatt,denslatt2)
+    deallocate(denslatt,denslatt_tot)
     deallocate(Eklatt,Epotlatt)
     deallocate(corrfunc)
     !
