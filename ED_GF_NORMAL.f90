@@ -26,7 +26,7 @@ contains
           write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_s"//str(ispin)
           if(MPIMASTER)call start_timer
           call lanc_build_gf_normal_c(iorb,ispin)
-          if(MPIMASTER)call stop_timer(LOGfile)
+          if(MPIMASTER)call stop_timer(unit=LOGfile)
        enddo
     enddo
     !
@@ -36,7 +36,7 @@ contains
           do iorb=1,Norb
              do jorb=iorb+1,Norb
                 !if(hybrid)always T; if(replica)T iff following condition is T
-                MaskBool=.true.   
+                MaskBool=.true.
                 if(bath_type=="replica")MaskBool=&
                      (dmft_bath%mask(ispin,ispin,iorb,jorb,1)).OR.(dmft_bath%mask(ispin,ispin,iorb,jorb,2))
                 if(.not.MaskBool)cycle
@@ -44,7 +44,7 @@ contains
                 write(LOGfile,"(A)")"Get G_l"//str(iorb)//"_m"//str(jorb)//"_s"//str(ispin)
                 if(MPIMASTER)call start_timer
                 call lanc_build_gf_normal_mix_c(iorb,jorb,ispin)
-                if(MPIMASTER)call stop_timer(LOGfile)
+                if(MPIMASTER)call stop_timer(unit=LOGfile)
              enddo
           enddo
        enddo
@@ -53,7 +53,7 @@ contains
           do iorb=1,Norb
              do jorb=iorb+1,Norb
                 !
-                MaskBool=.true.   
+                MaskBool=.true.
                 if(bath_type=="replica")MaskBool=&
                      (dmft_bath%mask(ispin,ispin,iorb,jorb,1)).OR.(dmft_bath%mask(ispin,ispin,iorb,jorb,2))
                 if(.not.MaskBool)cycle
@@ -134,7 +134,7 @@ contains
        state_e    =  es_return_energy(state_list,istate)
 #ifdef _MPI
        if(MpiStatus)then
-          state_cvec => es_return_cvector(MpiComm,state_list,istate) 
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
        else
           state_cvec => es_return_cvector(state_list,istate)
        endif
@@ -148,7 +148,7 @@ contains
        !
        !ADD ONE PARTICLE:
        jsector = getCDGsector(ispin,isector)
-       if(jsector/=0)then 
+       if(jsector/=0)then
           !
           jdim  = getdim(jsector)
           !
@@ -195,7 +195,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -231,7 +231,7 @@ contains
           allocate(alfa_(nlanc),beta_(nlanc))
           !
           call build_Hv_sector(jsector)
-#ifdef _MPI        
+#ifdef _MPI
           if(MpiStatus)then
              call Bcast_MPI(MpiComm,norm2)
              vecDim = vecDim_Hv_sector(jsector)
@@ -248,7 +248,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -311,7 +311,7 @@ contains
        !
        !EVALUATE (c^+_iorb + c^+_jorb)|gs>
        jsector = getCDGsector(ispin,isector)
-       if(jsector/=0)then 
+       if(jsector/=0)then
           jdim  = getdim(jsector)
           if(MpiMaster)then
              if(ed_verbose==3)write(LOGfile,"(A,2I3,I15)")' add particle:',getnup(jsector),getndw(jsector),jdim
@@ -364,7 +364,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -422,13 +422,13 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
        !EVALUATE (c^+_iorb + i*c^+_jorb)|gs>
        jsector = getCDGsector(ispin,isector)
-       if(jsector/=0)then 
+       if(jsector/=0)then
           jdim  = getdim(jsector)
           if(MpiMaster)then
              if(ed_verbose==3)write(LOGfile,"(A,2I3,I15)")' add particle:',getnup(jsector),getndw(jsector),jdim
@@ -481,7 +481,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -540,7 +540,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -582,7 +582,7 @@ contains
     real(8)                                    :: Ei,Egs,de
     integer                                    :: nlanc,itype
     real(8),dimension(:)                       :: alanc
-    real(8),dimension(size(alanc))             :: blanc 
+    real(8),dimension(size(alanc))             :: blanc
     integer                                    :: isign,iorb,jorb,ispin
     real(8),dimension(size(alanc),size(alanc)) :: Z
     real(8),dimension(size(alanc))             :: diag,subdiag

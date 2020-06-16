@@ -26,13 +26,13 @@ contains
        write(LOGfile,"(A)")"Get Chi_spin_l"//reg(txtfy(iorb))
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_spinChi_c(iorb)
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=LOGfile)
     enddo
     if(Norb>1)then
        write(LOGfile,"(A)")"Get Chi_spin_tot"
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_spinChi_tot_c()
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=LOGfile)
     endif
     spinChi_tau = SpinChi_tau/zeta_function
     spinChi_w   = spinChi_w/zeta_function

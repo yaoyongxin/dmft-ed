@@ -24,7 +24,7 @@ contains
        write(LOGfile,"(A)")"Get Chi_pair_l"//reg(txtfy(iorb))
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_pairChi_c(iorb)
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=LOGfile)
     enddo
     pairChi_tau = PairChi_tau/zeta_function
     pairChi_w   = pairChi_w/zeta_function

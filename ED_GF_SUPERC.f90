@@ -34,7 +34,7 @@ contains
        write(LOGfile,"(A)")"Get G&F_l"//str(iorb)//"_s"//str(ispin)
        if(MPIMASTER)call start_timer()
        call lanc_build_gf_superc_c(iorb)
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=LOGfile)
        !
        impGmats(ispin,ispin,iorb,iorb,:) = auxGmats(1,:) !this is G_{iorb,iorb} = G_{up,up;iorb,iorb}
        impGreal(ispin,ispin,iorb,iorb,:) = auxGreal(1,:)
@@ -87,7 +87,7 @@ contains
 
   subroutine lanc_build_gf_superc_c(iorb)
     complex(8),allocatable :: vvinit(:),vvloc(:)
-    real(8),allocatable    :: alfa_(:),beta_(:)  
+    real(8),allocatable    :: alfa_(:),beta_(:)
     integer                :: iorb,isector,istate
     integer                :: idim,jsector,vecDim
     integer                :: jdim,isz,jsz
@@ -104,7 +104,7 @@ contains
        state_e    =  es_return_energy(state_list,istate)
 #ifdef _MPI
        if(MpiStatus)then
-          state_cvec => es_return_cvector(MpiComm,state_list,istate) 
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
        else
           state_cvec => es_return_cvector(state_list,istate)
        endif
@@ -118,7 +118,7 @@ contains
        !
        !EVALUATE c^+_{up,iorb}|v> --> Gaux(1) = G_{iorb,iorb}
        jsector = getCDGsector(1,isector)
-       if(jsector/=0)then 
+       if(jsector/=0)then
           jdim  = getdim(jsector)
           !
           if(MpiMaster)then
@@ -161,13 +161,13 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
        !EVALUATE c_{up,iorb}|v> --> Gaux(1) = G_{iorb,iorb}
        jsector = getCsector(1,isector)
-       if(jsector/=0)then 
+       if(jsector/=0)then
           jdim  = getdim(jsector)
           !
           if(MpiMaster)then
@@ -212,13 +212,13 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
        !EVALUATE c_{dw,iorb}|v> --> Gaux(2) = barG_{iorb,iorb}
        jsector = getCsector(2,isector)
-       if(jsector/=0)then 
+       if(jsector/=0)then
           jdim  = getdim(jsector)
           !
           if(MpiMaster)then
@@ -263,13 +263,13 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
        !EVALUATE c^+_{dw,iorb}|v> --> Gaux(2) = barG_{iorb,iorb}
        jsector = getCDGsector(2,isector)
-       if(jsector/=0)then 
+       if(jsector/=0)then
           jdim  = getdim(jsector)
           !
           if(MpiMaster)then
@@ -313,7 +313,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -373,7 +373,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -434,7 +434,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -454,7 +454,7 @@ contains
 
   subroutine lanc_build_gf_superc_mix_c(iorb,jorb)
     complex(8),allocatable           :: vvinit(:),vvloc(:)
-    real(8),allocatable              :: alfa_(:),beta_(:)  
+    real(8),allocatable              :: alfa_(:),beta_(:)
     integer                          :: iorb,jorb,isector,istate
     integer                          :: idim,jsector,isite
     integer                          :: jdim,isz,jsz,jsite
@@ -469,14 +469,14 @@ contains
     jsite=impIndex(jorb,2)  !orbital beta_dw
     !
     numstates=state_list%size
-    !   
+    !
     !
     do istate=1,numstates
        isector    =  es_return_sector(state_list,istate)
        state_e    =  es_return_energy(state_list,istate)
 #ifdef _MPI
        if(MpiStatus)then
-          state_cvec => es_return_cvector(MpiComm,state_list,istate) 
+          state_cvec => es_return_cvector(MpiComm,state_list,istate)
        else
           state_cvec => es_return_cvector(state_list,istate)
        endif
@@ -543,7 +543,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -604,7 +604,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -664,7 +664,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -725,7 +725,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        endif
        !
@@ -759,7 +759,7 @@ contains
     real(8)                                    :: Ei,Egs,de
     integer                                    :: nlanc,itype
     real(8),dimension(:)                       :: alanc
-    real(8),dimension(size(alanc))             :: blanc 
+    real(8),dimension(size(alanc))             :: blanc
     integer                                    :: isign,ichan
     real(8),dimension(size(alanc),size(alanc)) :: Z
     real(8),dimension(size(alanc))             :: diag,subdiag
@@ -855,7 +855,7 @@ contains
     !
     select case(bath_type)
     case default
-       !      
+       !
        !Get Gimp^-1
        do iorb=1,Norb
           det_mats  =  abs(impGmats(ispin,ispin,iorb,iorb,:))**2 + (impFmats(ispin,ispin,iorb,iorb,:))**2
