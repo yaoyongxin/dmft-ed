@@ -25,7 +25,7 @@ contains
        write(LOGfile,"(A)")"Get Chi_dens_diag_l"//reg(txtfy(iorb))
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_densChi_diag_c(iorb)
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=LOGfile)
     enddo
     !
     !
@@ -35,7 +35,7 @@ contains
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
              if(MPIMASTER)call start_timer()
              call lanc_ed_build_densChi_offdiag_c(iorb,jorb)
-             if(MPIMASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(unit=LOGfile)
           end do
        end do
        do iorb=1,Norb
@@ -49,14 +49,14 @@ contains
              write(LOGfile,"(A)")"Get Chi_dens_offdiag_l"//reg(txtfy(iorb))//reg(txtfy(jorb))
              if(MPIMASTER)call start_timer()
              call lanc_ed_build_densChi_mix_c(iorb,jorb)
-             if(MPIMASTER)call stop_timer(LOGfile)
+             if(MPIMASTER)call stop_timer(unit=LOGfile)
           end do
        end do
        !
        write(LOGfile,"(A)")"Get Chi_dens_tot"
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_densChi_tot_c()
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=LOGfile)
     endif
     !
     denschi_tau = Denschi_tau/zeta_function
@@ -84,7 +84,7 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : Evaluate the Charge-Charge susceptibility \Chi_dens for  
+  !PURPOSE  : Evaluate the Charge-Charge susceptibility \Chi_dens for
   ! the orbital diagonal case: \chi_dens_aa = <N_a(\tau)N_a(0)>
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_densChi_diag_c(iorb)
@@ -161,7 +161,7 @@ contains
        call delete_Hv_sector()
        !
        deallocate(alfa_,beta_)
-       if(allocated(vvinit))deallocate(vvinit)          
+       if(allocated(vvinit))deallocate(vvinit)
        if(allocated(vvloc))deallocate(vvloc)
        nullify(state_cvec)
     enddo
@@ -185,7 +185,7 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : Evaluate the TOTAL Charge-Charge susceptibility \Chi_dens  
+  !PURPOSE  : Evaluate the TOTAL Charge-Charge susceptibility \Chi_dens
   ! \chi_dens_tot = <N(\tau)N(0)>, N=sum_a N_a
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_densChi_tot_c()
@@ -201,7 +201,7 @@ contains
     complex(8),allocatable :: vvinit(:),vvloc(:)
     integer                :: Nitermax
     type(sector_map)       :: HI    !map of the Sector S to Hilbert space H
-    !    
+    !
     !
     do istate=1,state_list%size
        isector    =  es_return_sector(state_list,istate)
@@ -228,7 +228,7 @@ contains
              i=HI%map(m)
              ib = bdecomp(i,2*Ns)
              sgn = sum(dble(ib(1:Norb)))+sum(dble(ib(Ns+1:Ns+Norb)))
-             vvinit(m) = sgn*state_cvec(m) 
+             vvinit(m) = sgn*state_cvec(m)
           enddo
           call delete_sector(isector,HI)
           norm2=dot_product(vvinit,vvinit)
@@ -261,7 +261,7 @@ contains
        call delete_Hv_sector()
        !
        deallocate(alfa_,beta_)
-       if(allocated(vvinit))deallocate(vvinit)          
+       if(allocated(vvinit))deallocate(vvinit)
        if(allocated(vvloc))deallocate(vvloc)
        nullify(state_cvec)
     enddo
@@ -330,10 +330,10 @@ contains
              i=HI%map(m)
              ib = bdecomp(i,2*Ns)
              sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
-             vvinit(m) = sgn*state_cvec(m)   
+             vvinit(m) = sgn*state_cvec(m)
              !
              sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
-             vvinit(m) = vvinit(m) + sgn*state_cvec(m)   
+             vvinit(m) = vvinit(m) + sgn*state_cvec(m)
              !
           enddo
           call delete_sector(isector,HI)
@@ -379,10 +379,10 @@ contains
              i=HI%map(m)
              ib = bdecomp(i,2*Ns)
              sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
-             vvinit(m) = sgn*state_cvec(m)   
+             vvinit(m) = sgn*state_cvec(m)
              !
              sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
-             vvinit(m) = vvinit(m) - xi*sgn*state_cvec(m)   
+             vvinit(m) = vvinit(m) - xi*sgn*state_cvec(m)
              !
           enddo
           call delete_sector(isector,HI)
@@ -406,7 +406,7 @@ contains
        endif
 #else
        call sp_lanc_tridiag(spHtimesV_cc,vvinit,alfa_,beta_)
-#endif     
+#endif
        cnorm2=xi*norm2
        isign=1
        call add_to_lanczos_densChi(cnorm2,state_e,alfa_,beta_,isign,iorb,jorb)
@@ -425,10 +425,10 @@ contains
              i=HI%map(m)
              ib = bdecomp(i,2*Ns)
              sgn = dble(ib(iorb))+dble(ib(iorb+Ns))
-             vvinit(m) = sgn*state_cvec(m)   
+             vvinit(m) = sgn*state_cvec(m)
              !
              sgn = dble(ib(jorb))+dble(ib(jorb+Ns))
-             vvinit(m) = vvinit(m) + xi*sgn*state_cvec(m)   
+             vvinit(m) = vvinit(m) + xi*sgn*state_cvec(m)
              !
           enddo
           call delete_sector(isector,HI)
@@ -460,7 +460,7 @@ contains
        call delete_Hv_sector()
        !
        deallocate(alfa_,beta_)
-       if(allocated(vvinit))deallocate(vvinit)          
+       if(allocated(vvinit))deallocate(vvinit)
        if(allocated(vvloc))deallocate(vvloc)
        nullify(state_cvec)
     enddo
@@ -484,7 +484,7 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : Evaluate the inter-orbital charge susceptibility \Chi_mix 
+  !PURPOSE  : Evaluate the inter-orbital charge susceptibility \Chi_mix
   ! \chi_mix = <C^+_a(\tau)N_a(0)>
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_densChi_mix_c(iorb,jorb)
@@ -501,7 +501,7 @@ contains
     complex(8)             :: cnorm2
     integer                :: Nitermax,Nlanc
     !
-    !   
+    !
     !
     do istate=1,state_list%size
        isector     =  es_return_sector(state_list,istate)
@@ -543,7 +543,7 @@ contains
              !
              jsite = impIndex(jorb,ispin)
              ksector = getCDGsector(ispin,jsector)
-             if(ksector/=0) then       
+             if(ksector/=0) then
                 kdim  = getdim(ksector)
                 allocate(vvinit(kdim)) ;  vvinit=zero
                 call build_sector(ksector,HK)
@@ -588,7 +588,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        enddo
        !
@@ -602,7 +602,7 @@ contains
              if(jsector/=0)then
                 jdim  = getdim(jsector)
                 allocate(vvinit_tmp(jdim)) ; vvinit_tmp=zero
-                call build_sector(jsector,HJ)             
+                call build_sector(jsector,HJ)
                 do m=1,idim
                    i=HI%map(m)
                    ib = bdecomp(i,2*Ns)
@@ -616,10 +616,10 @@ contains
              !
              isite = impIndex(iorb,ispin)
              ksector = getCDGsector(ispin,jsector)
-             if(ksector/=0) then       
+             if(ksector/=0) then
                 kdim  = getdim(ksector)
                 allocate(vvinit(kdim)) ; vvinit=zero
-                call build_sector(ksector,HK)             
+                call build_sector(ksector,HK)
                 do m=1,jdim
                    i=HJ%map(m)
                    ib = bdecomp(i,2*Ns)
@@ -661,7 +661,7 @@ contains
           call delete_Hv_sector()
           !
           deallocate(alfa_,beta_)
-          if(allocated(vvinit))deallocate(vvinit)          
+          if(allocated(vvinit))deallocate(vvinit)
           if(allocated(vvloc))deallocate(vvloc)
        enddo
        !
@@ -691,11 +691,11 @@ contains
 
   subroutine add_to_lanczos_densChi(vnorm2,Ei,alanc,blanc,isign,iorb,jorb)
     integer                                    :: iorb,jorb,isign
-    complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2  
+    complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2
     real(8)                                    :: Ei,Ej,Egs,de
     integer                                    :: nlanc
     real(8),dimension(:)                       :: alanc
-    real(8),dimension(size(alanc))             :: blanc 
+    real(8),dimension(size(alanc))             :: blanc
     real(8),dimension(size(alanc),size(alanc)) :: Z
     real(8),dimension(size(alanc))             :: diag,subdiag
     integer                                    :: i,j,ierr
@@ -705,7 +705,7 @@ contains
     !
     Nlanc = size(alanc)
     !
-    pesoF  = vnorm2/zeta_function 
+    pesoF  = vnorm2/zeta_function
     pesoBZ = 1d0
     if(finiteT)pesoBZ = exp(-beta*(Ei-Egs))
     !
@@ -726,7 +726,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              densChi_iv(iorb,jorb,0)=densChi_iv(iorb,jorb,0) - peso*beta
           else
-             densChi_iv(iorb,jorb,0)=densChi_iv(iorb,jorb,0) + peso*(exp(-beta*dE)-1d0)/dE 
+             densChi_iv(iorb,jorb,0)=densChi_iv(iorb,jorb,0) + peso*(exp(-beta*dE)-1d0)/dE
           endif
           do i=1,Lmats
              densChi_iv(iorb,jorb,i)=densChi_iv(iorb,jorb,i) + peso*(exp(-beta*dE)-1d0)/(dcmplx(0d0,vm(i)) - dE)
@@ -747,7 +747,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              densChi_iv(iorb,jorb,0)=densChi_iv(iorb,jorb,0) + peso*beta
           else
-             densChi_iv(iorb,jorb,0)=densChi_iv(iorb,jorb,0) + peso*(1d0-exp(-beta*dE))/dE 
+             densChi_iv(iorb,jorb,0)=densChi_iv(iorb,jorb,0) + peso*(1d0-exp(-beta*dE))/dE
           endif
           do i=1,Lmats
              densChi_iv(iorb,jorb,i)=densChi_iv(iorb,jorb,i) + peso*(1d0-exp(-beta*dE))/(dcmplx(0d0,vm(i)) + dE)
@@ -783,11 +783,11 @@ contains
 
   subroutine add_to_lanczos_densChi_mix(vnorm2,Ei,alanc,blanc,isign,iorb,jorb)
     integer                                    :: iorb,jorb,isign
-    complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2  
+    complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2
     real(8)                                    :: Ei,Ej,Egs,de
     integer                                    :: nlanc
     real(8),dimension(:)                       :: alanc
-    real(8),dimension(size(alanc))             :: blanc 
+    real(8),dimension(size(alanc))             :: blanc
     real(8),dimension(size(alanc),size(alanc)) :: Z
     real(8),dimension(size(alanc))             :: diag,subdiag
     integer                                    :: i,j,ierr
@@ -797,7 +797,7 @@ contains
     !
     Nlanc = size(alanc)
     !
-    pesoF  = vnorm2/zeta_function 
+    pesoF  = vnorm2/zeta_function
     pesoBZ = 1d0
     if(finiteT)pesoBZ = exp(-beta*(Ei-Egs))
     !
@@ -818,7 +818,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              densChi_mix_iv(iorb,jorb,0)=densChi_mix_iv(iorb,jorb,0) - peso*beta
           else
-             densChi_mix_iv(iorb,jorb,0)=densChi_mix_iv(iorb,jorb,0) + peso*(exp(-beta*dE)-1d0)/dE 
+             densChi_mix_iv(iorb,jorb,0)=densChi_mix_iv(iorb,jorb,0) + peso*(exp(-beta*dE)-1d0)/dE
           endif
           do i=1,Lmats
              densChi_mix_iv(iorb,jorb,i)=densChi_mix_iv(iorb,jorb,i) + peso*(exp(-beta*dE)-1d0)/(dcmplx(0d0,vm(i)) - dE)
@@ -839,7 +839,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              densChi_mix_iv(iorb,jorb,0)=densChi_mix_iv(iorb,jorb,0) + peso*beta
           else
-             densChi_mix_iv(iorb,jorb,0)=densChi_mix_iv(iorb,jorb,0) + peso*(1d0-exp(-beta*dE))/dE 
+             densChi_mix_iv(iorb,jorb,0)=densChi_mix_iv(iorb,jorb,0) + peso*(1d0-exp(-beta*dE))/dE
           endif
           do i=1,Lmats
              densChi_mix_iv(iorb,jorb,i)=densChi_mix_iv(iorb,jorb,i) + peso*(1d0-exp(-beta*dE))/(dcmplx(0d0,vm(i)) + dE)
@@ -874,11 +874,11 @@ contains
 
 
   subroutine add_to_lanczos_densChi_tot(vnorm2,Ei,alanc,blanc,isign)
-    complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2  
+    complex(8)                                 :: pesoF,pesoAB,pesoBZ,peso,vnorm2
     real(8)                                    :: Ei,Ej,Egs,de
     integer                                    :: nlanc,isign
     real(8),dimension(:)                       :: alanc
-    real(8),dimension(size(alanc))             :: blanc 
+    real(8),dimension(size(alanc))             :: blanc
     real(8),dimension(size(alanc),size(alanc)) :: Z
     real(8),dimension(size(alanc))             :: diag,subdiag
     integer                                    :: i,j,ierr
@@ -888,7 +888,7 @@ contains
     !
     Nlanc = size(alanc)
     !
-    pesoF  = vnorm2/zeta_function 
+    pesoF  = vnorm2/zeta_function
     pesoBZ = 1d0
     if(finiteT)pesoBZ = exp(-beta*(Ei-Egs))
     !
@@ -909,7 +909,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              densChi_tot_iv(0)=densChi_tot_iv(0) - peso*beta
           else
-             densChi_tot_iv(0)=densChi_tot_iv(0) + peso*(exp(-beta*dE)-1d0)/dE 
+             densChi_tot_iv(0)=densChi_tot_iv(0) + peso*(exp(-beta*dE)-1d0)/dE
           endif
           do i=1,Lmats
              densChi_tot_iv(i)=densChi_tot_iv(i) + peso*(exp(-beta*dE)-1d0)/(dcmplx(0d0,vm(i)) - dE)
@@ -930,7 +930,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              densChi_tot_iv(0)=densChi_tot_iv(0) + peso*beta
           else
-             densChi_tot_iv(0)=densChi_tot_iv(0) + peso*(1d0-exp(-beta*dE))/dE 
+             densChi_tot_iv(0)=densChi_tot_iv(0) + peso*(1d0-exp(-beta*dE))/dE
           endif
           do i=1,Lmats
              densChi_tot_iv(i)=densChi_tot_iv(i) + peso*(1d0-exp(-beta*dE))/(dcmplx(0d0,vm(i)) + dE)

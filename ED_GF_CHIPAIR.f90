@@ -24,7 +24,7 @@ contains
        write(LOGfile,"(A)")"Get Chi_pair_l"//reg(txtfy(iorb))
        if(MPIMASTER)call start_timer()
        call lanc_ed_build_pairChi_c(iorb)
-       if(MPIMASTER)call stop_timer(LOGfile)
+       if(MPIMASTER)call stop_timer(unit=LOGfile)
     enddo
     pairChi_tau = PairChi_tau/zeta_function
     pairChi_w   = pairChi_w/zeta_function
@@ -53,7 +53,7 @@ contains
 
 
   !+------------------------------------------------------------------+
-  !PURPOSE  : Evaluate the Pair susceptibility \Chi_pair for a 
+  !PURPOSE  : Evaluate the Pair susceptibility \Chi_pair for a
   ! single orbital: \chi = <Phi_a(\tau)Phi_a(0)>
   !+------------------------------------------------------------------+
   subroutine lanc_ed_build_pairChi_c(iorb)
@@ -85,13 +85,13 @@ contains
        !
        idim      =  getdim(isector)
        !
-       !Build the C_{iorb,up}C_{iorb,dw}|eigvec> 
+       !Build the C_{iorb,up}C_{iorb,dw}|eigvec>
        if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply C_{iorb,up}C_{iorb,dw}:',getsz(isector)
        !
        if(MpiMaster)then
           allocate(vvinit(idim)) ; vvinit=0.d0
           !
-          call build_sector(isector,HI)   
+          call build_sector(isector,HI)
           do m=1,idim
              i=HI%map(m)
              ib = bdecomp(i,2*Ns)
@@ -131,13 +131,13 @@ contains
        if(allocated(vvinit))deallocate(vvinit)
        if(allocated(vvloc))deallocate(vvloc)
        !
-       !Build the CDG_{iorb,dw}CDG_{iorb,up}|eigvec> 
+       !Build the CDG_{iorb,dw}CDG_{iorb,up}|eigvec>
        if(ed_verbose==3)write(LOGfile,"(A,2I3)")'Apply CDG_{iorb,dw}CDG_{iorb,up}:',getsz(isector)
        !
        if(MpiMaster)then
           allocate(vvinit(idim)) ; vvinit=0.d0
           !
-          call build_sector(isector,HI)     
+          call build_sector(isector,HI)
           do m=1,idim
              i=HI%map(m)
              ib = bdecomp(i,2*Ns)
@@ -204,7 +204,7 @@ contains
     real(8)                                    :: vnorm,Ei,Ej,Egs,pesoF,pesoAB,pesoBZ,de,peso
     integer                                    :: nlanc
     real(8),dimension(:)                       :: alanc
-    real(8),dimension(size(alanc))             :: blanc 
+    real(8),dimension(size(alanc))             :: blanc
     integer                                    :: isign,iorb
     real(8),dimension(size(alanc),size(alanc)) :: Z
     real(8),dimension(size(alanc))             :: diag,subdiag
@@ -215,7 +215,7 @@ contains
     !
     Nlanc = size(alanc)
     !
-    pesoF  = vnorm**2/zeta_function 
+    pesoF  = vnorm**2/zeta_function
     pesoBZ = 1d0
     if(finiteT)pesoBZ = exp(-beta*(Ei-Egs))
     !
@@ -236,7 +236,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              pairChi_iv(iorb,0)=pairChi_iv(iorb,0) + peso*beta
           else
-             pairChi_iv(iorb,0)=pairChi_iv(iorb,0) + peso*(1d0-exp(-beta*dE))/dE 
+             pairChi_iv(iorb,0)=pairChi_iv(iorb,0) + peso*(1d0-exp(-beta*dE))/dE
           endif
           do i=1,Lmats
              pairChi_iv(iorb,i)=pairChi_iv(iorb,i) + peso*(exp(-beta*dE)-1d0)/(dcmplx(0d0,vm(i)) - dE)
@@ -257,7 +257,7 @@ contains
           if(beta*dE < 1d-1)then     !abs(X - (1-exp(-X)) is about 5*10^-3 for X<10^-1 this is a satisfactory bound
              pairChi_iv(iorb,0)=pairChi_iv(iorb,0) + peso*beta
           else
-             pairChi_iv(iorb,0)=pairChi_iv(iorb,0) + peso*(1d0-exp(-beta*dE))/dE 
+             pairChi_iv(iorb,0)=pairChi_iv(iorb,0) + peso*(1d0-exp(-beta*dE))/dE
           endif
           do i=1,Lmats
              pairChi_iv(iorb,i)=pairChi_iv(iorb,i) + peso*(1d0-exp(-beta*dE))/(dcmplx(0d0,vm(i)) + dE)
