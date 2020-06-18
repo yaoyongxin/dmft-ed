@@ -947,8 +947,8 @@ contains
     integer                                      :: dim
     integer                                      :: ivec(Ns),jvec(Ns)
     !
-    integer(8),parameter                         :: zr=0
-    integer(8), allocatable                      :: Order(:)
+    integer(16),parameter                         :: zr=0
+    integer(16), allocatable                      :: Order(:)
     type(sector_map8),optional                   :: Hup8
     select case(ed_mode)
        !
@@ -1202,8 +1202,8 @@ contains
 
   subroutine c8(pos,in,out,fsgn)
     integer,intent(in)    :: pos
-    integer(8),intent(in)    :: in
-    integer(8),intent(inout) :: out
+    integer(16),intent(in)    :: in
+    integer(16),intent(inout) :: out
     real(8),intent(inout) :: fsgn
     integer               :: l
     if(.not.btest(in,pos-1))stop "C error: C_i|...0_i...>"
@@ -1216,8 +1216,8 @@ contains
 
   subroutine cdg8(pos,in,out,fsgn)
     integer,intent(in)    :: pos
-    integer(8),intent(in)    :: in
-    integer(8),intent(inout) :: out
+    integer(16),intent(in)    :: in
+    integer(16),intent(inout) :: out
     real(8),intent(inout) :: fsgn
     integer               :: l
     if(btest(in,pos-1))stop "C^+ error: C^+_i|...1_i...>"
@@ -1367,7 +1367,7 @@ contains
   end function bdecomp
 
   function bdecomp8(i,Ntot) result(ivec)
-    integer(8) :: i
+    integer(16) :: i
     integer :: Ntot,ivec(Ntot),l
     logical :: busy
     !this is the configuration vector |1,..,Ns,Ns+1,...,Ntot>
@@ -1460,8 +1460,8 @@ contains
   end function binary_search
 
   recursive function binary_search8(a,value) result(bsresult)
-    integer(8),intent(in) :: a(:), value
-    integer(8)            :: bsresult, mid
+    integer(16),intent(in) :: a(:), value
+    integer(16)            :: bsresult, mid
     mid = size(a)/2 + 1
     if (size(a) == 0) then
        bsresult = 0        ! not found
@@ -1539,11 +1539,11 @@ contains
 
   subroutine sort_array8(array,order)
     implicit none
-    integer(8),dimension(:)                    :: array
-    integer(8),dimension(size(array))          :: order
-    integer(8),dimension(size(array))          :: backup
-    integer(8)                                 :: i
-    integer(8)                                 :: lf,rg
+    integer(16),dimension(:)                    :: array
+    integer(16),dimension(size(array))          :: order
+    integer(16),dimension(size(array))          :: backup
+    integer(16)                                 :: i
+    integer(16)                                 :: lf,rg
     lf=1
     rg=size(array)
     forall(i=1:size(array))order(i)=i
@@ -1554,12 +1554,12 @@ contains
     array=backup
   contains
     recursive subroutine qsort_sort( array, order, left, right )
-      integer(8), dimension(:) :: array
-      integer(8), dimension(:) :: order
-      integer(8)               :: left
-      integer(8)               :: right
-      integer(8)               :: i
-      integer(8)               :: last
+      integer(16), dimension(:) :: array
+      integer(16), dimension(:) :: order
+      integer(16)               :: left
+      integer(16)               :: right
+      integer(16)               :: i
+      integer(16)               :: last
       if ( left .ge. right ) return
       call qsort_swap( order, left, qsort_rand(left,right) )
       last = left
@@ -1575,16 +1575,16 @@ contains
     end subroutine qsort_sort
     !---------------------------------------------!
     subroutine qsort_swap( order, first, second )
-      integer(8), dimension(:) :: order
-      integer(8)               :: first, second
-      integer(8)               :: tmp
+      integer(16), dimension(:) :: order
+      integer(16)               :: first, second
+      integer(16)               :: tmp
       tmp           = order(first)
       order(first)  = order(second)
       order(second) = tmp
     end subroutine qsort_swap
     !---------------------------------------------!
-    integer(8) function qsort_rand( lower, upper )
-      integer(8)            :: lower, upper
+    integer(16) function qsort_rand( lower, upper )
+      integer(16)            :: lower, upper
       real(8)               :: r
       call random_number(r)
       qsort_rand =  lower + nint(r * (upper-lower))
@@ -1592,8 +1592,8 @@ contains
     !---------------------------------------------!
     function compare(f,g)
       implicit none
-      integer(8)               :: f,g
-      integer(8)               :: compare
+      integer(16)               :: f,g
+      integer(16)               :: compare
       if(f<g) then
          compare=-1
       else

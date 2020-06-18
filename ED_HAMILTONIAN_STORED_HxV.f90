@@ -50,7 +50,7 @@ contains
     !
     integer                                :: isite,jsite,hopndx,distance
     real(8)                                :: n_i,n_j
-    integer(8)                             :: m_8,k1_8,k2_8
+    integer(16)                            :: m_8,k1_8,k2_8
     !
     if(.not.Hstatus)stop "ed_buildH_c ERROR: Hsector NOT set"
     isector=Hsector

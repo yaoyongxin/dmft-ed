@@ -47,8 +47,8 @@ MODULE ED_VARS_GLOBAL
 
 
   type sector_map8
-     integer(8),dimension(:),allocatable :: map
-     logical                             :: status=.false.
+     integer(16),dimension(:),allocatable :: map
+     logical                              :: status=.false.
   end type sector_map8
 
   interface map_allocate8
@@ -98,11 +98,13 @@ MODULE ED_VARS_GLOBAL
   !neighboring stride indexes for quartett calculations
   !INTERNAL USE (accessed thru functions)
   !=========================================================
+  integer(8),allocatable,dimension(:,:)              :: Xstride
   integer(8),allocatable,dimension(:,:,:)            :: Vstride
-  integer(8),allocatable,dimension(:)                :: Neigh
+  integer(8),allocatable,dimension(:)                :: Neigh,Neigh_int
   integer(8),allocatable,dimension(:,:)              :: vec2lat
   integer(8),allocatable,dimension(:,:)              :: lat2vec
   real(8),allocatable,dimension(:,:)                 :: Radius
+  real(8),allocatable,dimension(:)                   :: Vmat
 
 
   !local part of the Hamiltonian

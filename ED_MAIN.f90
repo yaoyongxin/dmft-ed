@@ -753,19 +753,34 @@ end subroutine ed_rotate_interaction_mpi
 #endif
 
 
-subroutine ed_set_Vstride(MpiComm,User_stride,User_neigh,User_lat2vec,User_vec2lat,User_Radius)
+subroutine ed_set_Vstride(MpiComm,User_Vnn,User_Xstride,User_stride,User_neigh,User_lat2vec,User_vec2lat,User_Radius)
+  real(8),dimension(:),intent(in)            :: User_Vnn
+  integer(8),dimension(:,:),intent(in)       :: User_Xstride
   integer(8),dimension(:,:,:),intent(in)     :: User_stride
   integer(8),dimension(:),intent(in)         :: User_neigh
   integer(8),dimension(:,:),intent(in)       :: User_lat2vec
   integer(8),dimension(:,:),intent(in)       :: User_vec2lat
   real(8),dimension(:,:),intent(in)          :: User_Radius
-  integer                                    :: distance
+  integer                                    :: i,distance,maxdist
   integer                                    :: MpiComm
   logical                                    :: MPI_MASTER=.true.
   integer                                    :: MPI_ERR
   !
   if(MPI_MASTER)write(LOGfile,*)"User_stride set."
   !
+  maxdist=0
+  do i=1,size(User_Vnn)
+     if(abs(User_Vnn(i)).gt.0)maxdist=maxdist+1
+  enddo
+  if(MPI_MASTER)write(LOGfile,"(A,I3)")"Number of interactions terms: ",maxdist
+  allocate(Neigh_int(maxdist))
+  Neigh_int=User_neigh(1:maxdist)
+  if(MPI_MASTER)write(LOGfile,"(A,100I5)")"Related Neighbors: ",(Neigh_int(i),i=1,maxdist)
+  !
+  allocate(Vmat(size(User_neigh)));Vmat=0d0
+  Vmat(1:maxdist)=User_Vnn(1:maxdist)
+  !
+  Xstride = User_Xstride
   Vstride = User_stride
   Neigh = User_neigh
   lat2vec = User_lat2vec

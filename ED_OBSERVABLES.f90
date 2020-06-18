@@ -846,7 +846,7 @@ contains
     integer                         :: isector,jsector
     integer                         :: idim,jdim
     integer                         :: numstates
-    integer(8)                      :: r,m,k
+    integer(16)                     :: r,m,k
     real(8)                         :: sgn,sgn1,sgn2
     real(8)                         :: gs_weight
     real(8)                         :: Ei
@@ -857,13 +857,13 @@ contains
     !
     real(8),allocatable             :: denslatt(:,:,:),denslatt_tot(:,:)
     real(8),allocatable             :: Eklatt(:,:,:),Epotlatt(:,:,:,:)
-    real(8),allocatable             :: corrfunc(:,:)
+    real(8),allocatable             :: corrfunc(:,:),XXop(:,:)
     integer                         :: distance
     integer                         :: isite,jsite
     integer                         :: row,col,hopndx
     integer                         :: unit_,ier
     real(8)                         :: n_i,n_j
-    real(8)                         :: ntot,ncorr,Ektot,Eptot
+    real(8)                         :: ntot,ncorr,Ektot,Eptot,Xop,Xcorr
     !
     Egs       = state_list%emin
     !
@@ -871,9 +871,11 @@ contains
     !
     allocate(denslatt(Nbath,Norb,numstates),denslatt_tot(Nbath,Norb))
     allocate(Eklatt(Nbath,Norb,numstates),Epotlatt(Nbath,Norb,0:size(Neigh),numstates))
-    allocate(corrfunc(size(Neigh),numstates))
+    allocate(corrfunc(size(Neigh),numstates),XXop(size(Neigh),numstates))
     denslatt  = 0.d0
     denslatt_tot = 0.d0
+    Xop = 0d0
+    XXop = 0d0
     corrfunc  = 0.d0
     Eklatt    = 0.d0
     Epotlatt  = 0.d0
@@ -917,23 +919,34 @@ contains
                 !
                 row = vec2lat(isite,1)
                 col = vec2lat(isite,2)
-                if(Norb.eq.1) then
-                   col=1
-                   row=row-1
-                endif
                 !
                 n_i = dble(ib(isite))
                 !
+                !local observables
                 denslatt(row,col,istate) = denslatt(row,col,istate) + n_i*gs_weight
                 denslatt_tot(row,col) = denslatt_tot(row,col) + n_i*n_i*gs_weight
+                if(isite.ne.Xstride(isite,1)) stop "something wrong"
+                Xop = Xop + dble(ib(isite))*dble(ib(Xstride(isite,2)))*dble(ib(Xstride(isite,3)))*dble(ib(Xstride(isite,4)))*gs_weight/(Nbath*Norb)
+                !
+                !Single particle and quartet correlation function
+                do distance=1,size(Neigh)
+                   do jsite=1,Neigh(distance)
+                      !
+                      n_j = dble(ib(Vstride(isite,distance,jsite)))
+                      corrfunc(distance,istate) = corrfunc(distance,istate) + n_i*n_j*gs_weight
+                      !
+                      XXop(distance,istate) = XXop(distance,istate) + dble(ib(isite))*dble(ib(Xstride(isite,2)))*dble(ib(Xstride(isite,3)))*dble(ib(Xstride(isite,4))) * &
+                                                                      dble(ib(jsite))*dble(ib(Xstride(jsite,2)))*dble(ib(Xstride(jsite,3)))*dble(ib(Xstride(jsite,4))) * gs_weight/(Nbath*Norb)
+                      !
+                   enddo
+                enddo
                 !
                 !Epot
                 Epotlatt(row,col,0,istate) = Epotlatt(row,col,0,istate) + Ust * Radius(row,col) * n_i*gs_weight
                 do distance=1,size(Neigh)
                    do jsite=1,Neigh(distance)
                       n_j = dble(ib(Vstride(isite,distance,jsite)))
-                      corrfunc(distance,istate) = corrfunc(distance,istate) + n_i*n_j*gs_weight
-                      Epotlatt(row,col,distance,istate) = Epotlatt(row,col,distance,istate) + n_i*n_j*gs_weight*Vnn(distance)
+                      Epotlatt(row,col,distance,istate) = Epotlatt(row,col,distance,istate) + n_i*n_j*gs_weight*Vmat(distance)
                    enddo
                 enddo
                 !
@@ -957,11 +970,20 @@ contains
           call delete_sector8(isector,H8)
           !
           !
+          !Single particle correlation function normalization
           ncorr=0d0
           do distance=1,size(Neigh)
              ncorr=ncorr+corrfunc(distance,istate)
           enddo
           corrfunc(:,istate) = corrfunc(:,istate)/ncorr
+          !
+          !
+          !Quartet correlation function normalization
+          ncorr=0d0
+          do distance=1,size(Neigh)
+             ncorr=ncorr+XXop(distance,istate)
+          enddo
+          XXop(:,istate) = XXop(:,istate)/ncorr
           !
           !
           unit_ = free_unit()
@@ -990,7 +1012,7 @@ contains
           unit_ = free_unit()
           open(unit=unit_,file="corr_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
           do distance=1,size(Neigh)
-             write(unit_,'(1I3,30(F20.12,1X))') distance,corrfunc(distance,istate)
+             write(unit_,'(1I3,30(F20.12,1X))') distance,corrfunc(distance,istate),XXop(distance,istate)
           enddo
           close(unit_)
           !
@@ -1014,9 +1036,11 @@ contains
       enddo
       !
       ncorr=0d0
+      Xcorr=0d0
       do istate=1,numstates
          do distance=1,size(Neigh)
             ncorr=ncorr+corrfunc(distance,istate)*distance/numstates
+            Xcorr=Xcorr+XXop(distance,istate)*distance/numstates
          enddo
       enddo
       !
@@ -1051,7 +1075,7 @@ contains
       !
       unit_ = free_unit()
       open(unit=unit_,file="observables_last.ed",status='unknown',position='rewind',action='write',form='formatted')
-      write(unit_,'(2I3,1F10.5,1I5,30(F20.12,1X))') Nbath,Norb,Thopping,numstates,ncorr,Ektot,Eptot,Egs/(Nbath*Norb),ust
+      write(unit_,'(2I3,1F10.5,1I5,30(F20.12,1X))') Nbath,Norb,Thopping,numstates,ncorr,Ektot,Eptot,Egs/(Nbath*Norb),Xop,Xcorr,ust
       close(unit_)
       unit_ = free_unit()
       open(unit_,file="parameters_last.ed")
