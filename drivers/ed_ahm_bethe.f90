@@ -89,11 +89,10 @@ program ed_ahm_bethe
      !Compute the local gfs:
      call dmft_gloc_matsubara(Ebethe,Dbethe,H0,Gmats,Smats)
 
-     if(cg_scheme=='weiss')then
-        call dmft_weiss(Gmats,Smats,Weiss,Hloc)
-     else
-        call dmft_delta(Gmats,Smats,Weiss,Hloc)
-     endif
+     call dmft_self_consistency(&
+          Gmats(1,:,:,:,:,:),Gmats(2,:,:,:,:,:),&
+          Smats(1,:,:,:,:,:),Smats(2,:,:,:,:,:),&
+          Weiss,Hloc,trim(cg_scheme))
 
      !Perform the self-consistency fitting the new bath
      call ed_chi2_fitgf(Weiss,bath,ispin=1)
