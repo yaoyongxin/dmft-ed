@@ -97,11 +97,11 @@ program ed_ahm_2bands_bethe
      call dmft_print_gf_matsubara(Gmats(2,:,:,:,:,:),"Floc",iprint=1)
 
 
-     if(cg_scheme=='weiss')then
-        call dmft_weiss(Gmats,Smats,Delta,Hloc)
-     else
-        call dmft_delta(Gmats,Smats,Delta,Hloc)
-     endif
+     call dmft_self_consistency(&
+          Gmats(1,:,:,:,:,:),Gmats(2,:,:,:,:,:),&
+          Smats(1,:,:,:,:,:),Smats(2,:,:,:,:,:),&
+          Delta,Hloc,trim(cg_scheme))
+
 
      !Perform the SELF-CONSISTENCY by fitting the new bath
      call ed_chi2_fitgf(delta,bath,ispin=1)
