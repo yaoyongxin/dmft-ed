@@ -13,6 +13,8 @@ program ed_quartett
   integer(8),dimension(:),allocatable            :: Neigh
   integer(8),dimension(:,:),allocatable          :: lat2vec,vec2lat
   real(8),dimension(:,:),allocatable             :: Radius
+  real(8),dimension(:),allocatable               :: distprint
+  real(8),dimension(:),allocatable               :: Vnn_used
   real(8)                                        :: bottom,Xc,Yc
   !Mpi:
   integer                                        :: comm,rank,ier
@@ -25,9 +27,11 @@ program ed_quartett
   integer,dimension(:,:),allocatable             :: lattice_irred
   integer,dimension(:,:),allocatable             :: lattice_tiled
   !
-  integer                                        :: tiling,Maxdist
-  integer                                        :: ilatt,jlatt,itiling,iNeig
+  integer                                        :: Maxdist,tiling
+  integer                                        :: tiling_x,tiling_y,itiling
+  integer                                        :: ilatt,jlatt,ineig,distance
   integer                                        :: row,col
+  logical                                        :: stripe
 
 
   !#########   MPI INITIALIZATION   #########
@@ -42,43 +46,81 @@ program ed_quartett
   call parse_cmd_variable(finput,"FINPUT",default='inputED_quartet.in')
   call ed_read_input(trim(finput),comm)
   call parse_input_variable(tiling,"TILING",finput,default=5)
+  call parse_input_variable(stripe,"STRIPE",finput,default=.false.)
   !Add DMFT CTRL Variables:
-  call add_ctrl_var(Norb,  "NORB")
-  call add_ctrl_var(Nbath, "NBATH")
-  call add_ctrl_var(Vnn,   "VNN")
+  call add_ctrl_var(Norb,"NORB")
+  call add_ctrl_var(Nbath,"NBATH")
+  call add_ctrl_var(Vnn,"VNN")
+  call add_ctrl_var(HardCoreBoson,"HARDCOREBOSON")
 
 
   !######### VECTOR-LATTICE WRAPPIN #########
-  Maxdist=12
-  call create_lattice_new(Maxdist)
-  !
-  !
-  if(master)then
-      !
-      do row=1,Nbath*tiling
-         write(*,"(1000I4)") (lattice_tiled(row,col),col=1,Norb*tiling)
-      enddo
-      write(*,*)
-      write(*,*)
-      do row=1,Nbath
-         write(*,"(1000F6.2)") (Radius(row,col),col=1,Norb)
-      enddo
-      write(*,*)
-      write(*,*)
-      do iNeig=1,7
-         write(LOGfile,'(1I5,1F6.2,A,100I3)')iNeig,Vnn(iNeig)," - ",(Vstride(Norb,iNeig,jlatt),jlatt=1,Neigh(iNeig))
-      enddo
-      do iNeig=8,Maxdist
-         write(LOGfile,'(1I5,1F6.2,A,100I3)')iNeig,0d0," - ",(Vstride(Norb,iNeig,jlatt),jlatt=1,Neigh(iNeig))
-      enddo
-      write(*,*)
-      write(*,*)
-      write(*,*)
+  tiling_x=tiling
+  tiling_y=tiling
+  Maxdist=tiling_x*Nbath-2
+  if(stripe)then
+     Maxdist=Norb*Nbath-2
+     tiling_y=1
+  endif
+  call create_lattice(Maxdist)
+
+
+  !######### INTERACION REMODULATON #########
+  if(HardCoreBoson)then
+     allocate(Vnn_used(8));Vnn_used=0d0
+     Vnn_used(1) = Nbath*Norb*1000d0
+     Vnn_used(2) = Nbath*Norb*1000d0
+     Vnn_used(3) = 2d0*(Vnn(1)+Vnn(2))+4d0*(Vnn(3)+Vnn(4))
+     Vnn_used(4) = Vnn(1)+2d0*Vnn(2)+2d0*Vnn(3)+4d0*Vnn(4)
+     Vnn_used(5) = Vnn(2)+4d0*Vnn(4)
+     Vnn_used(6) = 2d0*Vnn(3)
+     Vnn_used(7) = Vnn(3)+2d0*Vnn(4)
+     Vnn_used(8) = Vnn(4)
+  else
+     allocate(Vnn_used(size(Vnn)));Vnn_used=0d0
+     Vnn_used=Vnn
   endif
   !
-  !
-  call ed_set_Vstride(Comm,Vnn,Xstride,Vstride,Neigh,lat2vec,vec2lat,Radius)
+  call ed_set_Vstride(Comm,0.5d0*Vnn_used,Xstride,Vstride,Neigh,lat2vec,vec2lat,Radius,distprint)
   call MPI_Barrier(Comm,ier)
+
+
+  !############ PRINT SOME INFOs ############
+  if(master)then
+     !
+     write(LOGfile,*)
+     write(LOGfile,*)
+     !
+     do row=1,Nbath*3!tiling_y
+       write(LOGfile,"(1000I4)") (lattice_tiled(row,col),col=1,Norb*3)!tiling_x)
+     enddo
+     write(LOGfile,*)
+     write(LOGfile,*)
+     !
+     do row=1,Nbath
+       write(LOGfile,"(1000F6.2)") (Radius(row,col),col=1,Norb)
+     enddo
+     write(LOGfile,*)
+     write(LOGfile,*)
+     !
+     do ilatt=1,Norb*Nbath
+       write(LOGfile,'(1I5,2A,100I3)')ilatt," Xstr "," - ",(Xstride(ilatt,ineig),ineig=1,4)
+     enddo
+     write(LOGfile,*)
+     write(LOGfile,*)
+     !
+     write(LOGfile,'(A)')"Stride referred to the upper right corner:"
+     do distance=1,size(Vnn_used)
+       write(LOGfile,'(1I5,2F12.2,A,100I3)')distance,distprint(distance),Vnn_used(distance)," -",(Vstride(Norb,distance,ineig),ineig=1,Neigh(distance))
+     enddo
+     do distance=size(Vnn_used)+1,Maxdist
+       write(LOGfile,'(1I5,2F12.2,A,100I3)')distance,distprint(distance),0d0," -",(Vstride(Norb,distance,ineig),ineig=1,Neigh(distance))
+     enddo
+     write(LOGfile,*)
+     write(LOGfile,*)
+     write(LOGfile,*)
+     !
+  endif
 
 
   !######### SOLVER INITIALIZATION  #########
@@ -99,15 +141,11 @@ program ed_quartett
 
 
 
-
-
 contains
 
 
 
-
-
-   subroutine create_lattice_new(MaxNeig)
+   subroutine create_lattice(MaxNeig)
       implicit none
       integer,intent(in)          :: MaxNeig
       !
@@ -117,20 +155,25 @@ contains
       real(8)                     :: dist
       real(8),allocatable         :: distances(:),distances_tmp(:)
       integer,allocatable         :: order(:),doneNeigh(:)
+      real                        :: shift
       !
       !
       allocate(Neigh(MaxNeig));Neigh=0
       allocate(Xstride(Nbath*Norb,4)); Xstride=0
       allocate(Vstride(Nbath*Norb,MaxNeig,50)); Vstride=0
       allocate(lattice_irred(Nbath,Norb)); lattice_irred=0
-      allocate(lattice_tiled(tiling*Nbath,tiling*Norb)); lattice_tiled=0
+      allocate(lattice_tiled(tiling_y*Nbath,tiling_x*Norb)); lattice_tiled=0
       allocate(lat2vec(Nbath,Norb));lat2vec=0
       allocate(vec2lat(Nbath*Norb,2));vec2lat=0
       allocate(Radius(Nbath,Norb));Radius=0d0
       !
       !
-      Xc = dble(Norb)/2  + 0.5 ! 3.5 ! dble(Norb)/2  + 0.5
-      Yc = dble(Nbath)/2 + 0.5 ! 4.5 ! dble(Nbath)/2 + 0.5
+      shift=1d0
+      !if(HardCoreBoson)shift=0d0
+      !
+      !
+      Xc = dble(Norb)/2  + 0.5*shift
+      Yc = dble(Nbath)/2 + 0.5*shift
       ilatt=0
       do row=1,Nbath
         do col=1,Norb
@@ -144,8 +187,11 @@ contains
       enddo
       bottom=minval(Radius)
       Radius=Radius-bottom
-      do ilatt=1,tiling
-         do jlatt=1,tiling
+      !
+      if(HardCoreBoson)Radius(2:Nbath-1,2:Norb-1)=0d0
+      !
+      do ilatt=1,tiling_y
+         do jlatt=1,tiling_x
             lattice_tiled(1+(ilatt-1)*Nbath:Nbath+(ilatt-1)*Nbath,1+(jlatt-1)*Norb:Norb+(jlatt-1)*Norb) = lattice_irred
          enddo
       enddo
@@ -154,9 +200,10 @@ contains
       allocate(distances(MaxNeig**2),order(MaxNeig**2))
       distances=100000.d0
       idist=0
-      do Rx=0,MaxNeig
-         do Ry=Rx,MaxNeig
+      do Ry=0,MaxNeig
+         do Rx=Ry,MaxNeig
             if(Rx.eq.0 .and. Ry.eq.0)cycle
+            if(stripe  .and. Ry.gt.1)cycle
             dist = sqrt( dble(Rx)**2 + dble(Ry)**2 )
             !
             insert = .true.
@@ -173,15 +220,20 @@ contains
          enddo
       enddo
       call sort_quicksort(distances,order)
+      !
+      allocate(distprint(Maxdist))
+      distprint=distances(1:MaxNeig)
+      !write(*,*)
+      !write(*,*)
       !do idist=1,MaxNeig
       !   write(*,*)idist,distances(idist)
       !enddo
       !
       ! find the number of Neighbors
-      row_i = vec2lat(Norb,1) + floor(tiling/2.)*Nbath
-      col_i = vec2lat(Norb,2) + floor(tiling/2.)*Norb
-      do row_j=1,Nbath*tiling
-         do col_j=1,Norb*tiling
+      row_i = vec2lat(Norb,1) + floor(tiling_y/2.)*Nbath
+      col_i = vec2lat(Norb,2) + floor(tiling_x/2.)*Norb
+      do row_j=1,Nbath*tiling_y
+         do col_j=1,Norb*tiling_x
             !
             dist = sqrt( dble(col_i-col_j)**2 + dble(row_i-row_j)**2 )
             !
@@ -198,12 +250,12 @@ contains
       allocate(doneNeigh(MaxNeig))
       do ilatt=1,Nbath*Norb
          !
-         row_i = vec2lat(ilatt,1) + floor(tiling/2.)*Nbath
-         col_i = vec2lat(ilatt,2) + floor(tiling/2.)*Norb
+         row_i = vec2lat(ilatt,1) + floor(tiling_y/2.)*Nbath
+         col_i = vec2lat(ilatt,2) + floor(tiling_x/2.)*Norb
          !
          doneNeigh=0
-         do row_j=1,Nbath*tiling
-            do col_j=1,Norb*tiling
+         do row_j=1,Nbath*tiling_y
+            do col_j=1,Norb*tiling_x
                !
                dist = sqrt( dble(col_i-col_j)**2 + dble(row_i-row_j)**2 )
                !
@@ -220,112 +272,126 @@ contains
       deallocate(doneNeigh,order,distances)
       !
       !
-      do ilatt=1,Nbath*Norb
-         row_i = vec2lat(ilatt,1) + floor(tiling/2.)*Nbath
-         col_i = vec2lat(ilatt,2) + floor(tiling/2.)*Norb
-         Xstride(ilatt,1) = lattice_tiled(row_i,col_i)
-         Xstride(ilatt,2) = lattice_tiled(row_i,col_i+1)
-         Xstride(ilatt,3) = lattice_tiled(row_i+1,col_i+1)
-         Xstride(ilatt,4) = lattice_tiled(row_i+1,col_i)
-      enddo
-      !
-      !
-   end subroutine create_lattice_new
-
-
-
-
-   subroutine create_lattice_old(MaxNeig)
-      implicit none
-      integer,intent(in)          :: MaxNeig
-      !
-      allocate(Neigh(MaxNeig));Neigh=zero
-      Neigh(1:3)=4
-      Neigh(4)=8
-      Neigh(5:6)=4
-      !
-      !
-      allocate(Vstride(Nbath*Norb,MaxNeig,8)); Vstride=zero
-      allocate(lattice_irred(Nbath,Norb)); lattice_irred=zero
-      allocate(lattice_tiled(tiling*Nbath,tiling*Norb)); lattice_tiled=zero
-      allocate(lat2vec(Nbath,Norb));lat2vec=0
-      allocate(vec2lat(Nbath*Norb,2));vec2lat=0
-      allocate(Radius(Nbath,Norb));Radius=0d0
-      !
-      !
-      Xc = dble(Norb)/2  + 0.5 ! 3.5 ! dble(Norb)/2  + 0.5
-      Yc = dble(Nbath)/2 + 0.5 ! 4.5 ! dble(Nbath)/2 + 0.5
-      ilatt=0
-      do row=1,Nbath
-        do col=1,Norb
-            ilatt=ilatt+1
-            lattice_irred(row,col) = ilatt
-            lat2vec(row,col) = ilatt
-            vec2lat(ilatt,1) = row
-            vec2lat(ilatt,2) = col
-            Radius(row,col) = sqrt( (Yc - dble(row))**2 + (Xc - dble(col))**2 )
+      if(stripe)then
+         do ilatt=1,Nbath*Norb
+            row_i = vec2lat(ilatt,1) + floor(tiling_y/2.)*Nbath
+            col_i = vec2lat(ilatt,2) + floor(tiling_x/2.)*Norb
+            if(row_i.eq.1)then
+               Xstride(ilatt,1) = lattice_tiled(row_i,col_i)
+               Xstride(ilatt,2) = lattice_tiled(row_i,col_i+1)
+               Xstride(ilatt,3) = lattice_tiled(row_i+1,col_i+1)
+               Xstride(ilatt,4) = lattice_tiled(row_i+1,col_i)
+            elseif(row_i.eq.2)then
+               Xstride(ilatt,1) = lattice_tiled(row_i,col_i)
+               Xstride(ilatt,2) = lattice_tiled(row_i,col_i+1)
+               Xstride(ilatt,3) = lattice_tiled(row_i-1,col_i+1)
+               Xstride(ilatt,4) = lattice_tiled(row_i-1,col_i)
+            endif
          enddo
-      enddo
-      bottom=minval(Radius)
-      Radius=Radius-bottom
-      do ilatt=1,tiling
-         do jlatt=1,tiling
-            lattice_tiled(1+(ilatt-1)*Nbath:Nbath+(ilatt-1)*Nbath,1+(jlatt-1)*Norb:Norb+(jlatt-1)*Norb) = lattice_irred
+      else
+         do ilatt=1,Nbath*Norb
+            row_i = vec2lat(ilatt,1) + floor(tiling_y/2.)*Nbath
+            col_i = vec2lat(ilatt,2) + floor(tiling_x/2.)*Norb
+            Xstride(ilatt,1) = lattice_tiled(row_i,col_i)
+            Xstride(ilatt,2) = lattice_tiled(row_i,col_i+1)
+            Xstride(ilatt,3) = lattice_tiled(row_i+1,col_i+1)
+            Xstride(ilatt,4) = lattice_tiled(row_i+1,col_i)
          enddo
-      enddo
+      endif
       !
       !
-      do ilatt=1,Nbath*Norb
-         !
-         row = vec2lat(ilatt,1) + floor(tiling/2.)*Nbath
-         col = vec2lat(ilatt,2) + floor(tiling/2.)*Norb
-         !
-         !nn-1
-         Vstride(ilatt,1,1) = lattice_tiled(row-1,col)
-         Vstride(ilatt,1,2) = lattice_tiled(row,col+1)
-         Vstride(ilatt,1,3) = lattice_tiled(row+1,col)
-         Vstride(ilatt,1,4) = lattice_tiled(row,col-1)
-         !
-         !nn-2
-         Vstride(ilatt,2,1) = lattice_tiled(row-1,col+1)
-         Vstride(ilatt,2,2) = lattice_tiled(row+1,col+1)
-         Vstride(ilatt,2,3) = lattice_tiled(row+1,col-1)
-         Vstride(ilatt,2,4) = lattice_tiled(row-1,col-1)
-         !
-         !nn-3
-         Vstride(ilatt,3,1) = lattice_tiled(row-2,col)
-         Vstride(ilatt,3,2) = lattice_tiled(row,col+2)
-         Vstride(ilatt,3,3) = lattice_tiled(row+2,col)
-         Vstride(ilatt,3,4) = lattice_tiled(row,col-2)
-         !
-         !nn-4
-         Vstride(ilatt,4,1) = lattice_tiled(row-2,col+1)
-         Vstride(ilatt,4,2) = lattice_tiled(row-1,col+2)
-         Vstride(ilatt,4,3) = lattice_tiled(row+1,col+2)
-         Vstride(ilatt,4,4) = lattice_tiled(row+2,col+1)
-         Vstride(ilatt,4,5) = lattice_tiled(row+2,col-1)
-         Vstride(ilatt,4,6) = lattice_tiled(row+1,col-2)
-         Vstride(ilatt,4,7) = lattice_tiled(row-1,col-2)
-         Vstride(ilatt,4,8) = lattice_tiled(row-2,col-1)
-         !
-         !nn-5
-         Vstride(ilatt,5,1) = lattice_tiled(row-2,col+2)
-         Vstride(ilatt,5,2) = lattice_tiled(row+2,col+2)
-         Vstride(ilatt,5,3) = lattice_tiled(row+2,col-2)
-         Vstride(ilatt,5,4) = lattice_tiled(row-2,col-2)
-         !
-         !nn-6
-         Vstride(ilatt,6,1) = lattice_tiled(row-3,col)
-         Vstride(ilatt,6,2) = lattice_tiled(row,col+3)
-         Vstride(ilatt,6,3) = lattice_tiled(row+3,col)
-         Vstride(ilatt,6,4) = lattice_tiled(row,col-3)
-         !
-      enddo
-      !
-   end subroutine create_lattice_old
-
-
-
+   end subroutine create_lattice
 
 
 end program ed_quartett
+
+
+
+!subroutine create_lattice_old(MaxNeig)
+!   implicit none
+!   integer,intent(in) :: MaxNeig
+!   !
+!   allocate(Neigh(MaxNeig));Neigh=zero
+!   Neigh(1:3)=4
+!   Neigh(4)=8
+!   Neigh(5:6)=4
+!   !
+!   !
+!   allocate(Vstride(Nbath*Norb,MaxNeig,8)); Vstride=zero
+!   allocate(lattice_irred(Nbath,Norb)); lattice_irred=zero
+!   allocate(lattice_tiled(tiling*Nbath,tiling*Norb)); lattice_tiled=zero
+!   allocate(lat2vec(Nbath,Norb));lat2vec=0
+!   allocate(vec2lat(Nbath*Norb,2));vec2lat=0
+!   allocate(Radius(Nbath,Norb));Radius=0d0
+!   !
+!   !
+!   Xc = dble(Norb)/2  + 0.5 ! 3.5 ! dble(Norb)/2  + 0.5
+!   Yc = dble(Nbath)/2 + 0.5 ! 4.5 ! dble(Nbath)/2 + 0.5
+!   ilatt=0
+!   do row=1,Nbath
+!     do col=1,Norb
+!         ilatt=ilatt+1
+!         lattice_irred(row,col) = ilatt
+!         lat2vec(row,col) = ilatt
+!         vec2lat(ilatt,1) = row
+!         vec2lat(ilatt,2) = col
+!         Radius(row,col) = sqrt( (Yc - dble(row))**2 + (Xc - dble(col))**2 )
+!      enddo
+!   enddo
+!   bottom=minval(Radius)
+!   Radius=Radius-bottom
+!   do ilatt=1,tiling
+!      do jlatt=1,tiling
+!         lattice_tiled(1+(ilatt-1)*Nbath:Nbath+(ilatt-1)*Nbath,1+(jlatt-1)*Norb:Norb+(jlatt-1)*Norb) = lattice_irred
+!      enddo
+!   enddo
+!   !
+!   !
+!   do ilatt=1,Nbath*Norb
+!      !
+!      row = vec2lat(ilatt,1) + floor(tiling/2.)*Nbath
+!      col = vec2lat(ilatt,2) + floor(tiling/2.)*Norb
+!      !
+!      !nn-1
+!      Vstride(ilatt,1,1) = lattice_tiled(row-1,col)
+!      Vstride(ilatt,1,2) = lattice_tiled(row,col+1)
+!      Vstride(ilatt,1,3) = lattice_tiled(row+1,col)
+!      Vstride(ilatt,1,4) = lattice_tiled(row,col-1)
+!      !
+!      !nn-2
+!      Vstride(ilatt,2,1) = lattice_tiled(row-1,col+1)
+!      Vstride(ilatt,2,2) = lattice_tiled(row+1,col+1)
+!      Vstride(ilatt,2,3) = lattice_tiled(row+1,col-1)
+!      Vstride(ilatt,2,4) = lattice_tiled(row-1,col-1)
+!      !
+!      !nn-3
+!      Vstride(ilatt,3,1) = lattice_tiled(row-2,col)
+!      Vstride(ilatt,3,2) = lattice_tiled(row,col+2)
+!      Vstride(ilatt,3,3) = lattice_tiled(row+2,col)
+!      Vstride(ilatt,3,4) = lattice_tiled(row,col-2)
+!      !
+!      !nn-4
+!      Vstride(ilatt,4,1) = lattice_tiled(row-2,col+1)
+!      Vstride(ilatt,4,2) = lattice_tiled(row-1,col+2)
+!      Vstride(ilatt,4,3) = lattice_tiled(row+1,col+2)
+!      Vstride(ilatt,4,4) = lattice_tiled(row+2,col+1)
+!      Vstride(ilatt,4,5) = lattice_tiled(row+2,col-1)
+!      Vstride(ilatt,4,6) = lattice_tiled(row+1,col-2)
+!      Vstride(ilatt,4,7) = lattice_tiled(row-1,col-2)
+!      Vstride(ilatt,4,8) = lattice_tiled(row-2,col-1)
+!      !
+!      !nn-5
+!      Vstride(ilatt,5,1) = lattice_tiled(row-2,col+2)
+!      Vstride(ilatt,5,2) = lattice_tiled(row+2,col+2)
+!      Vstride(ilatt,5,3) = lattice_tiled(row+2,col-2)
+!      Vstride(ilatt,5,4) = lattice_tiled(row-2,col-2)
+!      !
+!      !nn-6
+!      Vstride(ilatt,6,1) = lattice_tiled(row-3,col)
+!      Vstride(ilatt,6,2) = lattice_tiled(row,col+3)
+!      Vstride(ilatt,6,3) = lattice_tiled(row+3,col)
+!      Vstride(ilatt,6,4) = lattice_tiled(row,col-3)
+!      !
+!   enddo
+!   !
+!end subroutine create_lattice_old

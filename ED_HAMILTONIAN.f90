@@ -48,7 +48,7 @@ contains
     Hsector=isector
     Hstatus=.true.
     !
-    if(quartett)then
+    if(plaquette)then
        call build_sector(isector,H,H8)
     else
        call build_sector(isector,H)
@@ -109,7 +109,7 @@ contains
 
   subroutine delete_Hv_sector()
     integer :: iud
-    if(quartett)then
+    if(plaquette)then
        call delete_sector8(Hsector,H8)
     else
        call delete_sector(Hsector,H)

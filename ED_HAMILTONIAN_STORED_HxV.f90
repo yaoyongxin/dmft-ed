@@ -48,7 +48,8 @@ contains
     integer                                :: first_state_up,last_state_up
     integer                                :: first_state_dw,last_state_dw
     !
-    integer                                :: isite,jsite,hopndx,distance
+    integer                                :: isite,jsite,hopndx,ineig
+    integer                                :: distance,firstNeig,BosonExp
     real(8)                                :: n_i,n_j
     integer(16)                            :: m_8,k1_8,k2_8
     !
@@ -88,8 +89,14 @@ contains
     !-----------------------------------------------!
     !
     !IMPURITY  HAMILTONIAN
-    if(quartett)then
-       include "ED_HAMILTONIAN/stored/Hquartett.f90"
+    if(plaquette)then
+       BosonExp=1
+       firstNeig=1
+       if(HardCoreBoson)then
+          BosonExp=0
+          firstNeig=3
+       endif
+       include "ED_HAMILTONIAN/stored/Hplaquette.f90"
     else
        include "ED_HAMILTONIAN/stored/Himp.f90"
        !

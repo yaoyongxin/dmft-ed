@@ -73,7 +73,7 @@ contains
        if(.not.twin_mask(isector))cycle sector !cycle loop if this sector should not be investigated
        if(Jz_basis.and.Jz_max.and.abs(gettwoJz(isector))>int(2*Jz_max_value))cycle
        if(Jz_basis.and.(.not.Jz_max).and.abs(getn(isector))<int(Jz_max_value))cycle
-       if(quartett.and.(getn(isector).ne.4))cycle
+       if(plaquette.and.(getn(isector).ne.filling))cycle
        iter=iter+1
        Tflag    = twin_mask(isector).AND.ed_twin
        select case(ed_mode)

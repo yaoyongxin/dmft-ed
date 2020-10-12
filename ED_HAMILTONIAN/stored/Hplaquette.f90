@@ -10,10 +10,13 @@
         n_i = dble(ib(isite))
         !
         do distance=1,size(Neigh_int)
-           !
-           do jsite=1,Neigh_int(distance)
-              n_j = dble(ib(Vstride(isite,distance,jsite)))
+           do ineig=firstNeig,Neigh_int(distance)
+              !
+              jsite = Vstride(isite,distance,ineig)
+              !
+              n_j = dble(ib(jsite))
               htmp = htmp + Vmat(distance) * n_i * n_j
+              !
            enddo
            !
         enddo
@@ -43,7 +46,7 @@
               call c8(isite,m_8,k1_8,sg1)
               call cdg8(hopndx,k1_8,k2_8,sg2)
               j = binary_search8(H8%map,k2_8)
-              htmp = Thopping * sg1 * sg2
+              htmp = Thopping * (sg1*sg2)**BosonExp
               !
               select case(MpiStatus)
               case (.true.)

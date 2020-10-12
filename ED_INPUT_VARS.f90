@@ -85,9 +85,12 @@ MODULE ED_INPUT_VARS
   !
   logical              :: Utensor             !flag to use tensorial representation of the interaction
   !
-  logical              :: quartett            !flag to perform quartett calculation on the square lattice
-  real(8),dimension(7) :: Vnn                 !non-local interactions
+  logical              :: plaquette           !flag to perform ED calculation on the lattice
+  logical              :: HardCoreBoson       !flag to switch to a bosonic model
+  integer              :: filling             !filling of the lattice
+  real(8),dimension(5) :: Vnn                 !non-local interactions
   real(8)              :: Thopping            !hopping integral
+  logical              :: ladder              !flag to remove PBC in the lattice y direction
 
 
   !Some parameters for function dimension:
@@ -212,7 +215,9 @@ contains
     call parse_input_variable(Utensor,"UTENSOR",INPUTunit,default=.false.,comment="Flag to use tensorial representation of the interaction")
     call parse_input_variable(UTENSfile,"UTENSfile",INPUTunit,default="Utensor.in",comment="File read the input tensorial representation of the interaction")
     !
-    call parse_input_variable(quartett,"QUARTETT",INPUTunit,default=.false.,comment="Flag to perform quartett calculation on the square lattice")
+    call parse_input_variable(plaquette,"PLAQUETTE",INPUTunit,default=.false.,comment="Flag to perform ED calculation on the lattice")
+    call parse_input_variable(HardCoreBoson,"HARDCOREBOSON",INPUTunit,default=.false.,comment="Flag to switch to a bosonic model")
+    call parse_input_variable(filling,"FILLING",INPUTunit,default=4,comment="Filling of the lattice")
     call parse_input_variable(Vnn,"VNN",INPUTunit,default=[0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0],comment="Values of the non-local interaction per site (max 7)")
     call parse_input_variable(Thopping,"THOPPING",INPUTunit,default=0.d0,comment="Hopping integral")
     !

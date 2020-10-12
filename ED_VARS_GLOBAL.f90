@@ -95,7 +95,7 @@ MODULE ED_VARS_GLOBAL
   !=========================================================
   real(8),allocatable,dimension(:,:,:,:,:)           :: Umat
 
-  !neighboring stride indexes for quartett calculations
+  !neighboring stride indexes for plaquette calculations
   !INTERNAL USE (accessed thru functions)
   !=========================================================
   integer(8),allocatable,dimension(:,:)              :: Xstride
@@ -105,6 +105,7 @@ MODULE ED_VARS_GLOBAL
   integer(8),allocatable,dimension(:,:)              :: lat2vec
   real(8),allocatable,dimension(:,:)                 :: Radius
   real(8),allocatable,dimension(:)                   :: Vmat
+  real(8),allocatable,dimension(:)                   :: distprint
 
 
   !local part of the Hamiltonian

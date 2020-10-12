@@ -20,7 +20,7 @@ MODULE ED_OBSERVABLES
   !
   public :: observables_impurity
   public :: local_energy_impurity
-  public :: observables_quartett
+  public :: observables_plaquette
 
 
   logical,save                       :: iolegend=.true.
@@ -839,46 +839,69 @@ contains
   !+-------------------------------------------------------------------+
   !PURPOSE  : Evaluate and print out many interesting physical qties
   !+-------------------------------------------------------------------+
-  subroutine observables_quartett()
+  subroutine observables_plaquette()
     integer,dimension(Nlevels)      :: ib
     integer                         :: i,j
     integer                         :: istate
     integer                         :: isector,jsector
     integer                         :: idim,jdim
     integer                         :: numstates
+    integer                         :: c1,c2,c3,c4
+    integer                         :: cd1,cd2,cd3,cd4
     integer(16)                     :: r,m,k
+    integer(16)                     :: k1,k2,k3
+    integer(16)                     :: r1,r2,r3
     real(8)                         :: sgn,sgn1,sgn2
+    real(8)                         :: sgn3,sgn4,sgn5
+    real(8)                         :: sgn6,sgn7,sgn8
     real(8)                         :: gs_weight
     real(8)                         :: Ei
     real(8)                         :: peso
     complex(8),dimension(:),pointer :: gscvec
     type(sector_map)                :: H
     type(sector_map8)               :: H8
+    logical                         :: Jcondition,Jleg
+    !
+    integer                         :: distance
+    integer                         :: isite,jsite,hopndx,ineig
+    integer                         :: row,col
+    integer                         :: unit_,ier
+    integer                         :: BosonExp
+    real(8)                         :: n1i,n2i,n3i,n4i
+    real(8)                         :: n1j,n2j,n3j,n4j
+    !
+    real(8)                         :: NormCorr
+    real(8)                         :: ntot,Ektot,Eptot,Xop
+    real(8)                         :: NNr,GGr,XXr,OOx,OOy,PPr,absOOx,absOOy
     !
     real(8),allocatable             :: denslatt(:,:,:),denslatt_tot(:,:)
-    real(8),allocatable             :: Eklatt(:,:,:),Epotlatt(:,:,:,:)
-    real(8),allocatable             :: corrfunc(:,:),XXop(:,:)
-    integer                         :: distance
-    integer                         :: isite,jsite
-    integer                         :: row,col,hopndx
-    integer                         :: unit_,ier
-    real(8)                         :: n_i,n_j
-    real(8)                         :: ntot,ncorr,Ektot,Eptot,Xop,Xcorr
+    real(8),allocatable             :: Eklatt(:,:,:)  ,Epotlatt(:,:,:,:)
+    real(8),allocatable             :: Ncorrfunc(:,:)   !single particle density-density
+    real(8),allocatable             :: Gcorrfunc(:,:)   !single particle propagator
+    real(8),allocatable             :: Ocorrfunc(:,:,:) !single particle ordpar
+    real(8),allocatable             :: Xcorrfunc(:,:)   !quartet density-density
+    real(8),allocatable             :: Pcorrfunc(:,:)   !quartet ordpar
+    !
     !
     Egs       = state_list%emin
     !
     numstates=state_list%size
     !
-    allocate(denslatt(Nbath,Norb,numstates),denslatt_tot(Nbath,Norb))
-    allocate(Eklatt(Nbath,Norb,numstates),Epotlatt(Nbath,Norb,0:size(Neigh),numstates))
-    allocate(corrfunc(size(Neigh),numstates),XXop(size(Neigh),numstates))
-    denslatt  = 0.d0
-    denslatt_tot = 0.d0
+    allocate(denslatt(Nbath,Norb,numstates))     ; denslatt  = 0.d0
+    allocate(denslatt_tot(Nbath,Norb))           ; denslatt_tot = 0.d0
+    allocate(Ncorrfunc(size(Neigh),numstates))   ; Ncorrfunc = 0d0 ; NNr = 0d0
+    allocate(Gcorrfunc(size(Neigh),numstates))   ; Gcorrfunc = 0d0 ; GGr = 0d0
+    allocate(Ocorrfunc(size(Neigh),numstates,2)) ; Ocorrfunc = 0d0 ; OOx = 0d0 ; OOy = 0d0
+    allocate(Xcorrfunc(size(Neigh),numstates))   ; Xcorrfunc = 0d0 ; XXr = 0d0
+    allocate(Pcorrfunc(size(Neigh),numstates))   ; Pcorrfunc = 0d0 ; PPr = 0d0
+    !
+    allocate(Eklatt(Nbath,Norb,numstates))       ; Eklatt    = 0.d0
+    allocate(Epotlatt(Nbath,Norb,0:size(Neigh),numstates)) ; Epotlatt = 0.d0
+    !
     Xop = 0d0
-    XXop = 0d0
-    corrfunc  = 0.d0
-    Eklatt    = 0.d0
-    Epotlatt  = 0.d0
+    !
+    BosonExp=1
+    if(HardCoreBoson)BosonExp=0
     !
     do istate=1,numstates
        isector = es_return_sector(state_list,istate)
@@ -901,7 +924,7 @@ contains
        !
        if(Mpimaster)then
           !
-          write(*,*)Ei,Egs,zeta_function
+          !write(*,*)Ei,Egs,zeta_function
           call build_sector(isector,H,H8)
           !do i=1,idim
           !   m=H8%map(i)
@@ -920,83 +943,173 @@ contains
                 row = vec2lat(isite,1)
                 col = vec2lat(isite,2)
                 !
-                n_i = dble(ib(isite))
-                !
-                !local observables
-                denslatt(row,col,istate) = denslatt(row,col,istate) + n_i*gs_weight
-                denslatt_tot(row,col) = denslatt_tot(row,col) + n_i*n_i*gs_weight
                 if(isite.ne.Xstride(isite,1)) stop "something wrong"
-                Xop = Xop + dble(ib(isite))*dble(ib(Xstride(isite,2)))*dble(ib(Xstride(isite,3)))*dble(ib(Xstride(isite,4)))*gs_weight/(Nbath*Norb)
+                n1i = dble(ib(Xstride(isite,1)))
+                n2i = dble(ib(Xstride(isite,2)))
+                n3i = dble(ib(Xstride(isite,3)))
+                n4i = dble(ib(Xstride(isite,4)))
                 !
-                !Single particle and quartet correlation function
+                if(isnan(n1i).or.isnan(n2i).or.isnan(n3i).or.isnan(n4i))then
+                   write(*,"(4F6.2)") n1i,n2i,n3i,n4i
+                   write(*,"(4I6)") distance,ineig,jsite,isite
+                   stop "ni"
+                endif
+                !
+                !
+                !Local observables on isite
+                denslatt(row,col,istate) = denslatt(row,col,istate) + n1i*gs_weight
+                denslatt_tot(row,col) = denslatt_tot(row,col) + n1i*gs_weight
+                Xop = Xop + (n1i*n2i*n3i*n4i) * gs_weight/(Nbath*Norb)
+                Epotlatt(row,col,0,istate) = Epotlatt(row,col,0,istate) + Ust * Radius(row,col) * n1i*gs_weight
+                !
+                !
+                !Non-local observables. Loop over the sites located on the different radius
                 do distance=1,size(Neigh)
-                   do jsite=1,Neigh(distance)
+                   do ineig=1,Neigh(distance)
                       !
-                      n_j = dble(ib(Vstride(isite,distance,jsite)))
-                      corrfunc(distance,istate) = corrfunc(distance,istate) + n_i*n_j*gs_weight
+                      jsite = Vstride(isite,distance,ineig)
                       !
-                      XXop(distance,istate) = XXop(distance,istate) + dble(ib(isite))*dble(ib(Xstride(isite,2)))*dble(ib(Xstride(isite,3)))*dble(ib(Xstride(isite,4))) * &
-                                                                      dble(ib(jsite))*dble(ib(Xstride(jsite,2)))*dble(ib(Xstride(jsite,3)))*dble(ib(Xstride(jsite,4))) * gs_weight/(Nbath*Norb)
+                      n1j = dble(ib(Xstride(jsite,1)))
+                      n2j = dble(ib(Xstride(jsite,2)))
+                      n3j = dble(ib(Xstride(jsite,3)))
+                      n4j = dble(ib(Xstride(jsite,4)))
                       !
-                   enddo
-                enddo
-                !
-                !Epot
-                Epotlatt(row,col,0,istate) = Epotlatt(row,col,0,istate) + Ust * Radius(row,col) * n_i*gs_weight
-                do distance=1,size(Neigh)
-                   do jsite=1,Neigh(distance)
-                      n_j = dble(ib(Vstride(isite,distance,jsite)))
-                      Epotlatt(row,col,distance,istate) = Epotlatt(row,col,distance,istate) + n_i*n_j*gs_weight*Vmat(distance)
-                   enddo
-                enddo
-                !
-                !Ekin
-                do jsite=1,4
-                   hopndx = Vstride(isite,1,jsite)
-                   if((ib(isite)==1).and.(ib(hopndx)==0))then
-                      call c8(isite,m,r,sgn1)
-                      call cdg8(hopndx,r,k,sgn2)
-                      j=binary_search8(H8%map,k)
-                      if(j.eq.0)write(*,'(A,14I6)')" a ",i,j,m,r,k,isite,hopndx
-                      Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*sgn1*gscvec(i)*sgn2*conjg(gscvec(j))*Thopping
-                   endif
-                enddo
-                !
-             enddo ! end loop on lattice sites
+                      if(isnan(n1j).or.isnan(n2j).or.isnan(n3j).or.isnan(n4j))then
+                         write(*,"(4F6.2)") n1j,n2j,n3j,n4j
+                         write(*,"(4I6)") distance,ineig,jsite,isite
+                         stop "nj"
+                      endif
+                      !
+                      !
+                      !Single particle correlation function: <N(R)N(0)>
+                      Ncorrfunc(distance,istate) = Ncorrfunc(distance,istate) + (n1i*n1j)*gs_weight / Neigh(distance)
+                      !
+                      !
+                      !Quartet correlation function: <X(R)X(0)> - REDO_LADDER
+                      !if(.not.((Nbath.eq.2).and.(mod(distance,2).eq.0)))then
+                      Xcorrfunc(distance,istate) = Xcorrfunc(distance,istate) &
+                                                 + (n1i*n2i*n3i*n4i) * (n1j*n2j*n3j*n4j) * gs_weight / (Nbath*Norb)
+                      !
+                      !
+                      !Potential energy: same as <N(R)N(0)> but with the energy at a given R
+                      Epotlatt(row,col,distance,istate) = Epotlatt(row,col,distance,istate) + (n1i*n1j)*gs_weight*Vmat(distance)
+                      !
+                      !
+                      !Kinetic energy: hopping considered only for first neighbors
+                      if(distance.eq.1)then
+                         hopndx = Vstride(isite,distance,ineig)
+                         if((ib(isite)==1).and.(ib(hopndx)==0))then
+                            call c8(isite,m,r,sgn1)
+                            call cdg8(hopndx,r,k,sgn2)
+                            j=binary_search8(H8%map,k)
+                            if(j.eq.0)write(*,'(A,14I06)')" Ekin ",i,j,m,r,k,isite,jsite,hopndx
+                            Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*(sgn1**BosonExp)*gscvec(i)*(sgn2**BosonExp)*conjg(gscvec(j))*Thopping
+                         endif
+                      endif
+                      !
+                      !
+                      !Single particle static propagator
+                      hopndx = Vstride(isite,distance,ineig)
+                      if((ib(isite)==1).and.(ib(hopndx)==0))then
+                         call c8(isite,m,r,sgn1)
+                         call cdg8(hopndx,r,k,sgn2)
+                         j=binary_search8(H8%map,k)
+                         if(j.eq.0)write(*,'(A,14I06)')" Gprop ",i,j,m,r,k,isite,jsite,hopndx
+                         Gcorrfunc(distance,istate) = Gcorrfunc(distance,istate) + peso*(sgn1**BosonExp)*gscvec(i)*(sgn2**BosonExp)*conjg(gscvec(j))/Neigh(distance)
+                      endif
+                      !
+                      !
+                      !Pair correlations
+                      c1 = Xstride(isite,1)
+                      c2 = Xstride(isite,2)
+                      c3 = Xstride(isite,3)
+                      c4 = Xstride(isite,4)
+                      !
+                      cd1 = Xstride(jsite,1)
+                      cd2 = Xstride(jsite,2)
+                      cd3 = Xstride(jsite,3)
+                      cd4 = Xstride(jsite,4)
+                      !
+                      !for the full quartet - REDO_LADDER
+                      Jleg=.true.
+                      !if((Nbath.eq.2).and.(mod(distance,2).eq.0))Jleg=.false.
+                      Jcondition = (ib(c1) ==1).and.(ib(c2) ==1).and.(ib(c3) ==1).and.(ib(c4) ==1).and. &
+                                   (ib(cd1)==0).and.(ib(cd2)==0).and.(ib(cd3)==0).and.(ib(cd4)==0).and.(filling.gt.4).and.Jleg
+                      if(Jcondition)then
+                         call   c8(c1 ,m ,r1,sgn1)
+                         call   c8(c2 ,r1,r2,sgn2)
+                         call   c8(c3 ,r2,r3,sgn3)
+                         call   c8(c4 ,r3,r ,sgn4)
+                         call cdg8(cd1,r ,k1,sgn5)
+                         call cdg8(cd2,k1,k2,sgn6)
+                         call cdg8(cd3,k2,k3,sgn7)
+                         call cdg8(cd4,k3,k ,sgn8)
+                         j=binary_search8(H8%map,k)
+                         if(j.eq.0)write(*,'(A,140I6)')" PairX ",distance,c1,c2,c3,c4,cd1,cd2,cd3,cd4,isite,jsite
+                         Pcorrfunc(distance,istate) = Pcorrfunc(distance,istate) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4*sgn5*sgn6*sgn7*sgn8)**BosonExp
+                      endif
+                      !
+                      !pair on the x
+                      Jcondition = (ib(c1)==1).and.(ib(c2)==1).and.(ib(cd1)==0).and.(ib(cd2)==0)
+                      if(Jcondition)then
+                         call   c8(c1 ,m ,r1,sgn1)
+                         call   c8(c2 ,r1,r ,sgn2)
+                         call cdg8(cd1,r ,k1,sgn3)
+                         call cdg8(cd2,k1,k ,sgn4)
+                         j=binary_search8(H8%map,k)
+                         if(j.eq.0)write(*,'(A,140I6)')" PairO ",distance,c1,cd1,isite,jsite
+                         Ocorrfunc(distance,istate,1) = Ocorrfunc(distance,istate,1) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4)**BosonExp
+                      endif
+                      !
+                      !pair on the y
+                      Jcondition = (ib(c1)==1).and.(ib(c4)==1).and.(ib(cd1)==0).and.(ib(cd4)==0).and.Jleg
+                      if(Jcondition)then
+                         call   c8(c1 ,m ,r1,sgn1)
+                         call   c8(c4 ,r1,r ,sgn2)
+                         call cdg8(cd1,r ,k1,sgn3)
+                         call cdg8(cd4,k1,k ,sgn4)
+                         j=binary_search8(H8%map,k)
+                         if(j.eq.0)write(*,'(A,140I6)')" PairO ",distance,c1,cd1,isite,jsite
+                         Ocorrfunc(distance,istate,2) = Ocorrfunc(distance,istate,2) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4)**BosonExp
+                      endif
+                      !
+                   enddo !ineig
+                enddo !distance
+             enddo !isite
              !
-          enddo ! end loop on states in the block
+          enddo !states in the block
           !
           if(associated(gscvec))nullify(gscvec)
           call delete_sector8(isector,H8)
           !
           !
           !Single particle correlation function normalization
-          ncorr=0d0
+          NormCorr=0d0
           do distance=1,size(Neigh)
-             ncorr=ncorr+corrfunc(distance,istate)
+             NormCorr=NormCorr+Ncorrfunc(distance,istate)
           enddo
-          corrfunc(:,istate) = corrfunc(:,istate)/ncorr
+          if(NormCorr.gt.0d0)Ncorrfunc(:,istate) = Ncorrfunc(:,istate)/NormCorr
           !
           !
           !Quartet correlation function normalization
-          ncorr=0d0
-          do distance=1,size(Neigh)
-             ncorr=ncorr+XXop(distance,istate)
+          NormCorr=0d0
+          do distance=1,size(Neigh) !if((Nbath.eq.2).and.(mod(distance,2).eq.0))cycle
+             NormCorr=NormCorr+Xcorrfunc(distance,istate)
           enddo
-          XXop(:,istate) = XXop(:,istate)/ncorr
+          if(NormCorr.gt.0d0)Xcorrfunc(:,istate) = Xcorrfunc(:,istate)/NormCorr
           !
           !
           unit_ = free_unit()
           open(unit=unit_,file="n_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
           do row=1,Nbath
-             write(unit_,'(30(F20.12,1X))') (denslatt(row,col,istate),col=1,Norb)
+             write(unit_,'(30(E22.10,1X))') (denslatt(row,col,istate),col=1,Norb)
           enddo
           close(unit_)
           !
           unit_ = free_unit()
           open(unit=unit_,file="Ek_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
           do row=1,Nbath
-             write(unit_,'(30(F20.12,1X))') (Eklatt(row,col,istate),col=1,Norb)
+             write(unit_,'(30(E22.10,1X))') (Eklatt(row,col,istate),col=1,Norb)
           enddo
           close(unit_)
           !
@@ -1004,15 +1117,23 @@ contains
              unit_ = free_unit()
              open(unit=unit_,file="Epot_r"//reg(str(distance))//"_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
              do row=1,Nbath
-                 write(unit_,'(30(F20.12,1X))') (Epotlatt(row,col,distance,istate),col=1,Norb)
+                 write(unit_,'(30(E22.10,1X))') (Epotlatt(row,col,distance,istate),col=1,Norb)
              enddo
              close(unit_)
           enddo
           !
           unit_ = free_unit()
-          open(unit=unit_,file="corr_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+          open(unit=unit_,file="DensityCorrelators_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
           do distance=1,size(Neigh)
-             write(unit_,'(1I3,30(F20.12,1X))') distance,corrfunc(distance,istate),XXop(distance,istate)
+             write(unit_,'(1I3,30(E22.10,1X))') distance,distprint(distance),Ncorrfunc(distance,istate),Xcorrfunc(distance,istate),Gcorrfunc(distance,istate)
+          enddo
+          close(unit_)
+          !
+          unit_ = free_unit()
+          open(unit=unit_,file="PairCorrelators_gs"//reg(str(istate))//".DAT",status='unknown',position='rewind',action='write',form='formatted')
+          do distance=1,size(Neigh)
+             !if((Nbath.eq.2).and.(mod(distance,2).eq.0))cycle
+             write(unit_,'(1I3,30(E22.10,1X))') distance,distprint(distance),Pcorrfunc(distance,istate),Ocorrfunc(distance,istate,1),Ocorrfunc(distance,istate,2)
           enddo
           close(unit_)
           !
@@ -1026,21 +1147,49 @@ contains
       do istate=1,numstates
          ntot=0d0
          do isite=1,Norb*Nbath
-            !
             row = vec2lat(isite,1)
             col = vec2lat(isite,2)
-            !
             ntot = ntot + denslatt(row,col,istate)
          enddo
          write(*,"(A,I4,A,1F10.5)")"#GS= ",istate, " NTOT= ",ntot
       enddo
       !
-      ncorr=0d0
-      Xcorr=0d0
+      NNr=0d0
       do istate=1,numstates
          do distance=1,size(Neigh)
-            ncorr=ncorr+corrfunc(distance,istate)*distance/numstates
-            Xcorr=Xcorr+XXop(distance,istate)*distance/numstates
+            NNr = NNr + Ncorrfunc(distance,istate)*distprint(distance)/numstates
+         enddo
+      enddo
+      !
+      GGr=0d0
+      do istate=1,numstates
+         do distance=1,size(Neigh)
+            GGr = GGr + Gcorrfunc(distance,istate)*distprint(distance)/numstates
+         enddo
+      enddo
+      !
+      XXr=0d0
+      do istate=1,numstates
+         do distance=1,size(Neigh) !-2;if((Nbath.eq.2).and.(mod(distance,2).eq.0))cycle
+            XXr = XXr + Xcorrfunc(distance,istate)*distprint(distance)/numstates
+         enddo
+      enddo
+      !
+      PPr=0d0
+      do istate=1,numstates
+         do distance=1,size(Neigh) !-2;if((Nbath.eq.2).and.(mod(distance,2).eq.0))cycle
+            PPr = PPr + Pcorrfunc(distance,istate)/numstates
+         enddo
+      enddo
+      !
+      OOx=0d0;absOOx=0d0
+      OOy=0d0;absOOy=0d0
+      do istate=1,numstates
+         do distance=1,size(Neigh)
+            OOx = OOx + Ocorrfunc(distance,istate,1)/numstates
+            absOOx = absOOx + abs(Ocorrfunc(distance,istate,1))/numstates
+            OOy = OOy + Ocorrfunc(distance,istate,2)/numstates
+            absOOy = absOOy + abs(Ocorrfunc(distance,istate,2))/numstates
          enddo
       enddo
       !
@@ -1068,14 +1217,14 @@ contains
       unit_ = free_unit()
       open(unit=unit_,file="nlatt.DAT",status='unknown',position='rewind',action='write',form='formatted')
       do row=1,Nbath
-        write(unit_,'(30(F20.12,1X))') (denslatt_tot(row,col),col=1,Norb)
+        write(unit_,'(30(E22.10,1X))') (denslatt_tot(row,col),col=1,Norb)
       enddo
       close(unit_)
       !
       !
       unit_ = free_unit()
       open(unit=unit_,file="observables_last.ed",status='unknown',position='rewind',action='write',form='formatted')
-      write(unit_,'(2I3,1F10.5,1I5,30(F20.12,1X))') Nbath,Norb,Thopping,numstates,ncorr,Ektot,Eptot,Egs/(Nbath*Norb),Xop,Xcorr,ust
+      write(unit_,'(2I3,1F10.5,1I5,30(E22.10,1X))') Nbath,Norb,Thopping,numstates,Ektot,Eptot,Egs/(Nbath*Norb),Xop,NNr,XXr,GGr,PPr,OOx,OOy!,absOOx,absOOy
       close(unit_)
       unit_ = free_unit()
       open(unit_,file="parameters_last.ed")
@@ -1089,9 +1238,9 @@ contains
     !
     deallocate(denslatt,denslatt_tot)
     deallocate(Eklatt,Epotlatt)
-    deallocate(corrfunc)
+    deallocate(Ncorrfunc)
     !
-  end subroutine observables_quartett
+  end subroutine observables_plaquette
 
 
 

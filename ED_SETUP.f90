@@ -57,7 +57,7 @@ contains
     !CHECKS:
     if(Lfit>Lmats)Lfit=Lmats
     if(Nspin>2)stop "ED ERROR: Nspin > 2 is currently not supported"
-    if(Norb>3.and.(.not.quartett))stop "ED ERROR: Norb > 3 is currently not supported"
+    if((.not.plaquette) .and. Norb>3)stop "ED ERROR: Norb > 3 is currently not supported"
     !
     if(ed_mode=="superc")then
        if(Nspin>1)stop "ED ERROR: SC + AFM is currently not supported ."
@@ -110,7 +110,7 @@ contains
     end select
     Nlevels  = 2*Ns
     !
-    if(quartett)then
+    if(plaquette)then
        Ns=Norb*Nbath
        Nlevels=Ns
     endif
@@ -119,7 +119,7 @@ contains
     case default
        Nsectors = (Ns+1)*(Ns+1) !nup=0:Ns;ndw=0:Ns
        Nhel     = 1
-       if(quartett)Nsectors=Ns+1
+       if(plaquette)Nsectors=Ns+1
     case ("superc")
        Nsectors = Nlevels+1     !sz=-Ns:Ns=2*Ns+1=Nlevels+1
        Nhel     = 1
@@ -182,7 +182,7 @@ contains
        dim_sector_max(1)=get_superc_sector_dimension(0)
     case("nonsu2")
        dim_sector_max(1)=get_nonsu2_sector_dimension(Ns)
-       if(quartett)dim_sector_max(1)=get_normal_sector_dimension(Ns/2)
+       if(plaquette)dim_sector_max(1)=get_normal_sector_dimension(Ns/2)
     end select
     !
     write(LOGfile,"(A)")"Summary:"
@@ -257,8 +257,8 @@ contains
     endif
     !
     !
-    !Setup the stride for quartett calculations
-    if(quartett)then
+    !Setup the stride for plaquette calculations
+    if(plaquette)then
        if(.not.allocated(Vstride))stop "Vstride not allocated."
     endif
     !
@@ -709,7 +709,7 @@ contains
              neigen_sector(isector) = min(dim,lanc_nstates_sector)
           enddo
        enddo
-    elseif(quartett)then
+    elseif(plaquette)then
        do in=0,Nlevels
           isector=isector+1
           getSector(in,1)=isector
@@ -944,11 +944,13 @@ contains
     integer                                      :: i,ibath,iorb
     integer                                      :: iup,idw
     integer                                      :: p1,p2,p3,p4
+    integer                                      :: p5,p6,p7,p8
+    integer                                      :: p9,p10,p11,p12
     integer                                      :: dim
     integer                                      :: ivec(Ns),jvec(Ns)
     !
-    integer(16),parameter                         :: zr=0
-    integer(16), allocatable                      :: Order(:)
+    integer(16),parameter                        :: zr=0
+    integer(16),allocatable                      :: Order(:)
     type(sector_map8),optional                   :: Hup8
     select case(ed_mode)
        !
@@ -1020,31 +1022,253 @@ contains
                 endif
              enddo
           enddo
-       elseif(quartett)then
+       elseif(plaquette)then
+          !
           nt  = getN(isector)
-          if(nt.ne.4)stop "not implemented for more than 4 part"
+          if((nt.gt.Ns).or.(nt.gt.12))stop "filling too big"
           dim = get_normal_sector_dimension(nt,0)
           call map_allocate8(Hup8,dim)
           allocate(Order(dim))
-          dim=0
-          do p1=0,Ns-2
-             do p2=p1+1,Ns-1
-                do p3=p2+1,Ns-1
-                   do p4=p3+1,Ns-1
+          !
+          if(filling.eq.2)then
+             write(LOGfile,'(A)')"Building N=2 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   dim=dim+1
+                   Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 )
+                   if(Hup8%map(dim).lt.0) stop
+                enddo
+             enddo
+          elseif(filling.eq.3)then
+             write(LOGfile,'(A)')"Building N=3 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
                       dim=dim+1
-                      Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 )
-                      !write(LOGfile,'(30I20)')dim,Hup8%map(dim),ibset( zr, p1 ),ibset( zr, p2 ),ibset( zr, p3 ),ibset( zr, p4 ),p1,p2,p3,p4
+                      Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 )
                       if(Hup8%map(dim).lt.0) stop
                    enddo
                 enddo
              enddo
-          enddo
+          elseif(filling.eq.4)then
+             write(LOGfile,'(A)')"Building N=4 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         dim=dim+1
+                         Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 )
+                         if(Hup8%map(dim).lt.0) stop
+                      enddo
+                   enddo
+                enddo
+             enddo
+          elseif(filling.eq.5)then
+             write(LOGfile,'(A)')"Building N=5 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            dim=dim+1
+                            Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                          + ibset( zr, p5 )
+                            if(Hup8%map(dim).lt.0) stop
+                         enddo
+                      enddo
+                   enddo
+                enddo
+             enddo
+          elseif(filling.eq.6)then
+             write(LOGfile,'(A)')"Building N=6 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            do p6=p5+1,Ns-1
+                               dim=dim+1
+                               Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                             + ibset( zr, p5 ) + ibset( zr, p6 )
+                               if(Hup8%map(dim).lt.0) stop
+                            enddo
+                         enddo
+                     enddo
+                  enddo
+               enddo
+            enddo
+         elseif(filling.eq.7)then
+             write(LOGfile,'(A)')"Building N=7 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            do p6=p5+1,Ns-1
+                               do p7=p6+1,Ns-1
+                                  dim=dim+1
+                                  Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 )
+                                  if(Hup8%map(dim).lt.0) stop
+                               enddo
+                            enddo
+                         enddo
+                      enddo
+                   enddo
+                enddo
+             enddo
+          elseif(filling.eq.8)then
+             write(LOGfile,'(A)')"Building N=8 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            do p6=p5+1,Ns-1
+                               do p7=p6+1,Ns-1
+                                  do p8=p7+1,Ns-1
+                                     dim=dim+1
+                                     Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                   + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 )
+                                     if(Hup8%map(dim).lt.0) stop
+                                  enddo
+                               enddo
+                            enddo
+                         enddo
+                      enddo
+                   enddo
+                enddo
+             enddo
+          elseif(filling.eq.9)then
+             write(LOGfile,'(A)')"Building N=9 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            do p6=p5+1,Ns-1
+                               do p7=p6+1,Ns-1
+                                  do p8=p7+1,Ns-1
+                                     do p9=p8+1,Ns-1
+                                        dim=dim+1
+                                        Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                      + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                      + ibset( zr, p9 )
+                                        if(Hup8%map(dim).lt.0) stop
+                                     enddo
+                                  enddo
+                               enddo
+                            enddo
+                         enddo
+                      enddo
+                   enddo
+                enddo
+             enddo
+          elseif(filling.eq.10)then
+             write(LOGfile,'(A)')"Building N=10 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            do p6=p5+1,Ns-1
+                               do p7=p6+1,Ns-1
+                                  do p8=p7+1,Ns-1
+                                     do p9=p8+1,Ns-1
+                                        do p10=p9+1,Ns-1
+                                           dim=dim+1
+                                           Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                         + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                         + ibset( zr, p9 ) + ibset( zr, p10)
+                                           if(Hup8%map(dim).lt.0) stop
+                                        enddo
+                                     enddo
+                                  enddo
+                               enddo
+                            enddo
+                         enddo
+                      enddo
+                   enddo
+                enddo
+             enddo
+          elseif(filling.eq.11)then
+             write(LOGfile,'(A)')"Building N=11 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            do p6=p5+1,Ns-1
+                               do p7=p6+1,Ns-1
+                                  do p8=p7+1,Ns-1
+                                     do p9=p8+1,Ns-1
+                                        do p10=p9+1,Ns-1
+                                           do p11=p10+1,Ns-1
+                                              dim=dim+1
+                                              Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                            + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                            + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11)
+                                              if(Hup8%map(dim).lt.0) stop
+                                           enddo
+                                        enddo
+                                     enddo
+                                  enddo
+                               enddo
+                            enddo
+                         enddo
+                      enddo
+                   enddo
+                enddo
+             enddo
+          elseif(filling.eq.12)then
+             write(LOGfile,'(A)')"Building N=12 sector"
+             dim=0
+             do p1=0,Ns-2
+                do p2=p1+1,Ns-1
+                   do p3=p2+1,Ns-1
+                      do p4=p3+1,Ns-1
+                         do p5=p4+1,Ns-1
+                            do p6=p5+1,Ns-1
+                               do p7=p6+1,Ns-1
+                                  do p8=p7+1,Ns-1
+                                     do p9=p8+1,Ns-1
+                                        do p10=p9+1,Ns-1
+                                           do p11=p10+1,Ns-1
+                                              do p12=p11+1,Ns-1
+                                                 dim=dim+1
+                                                Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                              + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                              + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11) + ibset( zr, p12)
+                                                if(Hup8%map(dim).lt.0) stop
+                                              enddo
+                                           enddo
+                                        enddo
+                                     enddo
+                                  enddo
+                               enddo
+                            enddo
+                         enddo
+                      enddo
+                   enddo
+                enddo
+             enddo
+          endif
           !
           call sort_array8(Hup8%map,Order)
           dim = get_normal_sector_dimension(nt,0)
           do iup=1,dim
              jvec = bdecomp8(Hup8%map(iup),Ns)
-             if (sum(jvec).ne.4) then
+             if (sum(jvec).ne.filling) then
                 write(*,'(3I15,1000I3)')iup,dim,Hup8%map(iup),Ns,jvec
                 stop
              endif
