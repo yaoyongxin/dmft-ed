@@ -22,15 +22,19 @@ MODULE ED_OBSERVABLES
   public :: local_energy_impurity
 
 
-  logical,save                       :: iolegend=.true.
-  real(8),dimension(:),allocatable   :: dens,dens_up,dens_dw
-  real(8),dimension(:),allocatable   :: docc
-  real(8),dimension(:),allocatable   :: magZ,magX,magY
-  real(8),dimension(:),allocatable   :: phisc
-  real(8),dimension(:,:),allocatable :: sz2,n2
-  real(8),dimensioN(:,:),allocatable :: zimp,simp
-  real(8)                            :: s2tot
-  real(8)                            :: Egs
+  logical,save                          :: iolegend=.true.
+  real(8),dimension(:),allocatable      :: dens,dens_up,dens_dw
+  real(8),dimension(:),allocatable      :: docc
+  real(8),dimension(:),allocatable      :: magZ,magX,magY
+  real(8),dimension(:),allocatable      :: phisc
+  real(8),dimension(:,:),allocatable    :: sz2,n2
+  real(8),dimension(:,:),allocatable    :: exct_s0
+  real(8),dimension(:,:),allocatable    :: exct_tz
+  complex(8),dimension(:,:),allocatable :: exct_tx
+  complex(8),dimension(:,:),allocatable :: exct_ty
+  real(8),dimensioN(:,:),allocatable    :: zimp,simp
+  real(8)                               :: s2tot
+  real(8)                               :: Egs
   !
 
 
@@ -60,6 +64,7 @@ contains
     complex(8),dimension(:),pointer :: gscvec
     type(sector_map)                :: H,HJ
     complex(8),allocatable          :: vvinit(:)
+    real(8),dimension(Norb,Norb)    :: theta_upup,theta_dwdw,theta_updw,theta_dwup
     !
     !LOCAL OBSERVABLES:
     ! density, 
@@ -85,6 +90,10 @@ contains
     sz2     = 0.d0
     n2      = 0.d0
     s2tot   = 0.d0
+    exct_s0 = 0d0
+    exct_tz = 0d0
+    exct_tx = zero
+    exct_ty = zero
     !
     numstates=state_list%size
     do istate=1,numstates
@@ -217,13 +226,12 @@ contains
 
 
     !EVALUATE <SX> AND <SY>
-    if(ed_mode=="nonsu2")then
+    if(ed_mode=="nonsu2".AND.MpiMaster)then
        ispin=1
        jspin=2
        do iorb=1,Norb
           isite=impIndex(iorb,1)
           jsite=impIndex(iorb,2)
-
           do istate=1,state_list%size
              !
              isector = es_return_sector(state_list,istate)
@@ -241,21 +249,16 @@ contains
              peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
              peso = peso/zeta_function
              !
-
              idim    = getdim(isector)
-
              !GET <(CDG_UP + CDG_DW)(C_UP + C_DW)> = 
              !<CDG_UP*C_UP> + <CDG_DW*C_DW> + <CDG_UP*C_DW + CDG_DW*C_UP> = 
              !<N_UP> + <N_DW> + 2*<Sx>
              !<Sx> = <CDG_UP*C_DW + CDG_DW*C_UP>
-             if(Mpimaster)then
-                !
-                jsector = getCsector(ispin,isector)
-                jdim    = getdim(jsector)
-                !
+             jsector = getCsector(ispin,isector)
+             jdim    = getdim(jsector)
+             if(jsector/=0)then
                 call build_sector(isector,H)
                 call build_sector(jsector,HJ)
-                !
                 allocate(vvinit(jdim));vvinit=zero
                 do i=1,idim
                    m=H%map(i)
@@ -280,21 +283,16 @@ contains
                 magx(iorb) = magx(iorb) + dot_product(vvinit,vvinit)*peso
                 if(allocated(vvinit))deallocate(vvinit)
              endif
-
-
-
+             !
              !GET <(-i*CDG_UP + CDG_DW)(i*C_UP + C_DW)> = 
              !<CDG_UP*C_UP> + <CDG_DW*C_DW> - i<CDG_UP*C_DW - CDG_DW*C_UP> = 
              !<N_UP> + <N_DW> + 2*<Sy>
              !<Sy> = -i/2<CDG_UP*C_DW - CDG_DW*C_UP>
-             if(Mpimaster)then
-                !
-                jsector = getCsector(ispin,isector)
-                jdim    = getdim(jsector)
-                !
+             jsector = getCsector(ispin,isector)
+             jdim    = getdim(jsector)
+             if(jsector/=0)then
                 call build_sector(isector,H)
                 call build_sector(jsector,HJ)
-                !
                 allocate(vvinit(jdim));vvinit=zero
                 do i=1,idim
                    m=H%map(i)
@@ -321,6 +319,7 @@ contains
              endif
              !
              if(associated(gscvec)) nullify(gscvec)
+             !
           enddo
           magx(iorb) = 0.5d0*(magx(iorb) - dens_up(iorb) - dens_dw(iorb))
           magy(iorb) = 0.5d0*(magy(iorb) - dens_up(iorb) - dens_dw(iorb))
@@ -328,78 +327,246 @@ contains
     end if
 
 
-
     !
-    !IMPURITY DENSITY MATRIX
-    if(allocated(imp_density_matrix))deallocate(imp_density_matrix)
-    allocate(imp_density_matrix(Nspin,Nspin,Norb,Norb))
-    imp_density_matrix=zero
-    do istate=1,state_list%size
-       !
-       isector = es_return_sector(state_list,istate)
-       Ei      = es_return_energy(state_list,istate)
+    !EVALUATE EXCITON OP <S_ab> AND <T^x,y,z_ab>
+    !<S_ab>  :=   <C^+_{a,up}C_{b,up} + C^+_{a,dw}C_{b,dw}>
+    !<T^z_ab>:=   <C^+_{a,up}C_{b,up} - C^+_{a,dw}C_{b,dw}>
+    !<T^x_ab>:=   <C^+_{a,up}C_{b,dw} + C^+_{a,dw}C_{b,up}>
+    !<T^y_ab>:= -i<C^+_{a,up}C_{b,dw} - C^+_{a,dw}C_{b,up}>
+    if(ed_mode=="nonsu2".AND.Mpimaster)then
+       do istate=1,state_list%size
+          isector = es_return_sector(state_list,istate)
+          Ei      = es_return_energy(state_list,istate)
 #ifdef _MPI
-       if(MpiStatus)then
-          gscvec => es_return_cvector(MpiComm,state_list,istate)
-       else
-          gscvec => es_return_cvector(state_list,istate)
-       endif
+          if(MpiStatus)then
+             gscvec => es_return_cvector(MpiComm,state_list,istate)
+          else
+             gscvec => es_return_cvector(state_list,istate)
+          endif
 #else
-       gscvec => es_return_cvector(state_list,istate)
+          gscvec => es_return_cvector(state_list,istate)
 #endif
-       !
-       peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
-       peso = peso/zeta_function
-       !
-       idim  = getdim(isector)
-       if(Mpimaster)then
-          call build_sector(isector,H)
           !
-          !Diagonal densities
-          do ispin=1,Nspin
-             do iorb=1,Norb
-                isite=impIndex(iorb,ispin)
-                do m=1,idim
-                   i=H%map(m)
-                   ib = bdecomp(i,2*Ns)
-                   imp_density_matrix(ispin,ispin,iorb,iorb) = imp_density_matrix(ispin,ispin,iorb,iorb) + &
-                        peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
-                enddo
+          peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
+          peso = peso/zeta_function
+          !
+          idim    = getdim(isector)
+          !    
+          do iorb=1,Norb
+             do jorb=iorb+1,Norb
+                !
+                !\Theta_upup = <v|v>, |v> = (C_aup + C_bup)|>
+                jsector = getCsector(1,isector)
+                jdim    = getdim(jsector)
+                if(jsector/=0)then
+                   call build_sector(isector,H)
+                   call build_sector(jsector,HJ)
+                   allocate(vvinit(jdim));vvinit=zero
+                   isite=impIndex(iorb,1)!+c_a,up
+                   jsite=impIndex(jorb,1)! c_b,up
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(jsite)/=1)cycle
+                      call c(jsite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = sgn*gscvec(i)
+                   enddo
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(isite)/=1)cycle
+                      call c(isite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = vvinit(j) + sgn*gscvec(i)
+                   enddo
+                   call delete_sector(isector,H)
+                   call delete_sector(jsector,HJ)
+                   theta_upup(iorb,jorb) = theta_upup(iorb,jorb) + dot_product(vvinit,vvinit)*peso
+                   if(allocated(vvinit))deallocate(vvinit)
+                endif
+                !
+                !\Theta_dwdw = <v|v>, |v> = (C_adw + C_bdw)|>
+                jsector = getCsector(2,isector)
+                jdim    = getdim(jsector)
+                if(jsector/=0)then
+                   call build_sector(isector,H)
+                   call build_sector(jsector,HJ)
+                   allocate(vvinit(jdim));vvinit=zero
+                   isite=impIndex(iorb,2)!+c_a,dw
+                   jsite=impIndex(jorb,2)! c_b,dw
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(jsite)/=1)cycle
+                      call c(jsite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = sgn*gscvec(i)
+                   enddo
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(isite)/=1)cycle
+                      call c(isite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = vvinit(j) + sgn*gscvec(i)
+                   enddo
+                   call delete_sector(isector,H)
+                   call delete_sector(jsector,HJ)
+                   theta_dwdw(iorb,jorb) = theta_dwdw(iorb,jorb) + dot_product(vvinit,vvinit)*peso
+                   if(allocated(vvinit))deallocate(vvinit)
+                endif
+                !
+                !\Theta_updw = <v|v>, |v> = (C_aup + C_bdw)|>
+                jsector = getCsector(1,isector)
+                jdim    = getdim(jsector)
+                if(jsector/=0)then
+                   call build_sector(isector,H)
+                   call build_sector(jsector,HJ)
+                   allocate(vvinit(jdim));vvinit=zero
+                   isite=impIndex(iorb,1)!+c_a,up
+                   jsite=impIndex(jorb,2)! c_b,dw
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(jsite)/=1)cycle
+                      call c(jsite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = sgn*gscvec(i)
+                   enddo
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(isite)/=1)cycle
+                      call c(isite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = vvinit(j) + sgn*gscvec(i)
+                   enddo
+                   call delete_sector(isector,H)
+                   call delete_sector(jsector,HJ)
+                   theta_updw(iorb,jorb) = theta_updw(iorb,jorb) + dot_product(vvinit,vvinit)*peso
+                   if(allocated(vvinit))deallocate(vvinit)
+                endif
+                !
+                !\Theta_dwup = <v|v>, |v> = (C_adw + C_bup)|>
+                jsector = getCsector(1,isector)
+                jdim    = getdim(jsector)
+                if(jsector/=0)then
+                   call build_sector(isector,H)
+                   call build_sector(jsector,HJ)
+                   allocate(vvinit(jdim));vvinit=zero
+                   isite=impIndex(iorb,2)!+c_a,dw
+                   jsite=impIndex(jorb,1)! c_b,up
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(jsite)/=1)cycle
+                      call c(jsite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = sgn*gscvec(i)
+                   enddo
+                   do i=1,idim
+                      m  = H%map(i)
+                      ib = bdecomp(m,2*Ns)
+                      if(ib(isite)/=1)cycle
+                      call c(isite,m,r,sgn)
+                      j=binary_search(HJ%map,r)
+                      vvinit(j) = vvinit(j) + sgn*gscvec(i)
+                   enddo
+                   call delete_sector(isector,H)
+                   call delete_sector(jsector,HJ)
+                   theta_dwup(iorb,jorb) = theta_dwup(iorb,jorb) + dot_product(vvinit,vvinit)*peso
+                   if(allocated(vvinit))deallocate(vvinit)
+                endif
              enddo
           enddo
-          !off-diagonal
-          do ispin=1,Nspin
-             do jspin=1,Nspin
+          !
+          if(associated(gscvec)) nullify(gscvec)
+          !
+       enddo
+       !
+       do iorb=1,Norb
+          do jorb=iorb+1,Norb
+             exct_s0(iorb,jorb) = 0.5d0*(theta_upup(iorb,jorb) + theta_dwdw(iorb,jorb) - dens(iorb) - dens(jorb))
+             exct_tz(iorb,jorb) = 0.5d0*(theta_upup(iorb,jorb) - theta_dwdw(iorb,jorb) - magZ(iorb) - magZ(jorb))
+             exct_tx(iorb,jorb) = 0.5d0*(theta_updw(iorb,jorb) + theta_dwup(iorb,jorb) - dens(iorb) - dens(jorb))
+             exct_ty(iorb,jorb) = -xi*0.5d0*(theta_updw(iorb,jorb) - theta_dwup(iorb,jorb) - magZ(iorb) + magZ(jorb))
+          enddo
+       enddo
+
+
+       !
+       !IMPURITY DENSITY MATRIX
+       if(allocated(imp_density_matrix))deallocate(imp_density_matrix)
+       allocate(imp_density_matrix(Nspin,Nspin,Norb,Norb))
+       imp_density_matrix=zero
+       do istate=1,state_list%size
+          !
+          isector = es_return_sector(state_list,istate)
+          Ei      = es_return_energy(state_list,istate)
+#ifdef _MPI
+          if(MpiStatus)then
+             gscvec => es_return_cvector(MpiComm,state_list,istate)
+          else
+             gscvec => es_return_cvector(state_list,istate)
+          endif
+#else
+          gscvec => es_return_cvector(state_list,istate)
+#endif
+          !
+          peso = 1.d0 ; if(finiteT)peso=exp(-beta*(Ei-Egs))
+          peso = peso/zeta_function
+          !
+          idim  = getdim(isector)
+          if(Mpimaster)then
+             call build_sector(isector,H)
+             !
+             !Diagonal densities
+             do ispin=1,Nspin
                 do iorb=1,Norb
-                   do jorb=1,Norb
-                      if((ed_mode=="normal").and.(ispin/=jspin))cycle
-                      if((bath_type=="normal").and.(iorb/=jorb))cycle
-                      if(bath_type=="replica".and.Jz_basis)then
-                         if((.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
-                      endif
-                      isite=impIndex(iorb,ispin)
-                      jsite=impIndex(jorb,jspin)
-                      do m=1,idim
-                         i=H%map(m)
-                         ib = bdecomp(i,2*Ns)
-                         if((ib(jsite)==1).and.(ib(isite)==0))then
-                            call c(jsite,i,r,sgn1)
-                            call cdg(isite,r,k,sgn2)
-                            j=binary_search(H%map,k)
-                            imp_density_matrix(ispin,jspin,iorb,jorb) = imp_density_matrix(ispin,jspin,iorb,jorb) + &
-                                 peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
+                   isite=impIndex(iorb,ispin)
+                   do m=1,idim
+                      i=H%map(m)
+                      ib = bdecomp(i,2*Ns)
+                      imp_density_matrix(ispin,ispin,iorb,iorb) = imp_density_matrix(ispin,ispin,iorb,iorb) + &
+                           peso*ib(isite)*conjg(gscvec(m))*gscvec(m)
+                   enddo
+                enddo
+             enddo
+             !off-diagonal
+             do ispin=1,Nspin
+                do jspin=1,Nspin
+                   do iorb=1,Norb
+                      do jorb=1,Norb
+                         if((ed_mode=="normal").and.(ispin/=jspin))cycle
+                         if((bath_type=="normal").and.(iorb/=jorb))cycle
+                         if(bath_type=="replica".and.Jz_basis)then
+                            if((.not.dmft_bath%mask(ispin,jspin,iorb,jorb,1)).and.(.not.dmft_bath%mask(ispin,jspin,iorb,jorb,2)))cycle
                          endif
+                         isite=impIndex(iorb,ispin)
+                         jsite=impIndex(jorb,jspin)
+                         do m=1,idim
+                            i=H%map(m)
+                            ib = bdecomp(i,2*Ns)
+                            if((ib(jsite)==1).and.(ib(isite)==0))then
+                               call c(jsite,i,r,sgn1)
+                               call cdg(isite,r,k,sgn2)
+                               j=binary_search(H%map,k)
+                               imp_density_matrix(ispin,jspin,iorb,jorb) = imp_density_matrix(ispin,jspin,iorb,jorb) + &
+                                    peso*sgn1*gscvec(m)*sgn2*conjg(gscvec(j))
+                            endif
+                         enddo
                       enddo
                    enddo
                 enddo
              enddo
-          enddo
+             !
+             if(associated(gscvec))nullify(gscvec)
+             call delete_sector(isector,H)
+          endif
           !
-          if(associated(gscvec))nullify(gscvec)
-          call delete_sector(isector,H)
-       endif
-       !
-    enddo
+       enddo
+    endif
     !
     !
     !BATH DENSITY MATRIX (only if bath_type=="replica")
@@ -863,6 +1030,12 @@ contains
     end select
     close(unit)
     !
+    if(ed_mode=="nonsu2")then
+       open(unit,file="exciton_info.ed")
+       write(unit,"(A1,6(A10,6X))")"#","1S_0","2T_z","3reT_x","4imT_x","5reT_y","6imT_y"
+       close(unit)
+    endif
+    !
     unit = free_unit()
     open(unit,file="parameters_info.ed")
     write(unit,"(A1,90(A14,1X))")"#","1xmu","2beta",&
@@ -911,6 +1084,7 @@ contains
             ((n2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
             ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
             ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
+       close(unit)
     case ("superc")
        write(unit,"(90(F15.9,1X))")&
             (dens(iorb),iorb=1,Norb),&
@@ -924,6 +1098,7 @@ contains
             ((n2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
             ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
             ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
+       close(unit)
     case ("nonsu2")
        write(unit,"(90(F15.9,1X))")&
             (dens(iorb),iorb=1,Norb),&
@@ -938,6 +1113,20 @@ contains
             ((n2(iorb,jorb),jorb=1,Norb),iorb=1,Norb),&
             ((zimp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin),&
             ((simp(iorb,ispin),iorb=1,Norb),ispin=1,Nspin)
+       close(unit)
+       !
+       unit = free_unit()
+       open(unit,file="exciton_last"//reg(ed_file_suffix)//".ed")
+       do iorb=1,Norb
+          do jorb=iorb+1,Norb
+             write(unit,"(90(F15.9,1X))")&
+                  exct_s0(iorb,jorb),exct_tz(iorb,jorb),&
+                  dreal(exct_tx(iorb,jorb)),dimag(exct_tx(iorb,jorb)),&
+                  dreal(exct_ty(iorb,jorb)),dimag(exct_ty(iorb,jorb))
+          enddo
+       enddo
+       close(unit)
+       !
     end select
     close(unit)    
     !
