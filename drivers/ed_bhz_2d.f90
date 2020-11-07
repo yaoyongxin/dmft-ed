@@ -24,8 +24,7 @@ program ed_bhz
   real(8)                :: mh,lambda,wmixing,akrange,rh
   character(len=16)      :: finput
   character(len=32)      :: hkfile
-  logical                :: spinsym,getak,getdeltaw,getpoles,usez
-  type(finter_type)      :: finter_func
+  logical                :: spinsym,usez
   !
   real(8),dimension(2)   :: Eout
   real(8),allocatable    :: dens(:)
@@ -67,7 +66,7 @@ program ed_bhz
   Nso=Nspin*Norb
 
   !Allocate Weiss Field:
-  allocate(delta(Nspin,Nspin,Norb,Norb,Lmats))
+  allocate(Delta(Nspin,Nspin,Norb,Norb,Lmats))
   allocate(Smats(Nspin,Nspin,Norb,Norb,Lmats))
   allocate(Gmats(Nspin,Nspin,Norb,Norb,Lmats))
   allocate(Sreal(Nspin,Nspin,Norb,Norb,Lreal))
@@ -131,16 +130,17 @@ program ed_bhz
   call dmft_gloc_realaxis(comm,Hk,Wtk,Greal,Sreal)
   if(master)call dmft_print_gf_realaxis(Greal,"Gloc",iprint=1)
 
-
   call dmft_kinetic_energy(comm,Hk,Wtk,Smats)
 
   call solve_hk_topological(so2j(Smats(:,:,:,:,1),Nso))
 
   call finalize_MPI()
 
+  
+  
 contains
 
-
+  
 
   !---------------------------------------------------------------------
   !PURPOSE: GET BHZ HAMILTONIAN (from the NonInteracting code)
@@ -167,7 +167,7 @@ contains
     if(master)write(*,*)"# of SO-bands     :",Nso
     if(allocated(Hk))deallocate(Hk)
     if(allocated(wtk))deallocate(wtk)
-    allocate(Hk(Nso,Nso,Lk))
+    allocate(Hk(Nso,Nso,Lk)) ;Hk=zero
     allocate(wtk(Lk))
     !
     call TB_build_model(Hk,hk_bhz,Nso,[Nk,Nk])
@@ -180,8 +180,9 @@ contains
             Nkvec=[Nk,Nk])
     endif
     allocate(bhzHloc(Nso,Nso))
-    bhzHloc = sum(Hk(:,:,:),dim=3)/Lk
-    where(abs(dreal(bhzHloc))<1.d-9)bhzHloc=0d0
+    bhzHloc = zero
+    bhzHloc = sum(Hk,dim=3)/Lk
+    where(abs(dreal(bhzHloc))<1d-6)bhzHloc=zero
     if(master)  call TB_write_Hloc(bhzHloc)
   end subroutine build_hk
 

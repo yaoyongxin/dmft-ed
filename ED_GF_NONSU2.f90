@@ -324,10 +324,10 @@ contains
           enddo
        enddo
        !
-       if(ed_para)then
-          call SOC_jz_symmetrize(impGmats,dmft_bath%mask)
-          call SOC_jz_symmetrize(impGreal,dmft_bath%mask)
-       endif
+       ! if(ed_para)then
+       !    call SOC_jz_symmetrize(impGmats,dmft_bath%mask)
+       !    call SOC_jz_symmetrize(impGreal,dmft_bath%mask)
+       ! endif
        !
     end select
   end subroutine build_gf_nonsu2
