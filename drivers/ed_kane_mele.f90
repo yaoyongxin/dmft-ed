@@ -2,6 +2,7 @@ program ed_kanemele
   USE DMFT_ED
   USE SCIFOR
   USE DMFT_TOOLS
+  USE MPI
   implicit none
 
   integer                                       :: iloop,Lk,Nso,Nlso,Nlat,Nineq
@@ -28,7 +29,7 @@ program ed_kanemele
   real(8),dimension(2)                          :: bk1,bk2 !reciprocal space lattice basis
   real(8),dimension(2)                          :: d1,d2,d3
   real(8),dimension(2)                          :: a1,a2,a3
-  real(8),dimension(2)                          :: pointK,pointKp,bklen
+  real(8),dimension(2)                          :: bklen
 
   !variables for the model:
   integer                                       :: Nk,Nkpath
@@ -38,8 +39,14 @@ program ed_kanemele
   logical                                       :: spinsym,neelsym
   !
   real(8),allocatable,dimension(:)              :: dens
-  !
+  integer                                     :: comm,rank
+  logical                                     :: master
 
+  call init_MPI()
+  comm = MPI_COMM_WORLD
+  call StartMsg_MPI(comm)
+  rank = get_Rank_MPI(comm)
+  master = get_Master_MPI(comm)
 
   !Parse additional variables && read Input && read H(k)^2x2
   call parse_cmd_variable(finput,"FINPUT",default='inputKANEMELE.conf')
@@ -54,9 +61,8 @@ program ed_kanemele
   call parse_input_variable(spinsym,"SPINSYM",finput,default=.true.)
   call parse_input_variable(neelsym,"NEELSYM",finput,default=.false.)
   !
-  call ed_read_input(trim(finput))
-
-
+  call ed_read_input(trim(finput),comm)
+  !
   call add_ctrl_var(beta,"BETA")
   call add_ctrl_var(xmu,"xmu")
   call add_ctrl_var(wini,"wini")
@@ -87,9 +93,6 @@ program ed_kanemele
   a2 = d2-d3                    !3/2*a[1,-1/sqrt3]
   a3 = d1-d2
 
-  pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
-  pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]
-
 
 
   !RECIPROCAL LATTICE VECTORS:
@@ -117,55 +120,58 @@ program ed_kanemele
   Nb=get_bath_dimension()
   allocate(Bath(Nlat,Nb))
   allocate(Bath_prev(Nlat,Nb))
-  call ed_init_solver(Bath,Hloc)
+  call ed_init_solver(comm,Bath,Hloc)
 
 
   !DMFT loop
   iloop=0;converged=.false.
   do while(.not.converged.AND.iloop<nloop)
      iloop=iloop+1
-     call start_loop(iloop,nloop,"DMFT-loop")
+     if(master)call start_loop(iloop,nloop,"DMFT-loop")
      !
      !Solve the EFFECTIVE IMPURITY PROBLEM (first w/ a guess for the bath)
-     call ed_solve(Bath,Hloc)
-     call ed_get_sigma_matsubara(Smats,Nlat)
+     !Solve separately the two atoms:
+     do ilat=1,Nlat
+        call ed_solve(comm,Bath(ilat,:),Hloc(ilat,:,:,:,:))
+        call ed_get_sigma_matsubara(Smats(ilat,:,:,:,:,:))
+        call ed_get_sigma_real(Sreal(ilat,:,:,:,:,:))
+     enddo
      !
      ! Smats(2,2,2,:,:,:) = -Smats(1,1,1,:,:,:) !sub_B(dw,dw) = -sub_A(up,up)
      ! Smats(2,1,1,:,:,:) = -Smats(1,2,2,:,:,:) !sub_B(up,up) = -sub_A(dw,dw)
      !
      ! compute the local gf:
-     call dmft_gloc_matsubara(Hk,Wtk,Gmats,Smats)
+     call dmft_gloc_matsubara(comm,Hk,Wtk,Gmats,Smats)
+     if(master)call dmft_print_gf_matsubara(Gmats,"Gloc",iprint=4)
      !
      ! compute the Weiss field (only the Nineq ones)
      if(cg_scheme=='weiss')then
-        call dmft_weiss(Gmats,Smats,Weiss,Hloc)
+        call dmft_weiss(comm,Gmats,Smats,Weiss,Hloc)
      else
-        call dmft_delta(Gmats,Smats,Weiss,Hloc)
+        call dmft_delta(comm,Gmats,Smats,Weiss,Hloc)
      endif
      !
      !Fit the new bath, starting from the old bath + the supplied Weiss
-     call ed_chi2_fitgf(Bath,Weiss,Hloc,ispin=1)
-     if(spinsym)then
-        call spin_symmetrize_bath(bath,save=.true.)
-     else
-        call ed_chi2_fitgf(Bath,Weiss,Hloc,ispin=2)
-     endif
+     call ed_chi2_fitgf(comm,Bath,Weiss,Hloc)
+     if(ed_mode=="normal".AND.spinsym)call spin_symmetrize_bath(bath,save=.true.)
      !
      !MIXING:
      if(iloop>1)Bath=wmixing*Bath + (1.d0-wmixing)*Bath_prev
      Bath_prev=Bath
      !
-     converged = check_convergence(Weiss(:,1,1,1,1,:),dmft_error,nsuccess,nloop)
+     if(master)then
+        converged = check_convergence(Weiss(:,1,1,1,1,:),dmft_error,nsuccess,nloop)
+     endif
+     call Bcast_MPI(comm,converged)
      !
-     call end_loop
+     if(master)call end_loop
   enddo
   call dmft_print_gf_matsubara(Gmats,"Gmats",iprint=4)
 
 
   !Extract and print retarded self-energy and Green's function 
-  call ed_get_sigma_real(Sreal,Nlat)
-  call dmft_gloc_realaxis(Hk,Wtk,Greal,Sreal)
-  call dmft_print_gf_realaxis(Greal,"Greal",iprint=4)
+  call dmft_gloc_realaxis(comm,Hk,Wtk,Greal,Sreal)
+  if(master)call dmft_print_gf_realaxis(Greal,"Greal",iprint=4)
 
 
 
@@ -177,17 +183,16 @@ contains
   !PURPOSE: Get Kane Mele Model Hamiltonian
   !---------------------------------------------------------------------
   subroutine build_hk(file)
-    character(len=*),optional                              :: file
-    integer                                                :: i,j,ik
-    integer                                                :: ix,iy
-    real(8)                                                :: kx,ky  
-    integer                                                :: iorb,jorb
-    integer                                                :: isporb,jsporb
-    integer                                                :: ispin,jspin
-    integer                                                :: unit
-    complex(8),dimension(Nlat,Nspin,Nspin,Norb,Norb,Lmats) :: Gmats
-    complex(8),dimension(Nlat,Nspin,Nspin,Norb,Norb,Lreal) :: Greal
-    real(8),dimension(:,:),allocatable                     :: KPath
+    character(len=*),optional          :: file
+    integer                            :: i,j,ik
+    integer                            :: ix,iy
+    real(8)                            :: kx,ky
+    real(8),dimension(2)               :: pointK,pointKp
+    integer                            :: iorb,jorb
+    integer                            :: isporb,jsporb
+    integer                            :: ispin,jspin
+    integer                            :: unit
+    real(8),dimension(:,:),allocatable :: KPath
     !
     Lk= Nk*Nk
     write(LOGfile,*)"Build H(k) Kane-Mele:",Lk
@@ -204,38 +209,26 @@ contains
     Wtk = 1d0/Lk
     !
     !
-    if(present(file))then
-       call TB_write_hk(Hk,"Hkrfile_kanemele.data",&
-            No=Nlso,&
-            Nd=Norb,&
-            Np=0,&
-            Nineq=1,&
-            Nkvec=[Nk,Nk])
-    endif
-    !
     allocate(kmHloc(Nlso,Nlso))
     kmHloc = sum(Hk(:,:,:),dim=3)/Lk
     where(abs(dreal(kmHloc))<1.d-4)kmHloc=0d0
-    call TB_write_Hloc(kmHloc)
-    call TB_write_Hloc(kmHloc,'Hloc.txt')
+    if(master)call TB_write_Hloc(kmHloc)
+    if(master)call TB_write_Hloc(kmHloc,'Hloc.txt')
     !
     !
-    allocate(Kpath(4,2))
-    KPath(1,:)=[0,0]
-    KPath(2,:)=pointK
-    Kpath(3,:)=pointKp
-    KPath(4,:)=[0d0,0d0]
-    call TB_Solve_model(hk_kanemele_model,Nlso,KPath,Nkpath,&
-         colors_name=[red1,blue1,red1,blue1],&
-         points_name=[character(len=10) :: "G","K","K`","G"],&
-         file="Eigenbands.nint")
-    !
-    !Build the local GF:
-    call dmft_gloc_matsubara(Hk,Wtk,Gmats,zeros(Nlat,Nspin,Nspin,Norb,Norb,Lmats))    
-    call dmft_print_gf_matsubara(Gmats,"LG0",iprint=4)
-    call dmft_gloc_realaxis(Hk,Wtk,Greal,zeros(Nlat,Nspin,Nspin,Norb,Norb,Lreal))
-    call dmft_print_gf_realaxis(Greal,"LG0",iprint=4)
-    !
+    ! pointK = [2*pi/3, 2*pi/3/sqrt(3d0)]
+    ! pointKp= [2*pi/3,-2*pi/3/sqrt(3d0)]
+    ! if(master)then
+    !    allocate(Kpath(4,2))
+    !    KPath(1,:)=[0,0]
+    !    KPath(2,:)=pointK
+    !    Kpath(3,:)=pointKp
+    !    KPath(4,:)=[0d0,0d0]
+    !    call TB_Solve_model(hk_kanemele_model,Nlso,KPath,Nkpath,&
+    !         colors_name=[red1,blue1,red1,blue1],&
+    !         points_name=[character(len=10) :: "G","K","K`","G"],&
+    !         file="Eigenbands.nint",iproject=.false.)
+    ! endif
   end subroutine build_hk
 
 
