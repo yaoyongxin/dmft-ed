@@ -901,7 +901,7 @@ contains
     Xop = 0d0
     !
     BosonExp=1
-    if(HardCoreBoson)BosonExp=0
+    if(HardCoreBoson.ne.0)BosonExp=0
     !
     do istate=1,numstates
        isector = es_return_sector(state_list,istate)
@@ -947,7 +947,7 @@ contains
                 n1i = dble(ib(Xstride(isite,1)))
                 n2i = dble(ib(Xstride(isite,2)))
                 n3i = dble(ib(Xstride(isite,3)))
-                n4i = dble(ib(Xstride(isite,4)))
+                if(Nbath.ne.1)n4i = dble(ib(Xstride(isite,4)))
                 !
                 if(isnan(n1i).or.isnan(n2i).or.isnan(n3i).or.isnan(n4i))then
                    write(*,"(4F6.2)") n1i,n2i,n3i,n4i
@@ -972,7 +972,7 @@ contains
                       n1j = dble(ib(Xstride(jsite,1)))
                       n2j = dble(ib(Xstride(jsite,2)))
                       n3j = dble(ib(Xstride(jsite,3)))
-                      n4j = dble(ib(Xstride(jsite,4)))
+                      if(Nbath.ne.1)n4j = dble(ib(Xstride(jsite,4)))
                       !
                       if(isnan(n1j).or.isnan(n2j).or.isnan(n3j).or.isnan(n4j))then
                          write(*,"(4F6.2)") n1j,n2j,n3j,n4j
@@ -1002,8 +1002,8 @@ contains
                             call c8(isite,m,r,sgn1)
                             call cdg8(hopndx,r,k,sgn2)
                             j=binary_search8(H8%map,k)
-                            if(j.eq.0)write(*,'(A,14I06)')" Ekin ",i,j,m,r,k,isite,jsite,hopndx
-                            Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*(sgn1**BosonExp)*gscvec(i)*(sgn2**BosonExp)*conjg(gscvec(j))*Thopping
+                            if((j.eq.0).and.(HardCoreBoson.eq.0))write(*,'(A,14I06)')" Ekin ",i,j,m,r,k,isite,jsite,hopndx
+                            if(j.ne.0)Eklatt(row,col,istate) = Eklatt(row,col,istate) + peso*(sgn1**BosonExp)*gscvec(i)*(sgn2**BosonExp)*conjg(gscvec(j))*Thopping
                          endif
                       endif
                       !
@@ -1014,63 +1014,66 @@ contains
                          call c8(isite,m,r,sgn1)
                          call cdg8(hopndx,r,k,sgn2)
                          j=binary_search8(H8%map,k)
-                         if(j.eq.0)write(*,'(A,14I06)')" Gprop ",i,j,m,r,k,isite,jsite,hopndx
-                         Gcorrfunc(distance,istate) = Gcorrfunc(distance,istate) + peso*(sgn1**BosonExp)*gscvec(i)*(sgn2**BosonExp)*conjg(gscvec(j))/Neigh(distance)
+                         if((j.eq.0).and.(HardCoreBoson.eq.0))write(*,'(A,14I06)')" Gprop ",i,j,m,r,k,isite,jsite,hopndx
+                         if(j.ne.0)Gcorrfunc(distance,istate) = Gcorrfunc(distance,istate) + peso*(sgn1**BosonExp)*gscvec(i)*(sgn2**BosonExp)*conjg(gscvec(j))/Neigh(distance)
                       endif
-                      !
                       !
                       !Pair correlations
-                      c1 = Xstride(isite,1)
-                      c2 = Xstride(isite,2)
-                      c3 = Xstride(isite,3)
-                      c4 = Xstride(isite,4)
-                      !
-                      cd1 = Xstride(jsite,1)
-                      cd2 = Xstride(jsite,2)
-                      cd3 = Xstride(jsite,3)
-                      cd4 = Xstride(jsite,4)
-                      !
-                      !for the full quartet - REDO_LADDER
-                      Jleg=.true.
-                      !if((Nbath.eq.2).and.(mod(distance,2).eq.0))Jleg=.false.
-                      Jcondition = (ib(c1) ==1).and.(ib(c2) ==1).and.(ib(c3) ==1).and.(ib(c4) ==1).and. &
-                                   (ib(cd1)==0).and.(ib(cd2)==0).and.(ib(cd3)==0).and.(ib(cd4)==0).and.(filling.gt.4).and.Jleg
-                      if(Jcondition)then
-                         call   c8(c1 ,m ,r1,sgn1)
-                         call   c8(c2 ,r1,r2,sgn2)
-                         call   c8(c3 ,r2,r3,sgn3)
-                         call   c8(c4 ,r3,r ,sgn4)
-                         call cdg8(cd1,r ,k1,sgn5)
-                         call cdg8(cd2,k1,k2,sgn6)
-                         call cdg8(cd3,k2,k3,sgn7)
-                         call cdg8(cd4,k3,k ,sgn8)
-                         j=binary_search8(H8%map,k)
-                         if(j.eq.0)write(*,'(A,140I6)')" PairX ",distance,c1,c2,c3,c4,cd1,cd2,cd3,cd4,isite,jsite
-                         Pcorrfunc(distance,istate) = Pcorrfunc(distance,istate) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4*sgn5*sgn6*sgn7*sgn8)**BosonExp
-                      endif
-                      !
-                      !pair on the x
-                      Jcondition = (ib(c1)==1).and.(ib(c2)==1).and.(ib(cd1)==0).and.(ib(cd2)==0)
-                      if(Jcondition)then
-                         call   c8(c1 ,m ,r1,sgn1)
-                         call   c8(c2 ,r1,r ,sgn2)
-                         call cdg8(cd1,r ,k1,sgn3)
-                         call cdg8(cd2,k1,k ,sgn4)
-                         j=binary_search8(H8%map,k)
-                         if(j.eq.0)write(*,'(A,140I6)')" PairO ",distance,c1,cd1,isite,jsite
-                         Ocorrfunc(distance,istate,1) = Ocorrfunc(distance,istate,1) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4)**BosonExp
-                      endif
-                      !
-                      !pair on the y
-                      Jcondition = (ib(c1)==1).and.(ib(c4)==1).and.(ib(cd1)==0).and.(ib(cd4)==0).and.Jleg
-                      if(Jcondition)then
-                         call   c8(c1 ,m ,r1,sgn1)
-                         call   c8(c4 ,r1,r ,sgn2)
-                         call cdg8(cd1,r ,k1,sgn3)
-                         call cdg8(cd4,k1,k ,sgn4)
-                         j=binary_search8(H8%map,k)
-                         if(j.eq.0)write(*,'(A,140I6)')" PairO ",distance,c1,cd1,isite,jsite
-                         Ocorrfunc(distance,istate,2) = Ocorrfunc(distance,istate,2) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4)**BosonExp
+                      if(Nbath.ne.1)then
+                         !
+                         c1 = Xstride(isite,1)
+                         c2 = Xstride(isite,2)
+                         c3 = Xstride(isite,3)
+                         c4 = Xstride(isite,4)
+                         !
+                         cd1 = Xstride(jsite,1)
+                         cd2 = Xstride(jsite,2)
+                         cd3 = Xstride(jsite,3)
+                         cd4 = Xstride(jsite,4)
+                         !
+                         !for the full quartet - REDO_LADDER
+                         Jleg=.true.
+                         !if((Nbath.eq.2).and.(mod(distance,2).eq.0))Jleg=.false.
+                         Jcondition = (ib(c1) ==1).and.(ib(c2) ==1).and.(ib(c3) ==1).and.(ib(c4) ==1).and. &
+                                      (ib(cd1)==0).and.(ib(cd2)==0).and.(ib(cd3)==0).and.(ib(cd4)==0).and.(filling.gt.4).and.Jleg
+                         if(Jcondition)then
+                            call   c8(c1 ,m ,r1,sgn1)
+                            call   c8(c2 ,r1,r2,sgn2)
+                            call   c8(c3 ,r2,r3,sgn3)
+                            call   c8(c4 ,r3,r ,sgn4)
+                            call cdg8(cd1,r ,k1,sgn5)
+                            call cdg8(cd2,k1,k2,sgn6)
+                            call cdg8(cd3,k2,k3,sgn7)
+                            call cdg8(cd4,k3,k ,sgn8)
+                            j=binary_search8(H8%map,k)
+                            if((j.eq.0).and.(HardCoreBoson.eq.0))write(*,'(A,140I6)')" PairX ",distance,c1,c2,c3,c4,cd1,cd2,cd3,cd4,isite,jsite
+                            if(j.ne.0)Pcorrfunc(distance,istate) = Pcorrfunc(distance,istate) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4*sgn5*sgn6*sgn7*sgn8)**BosonExp
+                         endif
+                         !
+                         !pair on the x
+                         Jcondition = (ib(c1)==1).and.(ib(c2)==1).and.(ib(cd1)==0).and.(ib(cd2)==0)
+                         if(Jcondition)then
+                            call   c8(c1 ,m ,r1,sgn1)
+                            call   c8(c2 ,r1,r ,sgn2)
+                            call cdg8(cd1,r ,k1,sgn3)
+                            call cdg8(cd2,k1,k ,sgn4)
+                            j=binary_search8(H8%map,k)
+                            if((j.eq.0).and.(HardCoreBoson.eq.0))write(*,'(A,140I6)')" PairO ",distance,c1,cd1,isite,jsite
+                            if(j.ne.0)Ocorrfunc(distance,istate,1) = Ocorrfunc(distance,istate,1) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4)**BosonExp
+                         endif
+                         !
+                         !pair on the y
+                         Jcondition = (ib(c1)==1).and.(ib(c4)==1).and.(ib(cd1)==0).and.(ib(cd4)==0).and.Jleg
+                         if(Jcondition)then
+                            call   c8(c1 ,m ,r1,sgn1)
+                            call   c8(c4 ,r1,r ,sgn2)
+                            call cdg8(cd1,r ,k1,sgn3)
+                            call cdg8(cd4,k1,k ,sgn4)
+                            j=binary_search8(H8%map,k)
+                            if((j.eq.0).and.(HardCoreBoson.eq.0))write(*,'(A,140I6)')" PairO ",distance,c1,cd1,isite,jsite
+                            if(j.ne.0)Ocorrfunc(distance,istate,2) = Ocorrfunc(distance,istate,2) + peso*gscvec(i)*conjg(gscvec(j))*(sgn1*sgn2*sgn3*sgn4)**BosonExp
+                         endif
+                         !
                       endif
                       !
                    enddo !ineig
@@ -1224,6 +1227,7 @@ contains
       !
       unit_ = free_unit()
       open(unit=unit_,file="observables_last.ed",status='unknown',position='rewind',action='write',form='formatted')
+      !                                                           3                 5     6         7           8   9   10  11  12  13  14
       write(unit_,'(2I3,1F10.5,1I5,30(E22.10,1X))') Nbath,Norb,Thopping,numstates,Ektot,Eptot,Egs/(Nbath*Norb),Xop,NNr,XXr,GGr,PPr,OOx,OOy!,absOOx,absOOy
       close(unit_)
       unit_ = free_unit()

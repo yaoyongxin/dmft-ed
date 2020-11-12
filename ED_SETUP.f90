@@ -946,12 +946,15 @@ contains
     integer                                      :: p1,p2,p3,p4
     integer                                      :: p5,p6,p7,p8
     integer                                      :: p9,p10,p11,p12
-    integer                                      :: dim
+    integer                                      :: p13,p14,p15,p16
+    integer                                      :: dim,idim
     integer                                      :: ivec(Ns),jvec(Ns)
     !
+    integer                                      :: Nnn,isite,ineig,dimUsed
     integer(16),parameter                        :: zr=0
     integer(16),allocatable                      :: Order(:)
     type(sector_map8),optional                   :: Hup8
+    type(sector_map8)                            :: Hup8Full
     select case(ed_mode)
        !
        !
@@ -1025,10 +1028,9 @@ contains
        elseif(plaquette)then
           !
           nt  = getN(isector)
-          if((nt.gt.Ns).or.(nt.gt.12))stop "filling too big"
+          if((nt.gt.Ns).or.(nt.gt.16))stop "filling too big"
           dim = get_normal_sector_dimension(nt,0)
-          call map_allocate8(Hup8,dim)
-          allocate(Order(dim))
+          call map_allocate8(Hup8Full,dim)
           !
           if(filling.eq.2)then
              write(LOGfile,'(A)')"Building N=2 sector"
@@ -1036,8 +1038,8 @@ contains
              do p1=0,Ns-2
                 do p2=p1+1,Ns-1
                    dim=dim+1
-                   Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 )
-                   if(Hup8%map(dim).lt.0) stop
+                   Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 )
+                   if(Hup8Full%map(dim).lt.0) stop
                 enddo
              enddo
           elseif(filling.eq.3)then
@@ -1047,8 +1049,8 @@ contains
                 do p2=p1+1,Ns-1
                    do p3=p2+1,Ns-1
                       dim=dim+1
-                      Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 )
-                      if(Hup8%map(dim).lt.0) stop
+                      Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 )
+                      if(Hup8Full%map(dim).lt.0) stop
                    enddo
                 enddo
              enddo
@@ -1060,8 +1062,8 @@ contains
                    do p3=p2+1,Ns-1
                       do p4=p3+1,Ns-1
                          dim=dim+1
-                         Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 )
-                         if(Hup8%map(dim).lt.0) stop
+                         Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 )
+                         if(Hup8Full%map(dim).lt.0) stop
                       enddo
                    enddo
                 enddo
@@ -1075,9 +1077,9 @@ contains
                       do p4=p3+1,Ns-1
                          do p5=p4+1,Ns-1
                             dim=dim+1
-                            Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                          + ibset( zr, p5 )
-                            if(Hup8%map(dim).lt.0) stop
+                            Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                              + ibset( zr, p5 )
+                            if(Hup8Full%map(dim).lt.0) stop
                          enddo
                       enddo
                    enddo
@@ -1093,9 +1095,9 @@ contains
                          do p5=p4+1,Ns-1
                             do p6=p5+1,Ns-1
                                dim=dim+1
-                               Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                             + ibset( zr, p5 ) + ibset( zr, p6 )
-                               if(Hup8%map(dim).lt.0) stop
+                               Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                 + ibset( zr, p5 ) + ibset( zr, p6 )
+                               if(Hup8Full%map(dim).lt.0) stop
                             enddo
                          enddo
                      enddo
@@ -1113,9 +1115,9 @@ contains
                             do p6=p5+1,Ns-1
                                do p7=p6+1,Ns-1
                                   dim=dim+1
-                                  Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                                + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 )
-                                  if(Hup8%map(dim).lt.0) stop
+                                  Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                    + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 )
+                                  if(Hup8Full%map(dim).lt.0) stop
                                enddo
                             enddo
                          enddo
@@ -1135,9 +1137,9 @@ contains
                                do p7=p6+1,Ns-1
                                   do p8=p7+1,Ns-1
                                      dim=dim+1
-                                     Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                                   + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 )
-                                     if(Hup8%map(dim).lt.0) stop
+                                     Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                       + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 )
+                                     if(Hup8Full%map(dim).lt.0) stop
                                   enddo
                                enddo
                             enddo
@@ -1159,10 +1161,10 @@ contains
                                   do p8=p7+1,Ns-1
                                      do p9=p8+1,Ns-1
                                         dim=dim+1
-                                        Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                                      + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
-                                                      + ibset( zr, p9 )
-                                        if(Hup8%map(dim).lt.0) stop
+                                        Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                          + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                          + ibset( zr, p9 )
+                                        if(Hup8Full%map(dim).lt.0) stop
                                      enddo
                                   enddo
                                enddo
@@ -1186,10 +1188,10 @@ contains
                                      do p9=p8+1,Ns-1
                                         do p10=p9+1,Ns-1
                                            dim=dim+1
-                                           Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                                         + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
-                                                         + ibset( zr, p9 ) + ibset( zr, p10)
-                                           if(Hup8%map(dim).lt.0) stop
+                                           Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                             + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                             + ibset( zr, p9 ) + ibset( zr, p10)
+                                           if(Hup8Full%map(dim).lt.0) stop
                                         enddo
                                      enddo
                                   enddo
@@ -1215,10 +1217,10 @@ contains
                                         do p10=p9+1,Ns-1
                                            do p11=p10+1,Ns-1
                                               dim=dim+1
-                                              Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                                            + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
-                                                            + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11)
-                                              if(Hup8%map(dim).lt.0) stop
+                                              Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                                + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                                + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11)
+                                              if(Hup8Full%map(dim).lt.0) stop
                                            enddo
                                         enddo
                                      enddo
@@ -1246,10 +1248,10 @@ contains
                                            do p11=p10+1,Ns-1
                                               do p12=p11+1,Ns-1
                                                  dim=dim+1
-                                                Hup8%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
-                                                              + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
-                                                              + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11) + ibset( zr, p12)
-                                                if(Hup8%map(dim).lt.0) stop
+                                                 Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                                                   + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                                                   + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11) + ibset( zr, p12)
+                                                 if(Hup8Full%map(dim).lt.0) stop
                                               enddo
                                            enddo
                                         enddo
@@ -1262,10 +1264,218 @@ contains
                    enddo
                 enddo
              enddo
+          elseif(filling.eq.13)then
+            write(LOGfile,'(A)')"Building N=13 sector"
+            dim=0
+            do p1=0,Ns-2
+            do p2=p1+1,Ns-1
+            do p3=p2+1,Ns-1
+            do p4=p3+1,Ns-1
+            do p5=p4+1,Ns-1
+            do p6=p5+1,Ns-1
+            do p7=p6+1,Ns-1
+            do p8=p7+1,Ns-1
+            do p9=p8+1,Ns-1
+            do p10=p9+1,Ns-1
+            do p11=p10+1,Ns-1
+            do p12=p11+1,Ns-1
+            do p13=p12+1,Ns-1
+            do p14=p13+1,Ns-1
+                dim=dim+1
+                Hup8Full%map(dim) =  ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                   + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                   + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11) + ibset( zr, p12) &
+                                   + ibset( zr, p13)
+                                   if(Hup8Full%map(dim).lt.0) stop
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+          elseif(filling.eq.14)then
+            write(LOGfile,'(A)')"Building N=14 sector"
+            dim=0
+            do p1=0,Ns-2
+            do p2=p1+1,Ns-1
+            do p3=p2+1,Ns-1
+            do p4=p3+1,Ns-1
+            do p5=p4+1,Ns-1
+            do p6=p5+1,Ns-1
+            do p7=p6+1,Ns-1
+            do p8=p7+1,Ns-1
+            do p9=p8+1,Ns-1
+            do p10=p9+1,Ns-1
+            do p11=p10+1,Ns-1
+            do p12=p11+1,Ns-1
+            do p13=p12+1,Ns-1
+            do p14=p13+1,Ns-1
+               dim=dim+1
+               Hup8Full%map(dim) =  ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                  + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                  + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11) + ibset( zr, p12) &
+                                  + ibset( zr, p13) + ibset( zr, p14)
+                                  if(Hup8Full%map(dim).lt.0) stop
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+            enddo
+          elseif(filling.eq.15)then
+             write(LOGfile,'(A)')"Building N=15 sector"
+             dim=0
+             do p1=0,Ns-2
+             do p2=p1+1,Ns-1
+             do p3=p2+1,Ns-1
+             do p4=p3+1,Ns-1
+             do p5=p4+1,Ns-1
+             do p6=p5+1,Ns-1
+             do p7=p6+1,Ns-1
+             do p8=p7+1,Ns-1
+             do p9=p8+1,Ns-1
+             do p10=p9+1,Ns-1
+             do p11=p10+1,Ns-1
+             do p12=p11+1,Ns-1
+             do p13=p12+1,Ns-1
+             do p14=p13+1,Ns-1
+             do p15=p14+1,Ns-1
+                dim=dim+1
+                Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                  + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                  + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11) + ibset( zr, p12) &
+                                  + ibset( zr, p13) + ibset( zr, p14) + ibset( zr, p15)
+                                  if(Hup8Full%map(dim).lt.0) stop
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+          elseif(filling.eq.16)then
+             write(LOGfile,'(A)')"Building N=16 sector"
+             dim=0
+             do p1=0,Ns-2
+             do p2=p1+1,Ns-1
+             do p3=p2+1,Ns-1
+             do p4=p3+1,Ns-1
+             do p5=p4+1,Ns-1
+             do p6=p5+1,Ns-1
+             do p7=p6+1,Ns-1
+             do p8=p7+1,Ns-1
+             do p9=p8+1,Ns-1
+             do p10=p9+1,Ns-1
+             do p11=p10+1,Ns-1
+             do p12=p11+1,Ns-1
+             do p13=p12+1,Ns-1
+             do p14=p13+1,Ns-1
+             do p15=p14+1,Ns-1
+             do p16=p15+1,Ns-1
+                dim=dim+1
+                Hup8Full%map(dim) = ibset( zr, p1 ) + ibset( zr, p2 ) + ibset( zr, p3 ) + ibset( zr, p4 ) &
+                                  + ibset( zr, p5 ) + ibset( zr, p6 ) + ibset( zr, p7 ) + ibset( zr, p8 ) &
+                                  + ibset( zr, p9 ) + ibset( zr, p10) + ibset( zr, p11) + ibset( zr, p12) &
+                                  + ibset( zr, p13) + ibset( zr, p14) + ibset( zr, p15) + ibset( zr, p16)
+                                  if(Hup8Full%map(dim).lt.0) stop
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
+             enddo
           endif
           !
-          call sort_array8(Hup8%map,Order)
           dim = get_normal_sector_dimension(nt,0)
+          !
+          if(HardCoreBoson.gt.1)then
+             !
+             allocate(Order(dim));Order=0
+             dimUsed=0
+             do idim=1,dim
+                !
+                ivec = bdecomp8(Hup8Full%map(idim),Ns)
+                !
+                Nnn=0
+                do isite=1,Norb*Nbath
+                   if(ivec(isite).eq.1)then
+                      !Nearest neighbors
+                      do ineig=1,size(Vstride(isite,1,:))
+                         Nnn = Nnn + ivec(Vstride(isite,1,ineig))
+                      enddo
+                      !Next-Nearest neighbors
+                      if(Nbath.ne.1)then
+                        do ineig=1,size(Vstride(isite,2,:))
+                           Nnn = Nnn + ivec(Vstride(isite,2,ineig))
+                        enddo
+                      endif
+                   endif
+                enddo
+                !
+                if(Nnn.eq.0)then
+                   dimUsed = dimUsed+1
+                   Order(dimUsed) = Hup8Full%map(idim)
+                endif
+             enddo
+             write(*,'(A,I10)')"Sector Full dimension: ",dim
+             write(*,'(A,I10)')"Sector dimension for HardCore quartet: ",dimUsed
+             getDim(isector)=dimUsed
+             !
+             call map_allocate8(Hup8,dimUsed)
+             do idim=1,dimUsed
+                Hup8%map(idim) = Order(idim)
+             enddo
+             write(*,'(A,I10)')"size(Hup8%map): ",size(Hup8%map)
+             deallocate(Order)
+             call map_deallocate8(Hup8Full)
+             dim = dimUsed
+             !
+          else
+             !
+             write(*,'(A,I10)')"Sector Full dimension: ",dim
+             call map_allocate8(Hup8,dim)
+             Hup8%map = Hup8Full%map
+             call map_deallocate8(Hup8Full)
+             !
+          endif
+          !
+          allocate(Order(dim))
+          call sort_array8(Hup8%map,Order)
+          !dim = get_normal_sector_dimension(nt,0)
           do iup=1,dim
              jvec = bdecomp8(Hup8%map(iup),Ns)
              if (sum(jvec).ne.filling) then

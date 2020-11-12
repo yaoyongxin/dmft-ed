@@ -37,9 +37,9 @@
      !
      ! HOPPING TERMS
      do isite=1,Norb*Nbath
-        do jsite=1,4
+        do ineig=1,size(Vstride(isite,1,:))
            !
-           hopndx = Vstride(isite,1,jsite)
+           hopndx = Vstride(isite,1,ineig)
            !
            Jcondition = (Thopping/=zero) .AND. (ib(isite)==1) .AND. (ib(hopndx)==0 )
            if (Jcondition) then
@@ -48,12 +48,14 @@
               j = binary_search8(H8%map,k2_8)
               htmp = Thopping * (sg1*sg2)**BosonExp
               !
-              select case(MpiStatus)
-              case (.true.)
-                 call sp_insert_element(MpiComm,spH0,htmp,i,j)
-              case (.false.)
-                 call sp_insert_element(spH0,htmp,i,j)
-              end select
+              if(j.ne.0)then
+                 select case(MpiStatus)
+                 case (.true.)
+                    call sp_insert_element(MpiComm,spH0,htmp,i,j)
+                 case (.false.)
+                    call sp_insert_element(spH0,htmp,i,j)
+                 end select
+              endif
               !
            endif
            !

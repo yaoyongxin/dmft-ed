@@ -52,30 +52,42 @@ program ed_quartett
   call add_ctrl_var(Nbath,"NBATH")
   call add_ctrl_var(Vnn,"VNN")
   call add_ctrl_var(HardCoreBoson,"HARDCOREBOSON")
+  call add_ctrl_var(filling,"FILLING")
+  call add_ctrl_var(Ust,"UST")
 
 
   !######### VECTOR-LATTICE WRAPPIN #########
   tiling_x=tiling
   tiling_y=tiling
-  Maxdist=tiling_x*Nbath-2
+  Maxdist=21 !tiling_x*Nbath-2
   if(stripe)then
      Maxdist=Norb*Nbath-2
+     tiling_y=1
+  elseif(Nbath.eq.1)then
+     Maxdist=Norb-1
      tiling_y=1
   endif
   call create_lattice(Maxdist)
 
 
   !######### INTERACION REMODULATON #########
-  if(HardCoreBoson)then
-     allocate(Vnn_used(8));Vnn_used=0d0
-     Vnn_used(1) = Nbath*Norb*1000d0
-     Vnn_used(2) = Nbath*Norb*1000d0
-     Vnn_used(3) = 2d0*(Vnn(1)+Vnn(2))+4d0*(Vnn(3)+Vnn(4))
-     Vnn_used(4) = Vnn(1)+2d0*Vnn(2)+2d0*Vnn(3)+4d0*Vnn(4)
-     Vnn_used(5) = Vnn(2)+4d0*Vnn(4)
-     Vnn_used(6) = 2d0*Vnn(3)
-     Vnn_used(7) = Vnn(3)+2d0*Vnn(4)
-     Vnn_used(8) = Vnn(4)
+  if(HardCoreBoson.ne.0)then
+     if(Nbath.ne.1)then
+        allocate(Vnn_used(8));Vnn_used=0d0
+        Vnn_used(1) = 0d0
+        Vnn_used(2) = 0d0
+        Vnn_used(3) = 2d0*(Vnn(1)+Vnn(2))+4d0*(Vnn(3)+Vnn(4))
+        Vnn_used(4) = Vnn(1)+2d0*Vnn(2)+2d0*Vnn(3)+4d0*Vnn(4)
+        Vnn_used(5) = Vnn(2)+4d0*Vnn(4)
+        Vnn_used(6) = 2d0*Vnn(3)
+        Vnn_used(7) = Vnn(3)+2d0*Vnn(4)
+        Vnn_used(8) = Vnn(4)
+     elseif(Nbath.eq.1)then
+        allocate(Vnn_used(3));Vnn_used=0d0
+        Vnn_used(1) = 0d0
+        Vnn_used(2) = 2d0*(Vnn(1)+Vnn(2))+4d0*(Vnn(3)+Vnn(4))
+        Vnn_used(3) = 2d0*Vnn(3)
+     endif
   else
      allocate(Vnn_used(size(Vnn)));Vnn_used=0d0
      Vnn_used=Vnn
@@ -169,7 +181,6 @@ contains
       !
       !
       shift=1d0
-      !if(HardCoreBoson)shift=0d0
       !
       !
       Xc = dble(Norb)/2  + 0.5*shift
@@ -188,7 +199,20 @@ contains
       bottom=minval(Radius)
       Radius=Radius-bottom
       !
-      if(HardCoreBoson)Radius(2:Nbath-1,2:Norb-1)=0d0
+      !
+      if((Norb.eq.8).and.(Nbath.eq.8).and.(Ust.ne.0d0))then
+         Radius=0d0
+         if(HardCoreBoson.ne.0)then
+            !
+            Radius(3,3)=-1d0
+            !
+         else
+            !
+            Radius(4:5,4:5)=-1d0
+            !
+         endif
+      endif
+      !
       !
       do ilatt=1,tiling_y
          do jlatt=1,tiling_x
@@ -201,6 +225,7 @@ contains
       distances=100000.d0
       idist=0
       do Ry=0,MaxNeig
+         if((Nbath.eq.1).and.(Ry.ne.0))cycle
          do Rx=Ry,MaxNeig
             if(Rx.eq.0 .and. Ry.eq.0)cycle
             if(stripe  .and. Ry.gt.1)cycle
@@ -287,6 +312,14 @@ contains
                Xstride(ilatt,3) = lattice_tiled(row_i-1,col_i+1)
                Xstride(ilatt,4) = lattice_tiled(row_i-1,col_i)
             endif
+         enddo
+      elseif(Nbath.eq.1)then
+         do ilatt=1,Nbath*Norb
+            row_i = vec2lat(ilatt,1) + floor(tiling_y/2.)*Nbath
+            col_i = vec2lat(ilatt,2) + floor(tiling_x/2.)*Norb
+            Xstride(ilatt,1) = lattice_tiled(row_i,col_i)
+            Xstride(ilatt,2) = lattice_tiled(row_i,col_i+1)
+            Xstride(ilatt,3) = lattice_tiled(row_i,col_i-1)
          enddo
       else
          do ilatt=1,Nbath*Norb

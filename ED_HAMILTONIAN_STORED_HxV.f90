@@ -90,11 +90,23 @@ contains
     !
     !IMPURITY  HAMILTONIAN
     if(plaquette)then
+       !
+       !STANDARD FOR FERMIONIC (U=inf) MODEL
        BosonExp=1
        firstNeig=1
-       if(HardCoreBoson)then
+       !
+       if(HardCoreBoson.ne.0)then
           BosonExp=0
-          firstNeig=3
+          !
+          !LOCAL HARD-CORE CONDITION - ALL DIMENSIONS
+          if(HardCoreBoson.eq.1)firstNeig=1
+          !
+          !EXTENDED HARD-CORE CONDITION - 1D
+          if((HardCoreBoson.eq.2).and.(Nbath.ne.1))firstNeig=2
+          !
+          !EXTENDED HARD-CORE CONDITION - 2D
+          if((HardCoreBoson.eq.2).and.(Nbath.ne.1))firstNeig=3
+          !
        endif
        include "ED_HAMILTONIAN/stored/Hplaquette.f90"
     else

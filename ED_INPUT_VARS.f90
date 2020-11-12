@@ -86,7 +86,7 @@ MODULE ED_INPUT_VARS
   logical              :: Utensor             !flag to use tensorial representation of the interaction
   !
   logical              :: plaquette           !flag to perform ED calculation on the lattice
-  logical              :: HardCoreBoson       !flag to switch to a bosonic model
+  integer              :: HardCoreBoson       !Integer flag to switch to a bosonic model: 1=local hard-core 2=extended hard-core
   integer              :: filling             !filling of the lattice
   real(8),dimension(5) :: Vnn                 !non-local interactions
   real(8)              :: Thopping            !hopping integral
@@ -216,7 +216,7 @@ contains
     call parse_input_variable(UTENSfile,"UTENSfile",INPUTunit,default="Utensor.in",comment="File read the input tensorial representation of the interaction")
     !
     call parse_input_variable(plaquette,"PLAQUETTE",INPUTunit,default=.false.,comment="Flag to perform ED calculation on the lattice")
-    call parse_input_variable(HardCoreBoson,"HARDCOREBOSON",INPUTunit,default=.false.,comment="Flag to switch to a bosonic model")
+    call parse_input_variable(HardCoreBoson,"HARDCOREBOSON",INPUTunit,default=2,comment="Integer flag to switch to a bosonic model: 1=local hard-core 2=extended hard-core")
     call parse_input_variable(filling,"FILLING",INPUTunit,default=4,comment="Filling of the lattice")
     call parse_input_variable(Vnn,"VNN",INPUTunit,default=[0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0],comment="Values of the non-local interaction per site (max 7)")
     call parse_input_variable(Thopping,"THOPPING",INPUTunit,default=0.d0,comment="Hopping integral")

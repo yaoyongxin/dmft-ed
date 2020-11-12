@@ -187,11 +187,18 @@ contains
           if(MpiMaster.AND.ed_verbose>3)write(LOGfile,*)""
           call delete_Hv_sector()
        else
-          allocate(eig_values(Dim)) ; eig_values=0d0
-          !
-          allocate(eig_basis_tmp(Dim,Dim)) ; eig_basis_tmp=zero
+          if(HardCoreBoson.eq.0)then
+             allocate(eig_values(Dim)); eig_values=0d0
+             allocate(eig_basis_tmp(Dim,Dim));eig_basis_tmp=zero
+          endif
           !
           call build_Hv_sector(isector,eig_basis_tmp)
+          !
+          if(HardCoreBoson.ne.0)then
+             allocate(eig_values(size(eig_basis_tmp,dim=1)))
+             eig_values=0d0
+          endif
+
           !
           if(MpiMaster)call eigh(eig_basis_tmp,eig_values)
           if(dim==1)eig_basis_tmp(dim,dim)=one

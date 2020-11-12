@@ -41,7 +41,7 @@ contains
   !####################################################################
   subroutine build_Hv_sector(isector,Hmat)
     integer                            :: isector,SectorDim
-    complex(8),dimension(:,:),optional :: Hmat
+    complex(8),allocatable,optional    :: Hmat(:,:)
     integer                            :: irank
     integer                            :: i,j,Dim
     !
@@ -50,6 +50,10 @@ contains
     !
     if(plaquette)then
        call build_sector(isector,H,H8)
+       if((HardCoreBoson.ne.0).and.present(Hmat))then
+          allocate(Hmat(getDim(isector),getDim(isector)))
+          Hmat=zero
+       endif
     else
        call build_sector(isector,H)
     endif
